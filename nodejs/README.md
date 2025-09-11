@@ -98,4 +98,14 @@ root@30cc67cf1f90 /usr/src/app [objective_bouman]
 docker >
 ```
 
+## The Htop Tool
+
+```
+> htop
+```
+
+
+<img width="956" height="604" alt="image" src="https://github.com/user-attachments/assets/fbbbd43e-2ce0-48b2-a347-714bdf131add" />
+
+
 
