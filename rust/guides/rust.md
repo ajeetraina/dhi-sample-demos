@@ -20,7 +20,7 @@ echo 'fn main() {
 
 # Compile and run with the dev variant (has Rust toolchain)
 docker run -v $(pwd):/app -w /app --rm \
-  <your-namespace>/dhi-rust:<tag>-dev rustc hello.rs -o hello && ./hello
+  <your-namespace>/dhi-rust:<tag>-dev ./hello
 ```
 
 
