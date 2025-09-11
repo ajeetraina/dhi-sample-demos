@@ -5,5 +5,7 @@
   "scripts": {
     "start": "node src/index.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "mime-types": "^2.1.35"
+  }
 }
