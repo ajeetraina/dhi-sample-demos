@@ -12,7 +12,7 @@ $ docker run --rm <your-namespace>/dhi-rust:<tag> rustc --version
 
 Or quickly test with a simple Rust program:
 
-```bash
+```
 # Create a simple Rust program
 echo 'fn main() {
     println!("Hello from DHI Rust!");
@@ -22,6 +22,7 @@ echo 'fn main() {
 docker run -v $(pwd):/app -w /app --rm \
   <your-namespace>/dhi-rust:<tag>-dev rustc hello.rs -o hello && ./hello
 ```
+
 
 ## Common Rust use cases
 
