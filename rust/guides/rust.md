@@ -241,36 +241,7 @@ Typically include `dev` in the variant name and are intended for use in the firs
 - Include the complete Rust toolchain (rustc, cargo, etc.)
 - Are used to build or compile applications
 
-### FIPS variants
 
-Docker Hardened Rust images include FIPS-compliant variants for environments requiring Federal Information Processing Standards compliance.
-
-**FIPS variant naming:**
-- Runtime: `<your-namespace>/dhi-rust:<version>-fips`
-- Development: `<your-namespace>/dhi-rust:<version>-fips-dev`
-
-**Steps to verify FIPS:**
-```bash
-# Check FIPS cryptographic libraries in compiled Rust programs
-docker run --rm <your-namespace>/dhi-rust:<version>-fips \
-  ldd /usr/local/cargo/bin/cargo | grep -i fips
-
-# Verify OpenSSL FIPS mode if available
-docker run --rm <your-namespace>/dhi-rust:<version>-fips \
-  openssl version -a | grep -i fips
-```
-
-**Runtime requirements specific to FIPS:**
-- FIPS mode enforces strict cryptographic standards for enhanced security
-- Rust applications using cryptographic crates may need FIPS-compatible alternatives
-- Applications benefit from verified, FIPS-approved cryptographic operations only
-- Curated cryptographic libraries ensure only secure, validated operations
-
-**What changes in FIPS mode:**
-- OpenSSL operates in FIPS-approved mode only
-- Certain cryptographic crates may be restricted or require FIPS-compatible versions
-- Self-tests are performed on cryptographic modules at startup
-- Non-compliant crypto operations will fail with specific error messages
 
 ## Migrate to a Docker Hardened Image
 
