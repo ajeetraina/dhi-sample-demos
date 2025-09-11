@@ -1,35 +1,21 @@
 ## How to use this image
 
-Before you can use any Docker Hardened Image, you must mirror the image
-repository from the catalog to your organization. To mirror the repository,
-select either **Mirror to repository** or **View in repository** > **Mirror to
-repository**, and then follow the on-screen instructions.
+### Start a Node.js instance
 
-### What's included in this image
-
-This Docker Hardened Node.js image includes the Node.js runtime in a minimal, security-hardened package:
-
-- Node.js runtime: Complete runtime for running Node.js applications
-- npm: Package manager for Node.js (in dev variants only)
-- Container optimizations: Pre-configured for non-root execution
-- Security hardening: No shell, no package manager in runtime variants, minimal attack surface
-
-### Start a Node.js image
-
-Run the following command and replace <your-namespace> with your organization's namespace and <tag> with the image variant you want to run:
+Run the following command to run a Nodejs container. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
 ```
-docker run --rm <your-namespace>/dhi-node:<tag> node --version
+$ docker run --rm <your-namespace>/dhi-node:<tag> node --version
 ```
 
 ### Common Node.js use cases
 
-#### Run a Node.js application
+### Run a Node.js application
 
 Run your Node.js application directly from the container:
 
-```json
-docker run -p 3000:3000 -v $(pwd):/app -w /app <your-namespace>/dhi-node:<tag>-dev node index.js
+```
+$ docker run -p 3000:3000 -v $(pwd):/app -w /app <your-namespace>/dhi-node:<tag>-dev node index.js
 ```
 
 ### Build and run a Node.js application
@@ -40,7 +26,7 @@ runtime environment. In your Dockerfile, writing something along the lines of
 the following will compile and run a simple project.
 
 
-```
+```Dockerfile
 # syntax=docker/dockerfile:1
 # Use a tag with the -dev suffix (e.g., 22-dev)
 FROM <your-namespace>/dhi-node:<tag> AS build-stage
@@ -70,24 +56,43 @@ $ docker build -t my-node-app .
 $ docker run --rm -p 3000:3000 --name my-running-app my-node-app
 ```
 
-## Migrate to a Docker Hardened Image
+## Non-hardened images vs Docker Hardened Images
 
-To migrate your application to a Docker Hardened Image, you must update your
-Dockerfile. At minimum, you must update the base image in your existing
-Dockerfile to a Docker Hardened Image. This and a few other common changes are
-listed in the following table of migration notes.
+### Key differences
 
-| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
-|:-------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
-| Nonroot user       | By default, non-dev images, intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user.                                                                                                                                                                            |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+| Feature | Docker Official Node.js | Docker Hardened Node.js |
+|---------|------------------------|-------------------------|
+| **Security** | Standard base with common utilities | Minimal, hardened base with security patches |
+| **Shell access** | Full shell (bash/sh) available | No shell in runtime variants |
+| **Package manager** | npm/yarn available in all variants | npm/yarn only available in dev variants |
+| **User** | Runs as root by default | Runs as nonroot user |
+| **Attack surface** | Larger due to additional utilities | Minimal, only essential components |
+| **Debugging** | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
 
+
+### Why no shell or package manager in runtime variants?
+
+Docker Hardened Images prioritize security through minimalism:
+
+- Reduced attack surface: Fewer binaries mean fewer potential vulnerabilities
+- Immutable infrastructure: Runtime containers shouldn't be modified after deployment
+- Compliance ready: Meets strict security requirements for regulated environments
+
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
+
+- [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers
+- Docker's Image Mount feature to mount debugging tools
+- Application-level logging and monitoring
+
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+
+- For example, you can use Docker Debug:
+
+```
+$ docker debug <container-name>
+```
+
+to get a debug shell into any container or image, even if they don't contain a shell.
 
 ## Image variants
 
@@ -111,55 +116,29 @@ use. Image variants are identified by their tag.
 To view the image variants and get more information about them, select the
 **Tags** tab for this repository, and then select a tag.
 
-### Why no shell or package manager in runtime variants?
-
-Docker Hardened Images prioritize security through minimalism:
-
-- Reduced attack surface: Fewer binaries mean fewer potential vulnerabilities
-- Immutable infrastructure: Runtime containers shouldn't be modified after deployment
-- Compliance ready: Meets strict security requirements for regulated environments
-
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
-
-- Docker Debug to attach to containers
-- Docker's Image Mount feature to mount debugging tools
-- Application-level logging and monitoring
-
-- Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
-
-- For example, you can use Docker Debug:
-
-```
-docker debug <container-name>
-```
-
-to get a debug shell into any container or image, even if they don't contain a shell.
-
 ### FIPS variants
+
+FIPS variants include `fips` in the variant name and tag. They come in both runtime and build-time variants. These variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure cryptographic operations. 
 
 Docker Hardened Node.js images include FIPS-compliant variants for environments requiring Federal Information Processing Standards compliance.
 
-FIPS variant naming:
-
-- Runtime: <your-namespace>/dhi-node:<version>-fips
-- Development: <your-namespace>/dhi-node:<version>-fips-dev
 
 #### Steps to verify FIPS:
 
-```json
+```shell
 # Check FIPS status (should return 1 for enabled)
-docker run --rm <your-namespace>/dhi-node:<version>-fips \
+$ docker run --rm <your-namespace>/dhi-node:<version>-fips \
   node -e "console.log('FIPS status:', require('crypto').getFips ? require('crypto').getFips() : 'FIPS method not available')"
 
 # Verify cipher restrictions (FIPS has significantly fewer available)
-docker run --rm <your-namespace>/dhi-node:<version>-fips \
+$ docker run --rm <your-namespace>/dhi-node:<version>-fips \
   node -e "console.log('FIPS ciphers:', require('crypto').getCiphers().length)"
 
-docker run --rm <your-namespace>/dhi-node:<version> \
+$ docker run --rm <your-namespace>/dhi-node:<version> \
   node -e "console.log('Non-FIPS ciphers:', require('crypto').getCiphers().length)"
 
 # Test disabled cryptographic functions (MD5 disabled in FIPS)
-docker run --rm <your-namespace>/dhi-node:<version>-fips \
+$ docker run --rm <your-namespace>/dhi-node:<version>-fips \
   node -e "
   try {
     require('crypto').createHash('md5').update('test').digest('hex');
@@ -169,13 +148,36 @@ docker run --rm <your-namespace>/dhi-node:<version>-fips \
   }"
  ```
 
-
 #### Runtime requirements specific to FIPS:
 
 - FIPS mode enforces stricter cryptographic standards
 - Weak cryptographic functions like MD5 are disabled and will fail at runtime
 - Applications using restricted algorithms may need modification
 - Only FIPS-approved cryptographic algorithms are available (~60% fewer than non-FIPS)
+
+
+## Migrate to a Docker Hardened Image
+
+To migrate your application to a Docker Hardened Image, you must update your
+Dockerfile. At minimum, you must update the base image in your existing
+Dockerfile to a Docker Hardened Image. This and a few other common changes are
+listed in the following table of migration notes.
+
+| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
+|:-------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
+| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
+| Nonroot user       | By default, non-dev images, intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user.                                                                                                                                                                            |
+| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
+| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
+| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
+| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
+| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+
+
+
+
+
 
 
 ### Migrate to a Docker Hardened Image
