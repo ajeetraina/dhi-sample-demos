@@ -135,17 +135,15 @@ $ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
 | **Base OS** | Various Alpine/Debian/Ubuntu versions | Security-hardened Alpine or Debian base |
 
 
-### Why minimal runtime with comprehensive development tools?
+### Why selective hardening with maintained functionality?
 
-Docker Hardened Images provide the best of both worlds through a thoughtful architecture:
+Docker Hardened Images provide enhanced security through targeted improvements:
 
-- **Enhanced security**: Minimal runtime images reduce attack surface while maintaining full functionality
-- **Optimized for Rust**: Perfect for Rust's compile-to-binary workflow - build with full toolchain, deploy minimal binaries
-- **Immutable infrastructure**: Runtime containers are designed for deployment stability
-- **Compliance ready**: Meets strict security requirements for regulated environments
-- **Efficient development**: Dev variants provide comprehensive Rust toolchain when needed
-
-**Advanced debugging capabilities**: Docker Debug provides comprehensive debugging tools through an ephemeral, secure layer that doesn't compromise the runtime container's security posture.
+- **Enhanced security**: Non-root user execution and source control tool removal
+- **Maintained functionality**: Rust toolchain and shell access preserved for operational flexibility
+- **User privilege separation**: Dev variants run as root for development needs, runtime variants run as nonroot
+- **Selective tool removal**: Source control tools removed while preserving essential development capabilities
+- **Advanced debugging capabilities**: Docker Debug provides comprehensive debugging tools through an ephemeral, secure layer
 
 
 ## Migrate to a Docker Hardened Image
@@ -155,13 +153,11 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
 | Item | Migration note |
 |------|----------------|
 | **Base image** | Replace your base images in your Dockerfile with a Docker Hardened Image. |
-| **Package management** | Non-dev images, intended for runtime, don't contain package managers. Use Cargo only in images with a dev tag. |
-| **Nonroot user** | By default, non-dev images, intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user. |
+| **Nonroot user** | Runtime images run as a nonroot user. Ensure that necessary files and directories are accessible to that user |
 | **Multi-stage build** | Utilize images with a dev tag for build stages and runtime images for runtime. |
 | **TLS certificates** | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
 | **Ports** | Non-dev hardened images run as a nonroot user by default. Configure your Rust application to use ports above 1024. |
-| **Entry point** | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
-| **No shell** | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage. |
+| **Entry point** | Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
 
 ### Migration process
 
@@ -177,7 +173,7 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
    ```
 
 3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
-   To ensure that your final image is as minimal as possible, you should use a multi-stage build. Use dev images for build stages and static images for runtime. For Rust applications, consider using `dhi-static` for the runtime stage since Rust compiles to self-contained binaries.
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. Use dev images for build stages and runtime images for final runtime.
 
 4. **Install additional packages**
    Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to install additional packages in your Dockerfile.
@@ -204,12 +200,11 @@ docker debug <container-name>
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to copy files to different directories or change permissions so your application running as a nonroot user can access them.
+Runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to copy files to different directories or change permissions so your application running as a nonroot user can access them.
 
 ### Privileged ports
 
 Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Configure your Rust applications to listen on ports 8000, 8080, or other ports above 1024.
-
 
 ### Entry point
 
