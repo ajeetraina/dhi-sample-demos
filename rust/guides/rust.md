@@ -2,25 +2,13 @@
 # How to use this image
 
 
-## Start a Rust image
+## Start a Rust toolchain
 
-Test the Rust toolchain:
+Run the following command to run a rust toolchain. Replace <your-namespace> with your organization's namespace and <tag> with the image variant you want to run.
+
 
 ```
 $ docker run --rm <your-namespace>/dhi-rust:<tag> rustc --version
-```
-
-Or quickly test with a simple Rust program:
-
-```
-# Create a simple Rust program
-echo 'fn main() {
-    println!("Hello from DHI Rust!");
-}' > hello.rs
-
-# Compile and run with the dev variant (has Rust toolchain)
-docker run -v $(pwd):/app -w /app --rm \
-  <your-namespace>/dhi-rust:<tag>-dev ./hello
 ```
 
 
@@ -28,124 +16,74 @@ docker run -v $(pwd):/app -w /app --rm \
 
 ### Run a Rust application
 
-Compile and run your Rust application by mounting your local project:
+Run your Rust application directly from the container:
 
-```bash
-# Create a simple Rust program
-echo 'fn main() {
-    println!("Hello from DHI Rust!");
-}' > main.rs
-
-# Compile and run with dev variant
-docker run -v $(pwd):/app -w /app \
-  <your-namespace>/dhi-rust:<tag>-dev rustc main.rs -o main && ./main
+```
+$ docker run -p 8000:8000 -v $(pwd):/app -w /app <your-namespace>/dhi-rust:<tag>-dev sh -c "cargo run"
 ```
 
-**Note**: This uses volume mounting for development. For production, use the multi-stage build approach shown below.
+## Build and run a Rust application
 
-### Quick development and testing
 
-Create and compile a simple Rust HTTP server:
+The recommended way to use this image is to use a multi-stage Dockerfile with the `dev` variant as the build environment and the `runtime` variant as the runtime environment. In your Dockerfile, writing something along the lines of the following will compile and run a simple project.
 
-```bash
-# Create a basic Cargo project structure
-mkdir -p src
-echo '[package]
-name = "hello-rust"
-version = "0.1.0"
-edition = "2021"
+```Dockerfile
+# syntax=docker/dockerfile:1
+# Use a tag with the -dev suffix (e.g., 1.75-dev)
+FROM <your-namespace>/dhi-rust:<tag>-dev AS build-stage
 
-[dependencies]' > Cargo.toml
+WORKDIR /usr/src/app
+COPY Cargo.toml Cargo.lock ./
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/src/app/target \
+    cargo fetch
 
-# Create a simple HTTP server
-echo 'use std::io::prelude::*;
-use std::net::{TcpListener, TcpStream};
+COPY src ./src
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/src/app/target \
+    cargo build --release && \
+    cp target/release/my-app /usr/local/bin/my-app
 
-fn main() {
-    let listener = TcpListener::bind("0.0.0.0:8000").unwrap();
-    println!("Server running on port 8000");
+# Use the same tag as above but without the -dev suffix (e.g., 1.75)
+FROM <your-namespace>/dhi-rust:<tag> AS runtime-stage
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
-}
-
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
-
-    let response = "HTTP/1.1 200 OK\r\n\r\nHello from DHI Rust!";
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
-}' > src/main.rs
-
-# Build and run with dev variant
-docker run -v $(pwd):/app -w /app -p 8000:8000 \
-  <your-namespace>/dhi-rust:<tag>-dev sh -c "cargo build --release && ./target/release/hello-rust"
+COPY --from=build-stage /usr/local/bin/my-app /usr/local/bin/my-app
+EXPOSE 8000
+CMD ["my-app"]
 ```
 
-You should see "Server running on port 8000" and can test with:
-```bash
-curl http://localhost:8000
+You can then build and run the Docker image:
+
+```
+$ docker build -t my-rust-app .
+$ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
 ```
 
-### Build with dependencies
+## Example application setup
 
-For projects with external dependencies, use the dev variant to build:
+Create a simple Rust web server for testing:
 
-```bash
-# Create Cargo.toml with dependencies
-echo '[package]
-name = "web-server"
+```
+# Create Cargo.toml
+$ cat > Cargo.toml << EOF
+[package]
+name = "my-app"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
-warp = "0.3"' > Cargo.toml
+EOF
 
-# Create async web server
-echo 'use warp::Filter;
-
-#[tokio::main]
-async fn main() {
-    let hello = warp::path!("hello" / String)
-        .map(|name| format!("Hello, {}!", name));
-
-    warp::serve(hello)
-        .run(([0, 0, 0, 0], 3030))
-        .await;
-}' > src/main.rs
-
-# Build with dev variant
-docker run -v $(pwd):/app -w /app -p 3030:3030 \
-  <your-namespace>/dhi-rust:<tag>-dev sh -c "cargo build --release && ./target/release/web-server"
-```
-
-### Multi-stage build for production
-
-For production deployments, use a multi-stage Dockerfile to create minimal, secure images:
-
-**Create the application files:**
-
-```bash
-# Create Cargo.toml
-echo '[package]
-name = "hello-rust"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]' > Cargo.toml
-
-# Create the app
-echo 'use std::io::prelude::*;
+# Create src directory and main.rs
+$ mkdir -p src
+$ cat > src/main.rs << EOF
+use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 
 fn main() {
     let listener = TcpListener::bind("0.0.0.0:8000").unwrap();
     println!("Server running on port 8000");
-
+    
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         handle_connection(stream);
@@ -155,44 +93,18 @@ fn main() {
 fn handle_connection(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
     stream.read(&mut buffer).unwrap();
-
-    let response = "HTTP/1.1 200 OK\\r\\n\\r\\nHello from Docker Hardened Rust!";
+    
+    let response = "HTTP/1.1 200 OK\r\n\r\nHello from DHI Rust!";
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
-}' > src/main.rs
+}
+EOF
 ```
+Test the application:
 
-**Create Dockerfile:**
-
-```bash
-echo '# Build stage
-FROM <your-namespace>/dhi-rust:<tag>-dev AS builder
-WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-COPY src ./src
-RUN cargo build --release
-
-# Runtime stage - using static image for minimal footprint
-FROM <your-namespace>/dhi-static:<tag>
-WORKDIR /app
-COPY --from=builder /app/target/release/hello-rust ./server
-USER 1001
-EXPOSE 8000
-CMD ["./server"]' > Dockerfile
 ```
-
-**Build and run:**
-
-```bash
-docker build -t my-rust-app .
-docker run -p 8000:8000 my-rust-app
-```
-
-You should see "Server running on port 8000" and can test with:
-```bash
-curl http://localhost:8000
+$ curl http://localhost:8000
+Hello from DHI Rust!
 ```
 
 ## Non-hardened images vs. Docker Hardened Images
