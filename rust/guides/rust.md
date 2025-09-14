@@ -8,13 +8,13 @@ Run the following command to run a Rust instance. Replace <your-namespace> with 
 
 
 ```
-$ docker run --rm <your-namespace>/dhi-rust:<tag> rustc --version
+docker run --rm <your-namespace>/dhi-rust:<tag> rustc --version
 ```
 
 Create a simple Rust program and run it directly from the container:
 
 ```
-$ docker run -p 8000:8000 -v $(pwd):/app -w /app dockerdevrel/dhi-rust:1-debian13-dev sh -c 'cat > main.rs << EOF
+docker run -p 8000:8000 -v $(pwd):/app -w /app dockerdevrel/dhi-rust:1-debian13-dev sh -c 'cat > main.rs << EOF
 fn main() {
     println!("Hello from DHI Rust!");
 }
@@ -71,7 +71,7 @@ EOF
 #### Step 3: Generate the lock file
 
 ```
-$ cargo generate-lockfile
+cargo generate-lockfile
 ```
 
 
