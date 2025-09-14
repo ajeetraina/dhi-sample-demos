@@ -33,13 +33,13 @@ rustc main.rs && ./main'
 [package]
 name = "docker-rust-hello"
 version = "0.1.0"
-edition = "2021"
+edition = "2025"
 
 [dependencies]
 EOF
 ```
 
-#### Step 2: Create src directory and main.rs FIRST
+#### Step 2: Create `src` directory and `main.rs` FIRST
 
 ```
 mkdir src
@@ -68,12 +68,11 @@ fn handle_connection(mut stream: TcpStream) {
 EOF
 ```
 
-#### Step 3: NOW generate the lock file
+#### Step 3: Generate the lock file
 
 ```
 $ cargo generate-lockfile
 ```
-
 
 
 The recommended way to use this image is to use a multi-stage Dockerfile with the `dev` variant as the build environment and the `runtime` variant as the runtime environment. In your Dockerfile, writing something along the lines of the following will compile and run a simple project.
