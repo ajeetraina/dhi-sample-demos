@@ -27,16 +27,9 @@ rustc main.rs && ./main'
 
 ### Build and run a Rust application 
 
-####  Create the project directory
+#### Step 1: Create Cargo.toml
 
-```
-$ mkdir my-rust-app && cd my-rust-app
-```
-
-#### Create Cargo.toml
-
-```
-$ cat > Cargo.toml << EOF
+``` cat > Cargo.toml << EOF
 [package]
 name = "docker-rust-hello"
 version = "0.1.0"
@@ -46,17 +39,11 @@ edition = "2021"
 EOF
 ```
 
-#### Generate Cargo.lock for reproducible builds
+#### Step 2: Create src directory and main.rs FIRST
 
 ```
-$ cargo generate-lockfile
-```
-
-#### Create src directory and main.rs
-
-```
-$ mkdir src
-$ cat > src/main.rs << EOF
+mkdir src
+cat > src/main.rs << EOF
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 
@@ -81,12 +68,19 @@ fn handle_connection(mut stream: TcpStream) {
 EOF
 ```
 
+#### Step 3: NOW generate the lock file
+
+```
+$ cargo generate-lockfile
+```
+
+
+
 The recommended way to use this image is to use a multi-stage Dockerfile with the `dev` variant as the build environment and the `runtime` variant as the runtime environment. In your Dockerfile, writing something along the lines of the following will compile and run a simple project.
 
 ```Dockerfile
 ################################################################################
 # Create a stage for building the application.
-
 FROM dockerdevrel/dhi-rust:1-debian13-dev AS build
 WORKDIR /build
 
@@ -96,20 +90,18 @@ RUN --mount=type=bind,source=src,target=src \
     --mount=type=cache,target=/build/target/ \
     --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
-    cargo build --locked --release
+    cargo build --locked --release && \
+    cp /build/target/release/docker-rust-hello /build/server
 
 ################################################################################
 # Create a new stage for running the application that contains the minimal
 # runtime dependencies for the application.
 
-FROM dockerdevrel/dhi-static:latest AS final
+FROM dockerdevrel/dhi-rust:1-debian13 AS final
 
 # Copy the executable from the "build" stage.
-COPY --from=build /build/target/release/docker-rust-hello server
+COPY --from=build /build/server ./server
 
-# Create a non-root user
-RUN adduser --disabled-password --gecos '' --uid 1001 appuser
-USER appuser
 
 # Expose the port that the application listens on.
 EXPOSE 8000
