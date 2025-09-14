@@ -84,7 +84,7 @@ Create a Dockerfile with the following content to compile and run the project.
 ```Dockerfile
 ################################################################################
 # Create a stage for building the application.
-FROM dockerdevrel/dhi-rust:1-debian13-dev AS build
+FROM <your-namespace>/dhi-rust:<tag>-dev AS build
 WORKDIR /build
 
 RUN --mount=type=bind,source=src,target=src \
@@ -100,7 +100,7 @@ RUN --mount=type=bind,source=src,target=src \
 # Create a new stage for running the application that contains the minimal
 # runtime dependencies for the application.
 
-FROM dockerdevrel/dhi-rust:1-debian13 AS final
+FROM <your-namespace>/dhi-rust:<tag> AS final
 
 # Copy the executable from the "build" stage.
 COPY --from=build /build/server ./server
