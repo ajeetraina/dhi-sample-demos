@@ -34,7 +34,7 @@ cat > Cargo.toml << EOF
 [package]
 name = "docker-rust-hello"
 version = "0.1.0"
-edition = "2025"
+edition = "2024"
 
 [dependencies]
 EOF
