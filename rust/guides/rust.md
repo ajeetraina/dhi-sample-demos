@@ -97,8 +97,7 @@ RUN --mount=type=bind,source=src,target=src \
     cp /build/target/release/docker-rust-hello /build/server
 
 ################################################################################
-# Create a new stage for running the application that contains the minimal
-# runtime dependencies for the application.
+# Create a new stage for running the application with security-hardened runtime environment
 
 FROM <your-namespace>/dhi-rust:<tag> AS final
 
@@ -126,7 +125,7 @@ $ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
 
 | Feature | Docker Official Rust | Docker Hardened Rust |
 |---------|---------------------|----------------------|
-| **Security** | Standard base with common utilities | Advanced security hardening with minimal attack surface |
+| **Security** | Standard base with common utilities | Advanced security hardening with reduced attack surface via selective tool removal |
 | **Runtime environment** | Full shell and tools available | Shell and Rust toolchain available, source control removed |
 | **Toolchain** | Same tools, same user | Same tools, secure user separation |
 | **User security** | Runs as root by default | Secure non-root execution in runtime, root in dev |
@@ -142,7 +141,7 @@ Docker Hardened Images provide enhanced security through targeted improvements:
 - **Enhanced security**: Non-root user execution and source control tool removal
 - **Maintained functionality**: Rust toolchain and shell access preserved for operational flexibility
 - **User privilege separation**: Dev variants run as root for development needs, runtime variants run as nonroot
-- **Selective tool removal**: Source control tools removed while preserving essential development capabilities
+- **Selective tool removal**: Source control tools removed (both dev and runtime) while preserving essential development capabilities
 - **Advanced debugging capabilities**: Docker Debug provides comprehensive debugging tools through an ephemeral, secure layer
 
 
@@ -176,7 +175,7 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
    To ensure that your final image is as minimal as possible, you should use a multi-stage build. Use dev images for build stages and runtime images for final runtime.
 
 4. **Install additional packages**
-   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to install additional packages in your Dockerfile.
+   Docker Hardened Images selectively remove certain tools while maintaining operational capabilities. You may need to install additional packages in your Dockerfile.
 
    Both dev and runtime variants include cargo and rustc. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a dev image. Then copy any necessary artifacts to the runtime stage that uses a minimal image.
 
