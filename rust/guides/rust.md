@@ -11,45 +11,111 @@ Run the following command to run a Rust instance. Replace <your-namespace> with 
 $ docker run --rm <your-namespace>/dhi-rust:<tag> rustc --version
 ```
 
+Create a simple Rust program and run it directly from the container:
+
+```
+$ docker run -p 8000:8000 -v $(pwd):/app -w /app dockerdevrel/dhi-rust:1-debian13-dev sh -c 'cat > main.rs << EOF
+fn main() {
+    println!("Hello from DHI Rust!");
+}
+EOF
+rustc main.rs && ./main'
+```
 
 ## Common Rust use cases
 
-### Run a Rust application
 
-Run your Rust application directly from the container:
+## Build and run a Rust application 
+
+###  Create the project directory
 
 ```
-$ docker run -p 8000:8000 -v $(pwd):/app -w /app <your-namespace>/dhi-rust:<tag>-dev sh -c "cargo run"
+$ mkdir my-rust-app && cd my-rust-app
 ```
 
-## Build and run a Rust application
+### Create Cargo.toml
 
+```
+$ cat > Cargo.toml << EOF
+[package]
+name = "docker-rust-hello"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+EOF
+```
+
+### Generate Cargo.lock for reproducible builds
+
+```
+$ cargo generate-lockfile
+```
+
+### Create src directory and main.rs
+
+```
+$ mkdir src
+$ cat > src/main.rs << EOF
+use std::io::prelude::*;
+use std::net::{TcpListener, TcpStream};
+
+fn main() {
+    let listener = TcpListener::bind("0.0.0.0:8000").unwrap();
+    println!("Server running on port 8000");
+    
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+        handle_connection(stream);
+    }
+}
+
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
+    
+    let response = "HTTP/1.1 200 OK\r\n\r\nHello from DHI Rust!";
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+EOF
+```
 
 The recommended way to use this image is to use a multi-stage Dockerfile with the `dev` variant as the build environment and the `runtime` variant as the runtime environment. In your Dockerfile, writing something along the lines of the following will compile and run a simple project.
 
 ```Dockerfile
-# syntax=docker/dockerfile:1
-# Use a tag with the -dev suffix (e.g., 1.75-dev)
-FROM <your-namespace>/dhi-rust:<tag>-dev AS build-stage
+################################################################################
+# Create a stage for building the application.
 
-WORKDIR /usr/src/app
-COPY Cargo.toml Cargo.lock ./
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/src/app/target \
-    cargo fetch
+FROM dockerdevrel/dhi-rust:1-debian13-dev AS build
+WORKDIR /build
 
-COPY src ./src
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/src/app/target \
-    cargo build --release && \
-    cp target/release/my-app /usr/local/bin/my-app
+RUN --mount=type=bind,source=src,target=src \
+    --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
+    --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
+    --mount=type=cache,target=/build/target/ \
+    --mount=type=cache,target=/usr/local/cargo/git/db \
+    --mount=type=cache,target=/usr/local/cargo/registry/ \
+    cargo build --locked --release
 
-# Use the same tag as above but without the -dev suffix (e.g., 1.75)
-FROM <your-namespace>/dhi-rust:<tag> AS runtime-stage
+################################################################################
+# Create a new stage for running the application that contains the minimal
+# runtime dependencies for the application.
 
-COPY --from=build-stage /usr/local/bin/my-app /usr/local/bin/my-app
+FROM dockerdevrel/dhi-static:latest AS final
+
+# Copy the executable from the "build" stage.
+COPY --from=build /build/target/release/docker-rust-hello server
+
+# Create a non-root user
+RUN adduser --disabled-password --gecos '' --uid 1001 appuser
+USER appuser
+
+# Expose the port that the application listens on.
 EXPOSE 8000
-CMD ["my-app"]
+
+# What the container should run when it is started.
+CMD ["./server"]
 ```
 
 You can then build and run the Docker image:
