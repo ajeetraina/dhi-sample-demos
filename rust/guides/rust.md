@@ -178,7 +178,7 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
 | **Base image** | Replace your base images in your Dockerfile with a Docker Hardened Image. |
 | **Package management** | Non-dev images, intended for runtime, don't contain package managers. Use Cargo only in images with a dev tag. |
 | **Nonroot user** | By default, non-dev images, intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user. |
-| **Multi-stage build** | Utilize images with a dev tag for build stages and static images for runtime. For Rust binaries, use `dhi-static` for runtime. |
+| **Multi-stage build** | Utilize images with a dev tag for build stages and runtime images for runtime. |
 | **TLS certificates** | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
 | **Ports** | Non-dev hardened images run as a nonroot user by default. Configure your Rust application to use ports above 1024. |
 | **Entry point** | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
