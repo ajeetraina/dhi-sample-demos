@@ -25,15 +25,15 @@ rustc main.rs && ./main'
 ## Common Rust use cases
 
 
-## Build and run a Rust application 
+### Build and run a Rust application 
 
-###  Create the project directory
+####  Create the project directory
 
 ```
 $ mkdir my-rust-app && cd my-rust-app
 ```
 
-### Create Cargo.toml
+#### Create Cargo.toml
 
 ```
 $ cat > Cargo.toml << EOF
@@ -46,13 +46,13 @@ edition = "2021"
 EOF
 ```
 
-### Generate Cargo.lock for reproducible builds
+#### Generate Cargo.lock for reproducible builds
 
 ```
 $ cargo generate-lockfile
 ```
 
-### Create src directory and main.rs
+#### Create src directory and main.rs
 
 ```
 $ mkdir src
@@ -123,54 +123,6 @@ You can then build and run the Docker image:
 ```
 $ docker build -t my-rust-app .
 $ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
-```
-
-## Example application setup
-
-Create a simple Rust web server for testing:
-
-```
-# Create Cargo.toml
-$ cat > Cargo.toml << EOF
-[package]
-name = "my-app"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-EOF
-
-# Create src directory and main.rs
-$ mkdir -p src
-$ cat > src/main.rs << EOF
-use std::io::prelude::*;
-use std::net::{TcpListener, TcpStream};
-
-fn main() {
-    let listener = TcpListener::bind("0.0.0.0:8000").unwrap();
-    println!("Server running on port 8000");
-    
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
-}
-
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
-    
-    let response = "HTTP/1.1 200 OK\r\n\r\nHello from DHI Rust!";
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
-}
-EOF
-```
-Test the application:
-
-```
-$ curl http://localhost:8000
-Hello from DHI Rust!
 ```
 
 ## Non-hardened images vs. Docker Hardened Images
