@@ -127,7 +127,7 @@ $ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
 | Feature | Docker Official Rust | Docker Hardened Rust |
 |---------|---------------------|----------------------|
 | **Security** | Standard base with common utilities | Advanced security hardening with minimal attack surface |
-| **Runtime environment** | Full shell and tools available | Secure, production-optimized runtime with essential components only |
+| **Runtime environment** | Full shell and tools available | Shell and Rust toolchain available, source control removed |
 | **Toolchain** | Same tools, same user | Same tools, secure user separation |
 | **User security** | Runs as root by default | Secure non-root execution in runtime, root in dev |
 | **Attack surface** | Larger due to additional utilities | Reduced via user security + tool filtering |
@@ -178,7 +178,7 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
 4. **Install additional packages**
    Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to install additional packages in your Dockerfile.
 
-   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a dev image. Then copy any necessary artifacts to the runtime stage that uses a minimal image.
+   Both dev and runtime variants include cargo and rustc. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a dev image. Then copy any necessary artifacts to the runtime stage that uses a minimal image.
 
 ## Troubleshoot migration
 
