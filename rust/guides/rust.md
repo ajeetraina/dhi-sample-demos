@@ -129,12 +129,11 @@ $ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
 | **Security** | Standard base with common utilities | Advanced security hardening with minimal attack surface |
 | **Runtime environment** | Full shell and tools available | Secure, production-optimized runtime with essential components only |
 | **Toolchain** | Same tools, same user | Same tools, secure user separation |
-| **Package management** | Cargo available in all variants | Secure development workflow: Cargo in dev variants, minimal runtime variants |
 | **User security** | Runs as root by default | Secure non-root execution in runtime, root in dev |
 | **Attack surface** | Larger due to additional utilities | Reduced via user security + tool filtering |
 | **Debugging** | Traditional shell debugging | Advanced debugging with Docker Debug - comprehensive tools without compromising security |
 | **Base OS** | Various Alpine/Debian/Ubuntu versions | Security-hardened Alpine or Debian base |
-| **Binary deployment** | Full toolchain in runtime | Optimized for static binary deployment with minimal dependencies |
+
 
 ### Why minimal runtime with comprehensive development tools?
 
@@ -147,27 +146,6 @@ Docker Hardened Images provide the best of both worlds through a thoughtful arch
 - **Efficient development**: Dev variants provide comprehensive Rust toolchain when needed
 
 **Advanced debugging capabilities**: Docker Debug provides comprehensive debugging tools through an ephemeral, secure layer that doesn't compromise the runtime container's security posture.
-
-## Image variants
-
-Docker Hardened Images come in different variants depending on their intended use:
-
-### Runtime variants
-Designed to run your application in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
-
-- Run as the nonroot user
-- Do not include a shell or package manager
-- Contain only the minimal set of libraries needed to run the app
-- **For Rust**: Often use `dhi-static` for compiled binaries with minimal dependencies
-
-### Build-time variants
-Typically include `dev` in the variant name and are intended for use in the first stage of a multi-stage Dockerfile. These images typically:
-
-- Run as the root user
-- Include a shell and package manager
-- Include the complete Rust toolchain (rustc, cargo, etc.)
-- Are used to build or compile applications
-
 
 
 ## Migrate to a Docker Hardened Image
@@ -210,7 +188,7 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. Docker Hardened Images provide robust debugging capabilities through **Docker Debug**, which attaches comprehensive debugging tools to running containers while maintaining the security benefits of minimal runtime images.
+Docker Hardened Images provide robust debugging capabilities through **Docker Debug**, which attaches comprehensive debugging tools to running containers while maintaining the security benefits of minimal runtime images.
 
 **Docker Debug** provides a shell, common debugging tools, and lets you install additional tools in an ephemeral, writable layer that only exists during the debugging session:
 
@@ -232,9 +210,6 @@ By default image variants intended for runtime, run as the nonroot user. Ensure 
 
 Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Configure your Rust applications to listen on ports 8000, 8080, or other ports above 1024.
 
-### No shell
-
-By default, image variants intended for runtime don't contain a shell. Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
 ### Entry point
 
