@@ -128,9 +128,10 @@ $ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
 |---------|---------------------|----------------------|
 | **Security** | Standard base with common utilities | Advanced security hardening with minimal attack surface |
 | **Runtime environment** | Full shell and tools available | Secure, production-optimized runtime with essential components only |
+| **Toolchain** | Same tools, same user | Same tools, secure user separation |
 | **Package management** | Cargo available in all variants | Secure development workflow: Cargo in dev variants, minimal runtime variants |
-| **User security** | Runs as root by default | Secure non-root execution by default |
-| **Attack surface** | Larger due to additional utilities | Minimal, carefully curated components |
+| **User security** | Runs as root by default | Secure non-root execution in runtime, root in dev |
+| **Attack surface** | Larger due to additional utilities | Reduced via user security + tool filtering |
 | **Debugging** | Traditional shell debugging | Advanced debugging with Docker Debug - comprehensive tools without compromising security |
 | **Base OS** | Various Alpine/Debian/Ubuntu versions | Security-hardened Alpine or Debian base |
 | **Binary deployment** | Full toolchain in runtime | Optimized for static binary deployment with minimal dependencies |
