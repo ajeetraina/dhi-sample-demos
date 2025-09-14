@@ -120,7 +120,7 @@ $ docker build -t my-rust-app .
 $ docker run --rm -p 8000:8000 --name my-running-app my-rust-app
 ```
 
-## Non-hardened images vs. Docker Hardened Images
+## Non-hardened images vs Docker Hardened Images
 
 ### Key advantages
 
