@@ -2,9 +2,9 @@
 # How to use this image
 
 
-## Start a Rust toolchain
+## Start a Rust instance
 
-Run the following command to run a rust toolchain. Replace <your-namespace> with your organization's namespace and <tag> with the image variant you want to run.
+Run the following command to run a Rust instance. Replace <your-namespace> with your organization's namespace and <tag> with the image variant you want to run.
 
 
 ```
