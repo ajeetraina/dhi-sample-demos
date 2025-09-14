@@ -27,7 +27,7 @@ rustc main.rs && ./main'
 
 ### Build and run a Rust application 
 
-The recommended way to use this image is to use a multi-stage Dockerfile with the `dev` variant as the build environment and the `runtime` variant as the runtime environment. Before writing Dockerfile, let's create a project files:
+The recommended way to use this image is to use a multi-stage Dockerfile with the `dev` variant as the build environment and the `runtime` variant as the runtime environment. Before writing the Dockerfile, let's create the project files:
 
 #### Step 1: Create Cargo.toml
 
@@ -42,7 +42,7 @@ edition = "2024"
 EOF
 ```
 
-#### Step 2: Create `src` directory and `main.rs` FIRST
+#### Step 2: Create `src` directory and `main.rs` 
 
 ```
 mkdir src
@@ -77,9 +77,9 @@ EOF
 cargo generate-lockfile
 ```
 
-#### Step 4. Writing the Dockerfile
+#### Step 4. Create the Dockerfile
 
-In your Dockerfile, writing something along the lines of the following will compile and run the project.
+Create a Dockerfile with the following content to compile and run the project.
 
 ```Dockerfile
 ################################################################################
