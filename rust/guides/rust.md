@@ -29,7 +29,8 @@ rustc main.rs && ./main'
 
 #### Step 1: Create Cargo.toml
 
-``` cat > Cargo.toml << EOF
+```
+cat > Cargo.toml << EOF
 [package]
 name = "docker-rust-hello"
 version = "0.1.0"
