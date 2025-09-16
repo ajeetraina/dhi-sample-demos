@@ -7,8 +7,10 @@ Refer to the [Apache Maven documentation](https://maven.apache.org/guides/) for 
 Run the following command to execute Maven commands using a Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
 ```bash
-$ docker run --rm <your-namespace>/dhi-maven:<tag> mvn --version
+$ docker run --rm <your-namespace>/dhi-maven:<tag>-dev --version
 ```
+
+**Important**: Maven DHI images have `mvn` as their ENTRYPOINT. When using `docker run`, omit `mvn` from your commands. In Dockerfiles, use `RUN mvn ...` as normal since RUN commands execute in shell context.
 
 ## Common Maven use cases
 
@@ -17,15 +19,15 @@ $ docker run --rm <your-namespace>/dhi-maven:<tag> mvn --version
 Build your Maven project by mounting your source code and running Maven commands:
 
 ```bash
-$ docker run --rm -v "$(pwd)":/app -w /app dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev mvn clean compile
+$ docker run --rm -v "$(pwd)":/app -w /app <your-namespace>/dhi-maven:<tag>-dev clean compile
 ```
 
 ### Build and package application artifacts
 
-The most common use case is building application artifacts like JAR or WAR files:
+Create application artifacts like JAR or WAR files by building your Maven project:
 
 ```bash
-$ docker run --rm -v "$(pwd)":/app -w /app dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev mvn clean package
+$ docker run --rm -v "$(pwd)":/app -w /app <your-namespace>/dhi-maven:<tag>-dev clean package
 ```
 
 ### Build and run with multi-stage Dockerfile
@@ -37,7 +39,7 @@ Here's a complete example for a Spring Boot application:
 ```dockerfile
 # syntax=docker/dockerfile:1
 # Build stage - Maven DHI for building
-FROM dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev AS build
+FROM <your-namespace>/dhi-maven:<tag>-dev AS build
 
 WORKDIR /app
 
@@ -61,15 +63,21 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 
 ### Build with dependency caching
 
-Use Docker's cache mount to speed up builds by persisting the Maven local repository:
+Use Docker volumes to speed up builds by persisting the Maven local repository across builds:
 
 ```bash
+# Create a persistent volume for Maven dependencies
+$ docker volume create maven-repo
+
+# Use the volume for faster subsequent builds
 $ docker run --rm \
     -v "$(pwd)":/app -w /app \
-    --mount type=cache,target=/root/.m2 \
-    dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev \
-    mvn clean package
+    -v maven-repo:/root/.m2 \
+    <your-namespace>/dhi-maven:<tag>-dev \
+    clean package
 ```
+
+**Note**: The first build will download dependencies (~4-5 seconds), while subsequent builds use cached dependencies (~0.7-1 seconds). Cache mounts (`--mount type=cache`) only work in Dockerfiles, not with `docker run` commands.
 
 You can then build and run the Docker image:
 
@@ -119,8 +127,8 @@ Maven DHI images follow this tag pattern: `<maven-version>-jdk<jdk-version>-<os>
 - `jdk23` - Java 23 (latest features)
 
 **Operating systems:**
-- `debian13` - Debian-based (default, ~200MB)
-- `alpine3.22` - Alpine-based (~180MB, smaller size)
+- `debian13` - Debian-based (default, ~647MB uncompressed)
+- `alpine3.22` - Alpine-based (~578MB uncompressed, ~69MB smaller)
 
 **Examples:**
 - `dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev` - Recommended for most projects
@@ -135,31 +143,31 @@ To migrate your Maven builds to Docker Hardened Images, you must update your Doc
 
 | Item | Migration note |
 |------|----------------|
-| Base image | Replace Maven base images with Docker Hardened Maven images in build stages only |
+| Base image | Replace Maven base images with Docker Hardened Maven dev images in build stages only |
 | Multi-stage required | Maven DHI images are build-only. Use multi-stage builds to copy artifacts to runtime images |
-| Package management | Package managers are available in Maven DHI images (all are dev variants) |
+| Package management | Package managers are available in all Maven DHI images (all are dev variants) |
 | Build user | Maven DHI images run as root during build (appropriate for build environments) |
 | Dependency caching | Use Docker cache mounts for `/root/.m2` to persist Maven local repository |
 | Settings files | Copy or mount Maven settings.xml if using custom repositories |
 | Runtime image selection | Choose appropriate JRE/JDK runtime images that match your build JDK version |
-| Entry point | Runtime images define entry points; build images focus on Maven commands |
+| Entry point | Runtime images define entry points; Maven DHI build images use `mvn` as ENTRYPOINT |
 
 ### Migration process
 
 1. **Identify your build requirements**
    
-   Choose the appropriate Maven DHI variant based on your needs:
+   Choose the appropriate Maven DHI dev variant based on your needs:
    - JDK version matching your application requirements
    - OS preference (Debian for compatibility, Alpine for size)
    - Maven version pinning strategy
 
 2. **Convert to multi-stage build**
    
-   Update your Dockerfile to use Maven DHI in the build stage:
+   Update your Dockerfile to use Maven DHI dev variant in the build stage:
 
    ```dockerfile
    # Build stage
-   FROM dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev AS build
+   FROM <your-namespace>/dhi-maven:<tag>-dev AS build
    # ... Maven build commands ...
    
    # Runtime stage  
