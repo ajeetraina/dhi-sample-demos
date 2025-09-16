@@ -142,7 +142,7 @@ To migrate your Maven builds to Docker Hardened Images, you must update your Doc
 |------|----------------|
 | Base image | Replace Maven base images with Docker Hardened Maven dev images in build stages only |
 | Multi-stage required | Maven DHI images are build-only. Use multi-stage builds to copy artifacts to runtime images |
-| Package management | Package managers are available in all Maven DHI images (all are dev variants) |
+| Package management | Package managers are completely removed (in all dev variants) |
 | Build user | Maven DHI images run as root during build (appropriate for build environments) |
 | Dependency caching | Use Docker cache mounts for `/root/.m2` to persist Maven local repository |
 | Settings files | Copy or mount Maven settings.xml if using custom repositories |
