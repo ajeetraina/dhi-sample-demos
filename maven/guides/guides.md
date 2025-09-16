@@ -1,131 +1,274 @@
-## How to use this image
+# How to use this image
 
-Refer to the [upstream's documentation](https://docs.haproxy.org/)⁠ on the
-subject of configuring HAProxy for your needs.
+Refer to the [Apache Maven documentation](https://maven.apache.org/guides/) for configuring Maven for your project's needs.
 
-### Run a HAProxy container and output the version
+## Start a Maven build
 
-You can run a Maven project by using the image directly, passing a Maven command
-to `docker run`. Replace `<your-namespace>` with your organization's namespace
-and `<tag>` with the image variant you want to run.
+Run the following command to execute Maven commands using a Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
+```bash
+$ docker run --rm <your-namespace>/dhi-maven:<tag> mvn --version
 ```
-$ docker run -it --rm --name my-maven-project -v "$(pwd)":/build -w /build <your-namespace>/dhi-maven:<tag> clean install
+
+## Common Maven use cases
+
+### Build a Maven project
+
+Build your Maven project by mounting your source code and running Maven commands:
+
+```bash
+$ docker run --rm -v "$(pwd)":/app -w /app dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev mvn clean compile
 ```
+
+### Build and package application artifacts
+
+The most common use case is building application artifacts like JAR or WAR files:
+
+```bash
+$ docker run --rm -v "$(pwd)":/app -w /app dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev mvn clean package
+```
+
+### Build and run with multi-stage Dockerfile
+
+**Important**: Maven Docker Hardened Images are build-only tools. They contain no runtime variants because Maven builds applications but doesn't run them. You must use multi-stage Dockerfiles to copy build artifacts to appropriate runtime images.
+
+Here's a complete example for a Spring Boot application:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+# Build stage - Maven DHI for building
+FROM dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev AS build
+
+WORKDIR /app
+
+# Copy dependency files for better caching
+COPY pom.xml .
+COPY src ./src
+
+# Build the application
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn clean package -DskipTests
+
+# Runtime stage - JRE for running the application
+FROM eclipse-temurin:21-jre-alpine AS runtime
+
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+### Build with dependency caching
+
+Use Docker's cache mount to speed up builds by persisting the Maven local repository:
+
+```bash
+$ docker run --rm \
+    -v "$(pwd)":/app -w /app \
+    --mount type=cache,target=/root/.m2 \
+    dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev \
+    mvn clean package
+```
+
+You can then build and run the Docker image:
+
+```bash
+$ docker build -t my-spring-app .
+$ docker run --rm -p 8080:8080 --name my-running-app my-spring-app
+```
+
+## Non-hardened images vs Docker Hardened Images
+
+| Feature | Docker Official Maven | Docker Hardened Maven |
+|---------|----------------------|------------------------|
+| Security | Standard base with common utilities | Minimal, hardened base with security patches |
+| Shell access | Full shell (bash/sh) available | Limited shell access in build environments |
+| Package manager | Package managers available | Package managers available (build-only images) |
+| User | Runs as root by default | Runs as root (build environment) |
+| Attack surface | Larger due to additional utilities | Minimal, only essential build components |
+| Runtime variants | Available for some use cases | **Not available - build-only tool** |
+| Debugging | Traditional shell debugging | Use Docker Debug for troubleshooting |
+
+### Why no runtime variants?
+
+Maven is a build tool, not a runtime. After Maven compiles and packages your application, you run the resulting artifacts (JAR, WAR, etc.) with appropriate runtime environments:
+
+- **Spring Boot applications**: Use JRE images like `eclipse-temurin:21-jre-alpine`
+- **Web applications**: Use application server images like Tomcat or Jetty  
+- **Microservices**: Use minimal JRE or native runtime images
+
+The hardened Maven images focus exclusively on providing a secure, minimal build environment.
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use.
+Docker Hardened Maven images are **build-time only**. All variants include `dev` in the tag name and are designed for use in build stages of multi-stage Dockerfiles.
 
-- Runtime variants are designed to run your application in production. These
-  images are intended to be used either directly or as the `FROM` image in the
-  final stage of a multi-stage build. These images typically:
-   - Run as the nonroot user
-   - Do not include a shell or a package manager
-   - Contain only the minimal set of libraries needed to run the app
+### Available variants
 
-- Build-time variants typically include `dev` in the variant name and are
-  intended for use in the first stage of a multi-stage Dockerfile. These images
-  typically:
-   - Run as the root user
-   - Include a shell and package manager
-   - Are used to build or compile applications
+Maven DHI images follow this tag pattern: `<maven-version>-jdk<jdk-version>-<os>-dev`
+
+**Maven versions:**
+- `3.9.11` - Specific patch version (recommended for production)
+- `3.9` - Latest patch of 3.9 series  
+- `3` - Latest minor and patch version
+
+**JDK versions:**
+- `jdk17` - Java 17 LTS (mature, stable)
+- `jdk21` - Java 21 LTS (recommended for new projects)
+- `jdk23` - Java 23 (latest features)
+
+**Operating systems:**
+- `debian13` - Debian-based (default, ~200MB)
+- `alpine3.22` - Alpine-based (~180MB, smaller size)
+
+**Examples:**
+- `dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev` - Recommended for most projects
+- `dockerdevrel/dhi-maven:3.9-jdk17-alpine3.22-dev` - Smaller size, Java 17
+- `dockerdevrel/dhi-maven:3-jdk21-dev` - Always latest Maven 3.x (debian13 default)
+
+To view available image variants, select the Tags tab for this repository.
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your
-Dockerfile. At minimum, you must update the base image in your existing
-Dockerfile to a Docker Hardened Image. This and a few other common changes are
-listed in the following table of migration notes.
+To migrate your Maven builds to Docker Hardened Images, you must update your Dockerfile and build process. Since Maven DHI images are build-only, **you must use multi-stage builds**.
 
-| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
-|:-------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
-| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                                                                                                   |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+| Item | Migration note |
+|------|----------------|
+| Base image | Replace Maven base images with Docker Hardened Maven images in build stages only |
+| Multi-stage required | Maven DHI images are build-only. Use multi-stage builds to copy artifacts to runtime images |
+| Package management | Package managers are available in Maven DHI images (all are dev variants) |
+| Build user | Maven DHI images run as root during build (appropriate for build environments) |
+| Dependency caching | Use Docker cache mounts for `/root/.m2` to persist Maven local repository |
+| Settings files | Copy or mount Maven settings.xml if using custom repositories |
+| Runtime image selection | Choose appropriate JRE/JDK runtime images that match your build JDK version |
+| Entry point | Runtime images define entry points; build images focus on Maven commands |
 
-The following steps outline the general migration process.
+### Migration process
 
-1. Find hardened images for your app.
+1. **Identify your build requirements**
+   
+   Choose the appropriate Maven DHI variant based on your needs:
+   - JDK version matching your application requirements
+   - OS preference (Debian for compatibility, Alpine for size)
+   - Maven version pinning strategy
 
-   A hardened image may have several variants. Inspect the image tags and find
-   the image variant that meets your needs.
+2. **Convert to multi-stage build**
+   
+   Update your Dockerfile to use Maven DHI in the build stage:
 
-2. Update the base image in your Dockerfile.
+   ```dockerfile
+   # Build stage
+   FROM dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev AS build
+   # ... Maven build commands ...
+   
+   # Runtime stage  
+   FROM eclipse-temurin:21-jre-alpine AS runtime
+   COPY --from=build /app/target/app.jar .
+   # ... runtime configuration ...
+   ```
 
-   Update the base image in your application's Dockerfile to the hardened image
-   you found in the previous step. For framework images, this is typically going
-   to be an image tagged as `dev` because it has the tools needed to install
-   packages and dependencies.
+3. **Optimize dependency caching**
+   
+   Copy `pom.xml` before source code and use cache mounts:
 
-3. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
+   ```dockerfile
+   COPY pom.xml .
+   RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline
+   COPY src ./src
+   RUN --mount=type=cache,target=/root/.m2 mvn package
+   ```
 
-   To ensure that your final image is as minimal as possible, you should use a
-   multi-stage build. All stages in your Dockerfile should use a hardened image.
-   While intermediary stages will typically use images tagged as `dev`, your
-   final runtime stage should use a non-dev image variant.
-
-4. Install additional packages
-
-   Docker Hardened Images contain minimal packages in order to reduce the
-   potential attack surface. You may need to install additional packages in your
-   Dockerfile. Inspect the image variants to identify which packages are already
-   installed.
-
-   Only images tagged as `dev` typically have package managers. You should use a
-   multi-stage Dockerfile to install the packages. Install the packages in the
-   build stage that uses a `dev` image. Then, if needed, copy any necessary
-   artifacts to the runtime stage that uses a non-dev image.
-
-   For Alpine-based images, you can use `apk` to install packages. For
-   Debian-based images, you can use `apt-get` to install packages.
+4. **Select appropriate runtime image**
+   
+   Choose runtime images that match your build environment:
+   - Same JDK major version (21 in build → JRE 21 in runtime)
+   - Consider security and size requirements
+   - Ensure runtime image supports your application type
 
 ## Troubleshooting migration
 
-The following are common issues that you may encounter during migration.
+### Dependency resolution issues
+
+**Problem**: Dependencies fail to download or resolve during build.
+
+**Solutions**:
+- Mount custom `settings.xml` with repository configurations
+- Use cache mounts to persist the Maven local repository across builds
+- Verify network connectivity to Maven repositories
+
+```dockerfile
+# Custom settings
+COPY settings.xml /root/.m2/settings.xml
+
+# Cache mount for dependencies
+RUN --mount=type=cache,target=/root/.m2 mvn clean package
+```
+
+### Build performance issues
+
+**Problem**: Builds are slow due to repeated dependency downloads.
+
+**Solutions**:
+- Use Docker cache mounts for `/root/.m2` directory
+- Separate dependency installation from source compilation
+- Consider using Maven daemon for repeated local builds
+
+```dockerfile
+# Separate dependency download
+COPY pom.xml .
+RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline
+
+# Then copy source and build
+COPY src ./src  
+RUN --mount=type=cache,target=/root/.m2 mvn compile
+```
+
+### JDK version mismatches
+
+**Problem**: Build succeeds but runtime fails due to JDK version incompatibility.
+
+**Solutions**:
+- Ensure build and runtime JDK versions are compatible
+- Use same major version for build and runtime (e.g., JDK 21 → JRE 21)
+- Consider using JDK runtime images if JRE is insufficient
+
+```dockerfile
+# Build with JDK 21
+FROM dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev AS build
+
+# Runtime with JRE 21 (compatible)
+FROM eclipse-temurin:21-jre-alpine AS runtime
+```
+
+### Multi-module project issues
+
+**Problem**: Multi-module Maven projects fail to build correctly.
+
+**Solutions**:
+- Copy the entire project structure including parent POM
+- Use proper WORKDIR and copy strategies for module dependencies
+- Consider building modules in correct dependency order
+
+```dockerfile
+# Copy entire project structure
+COPY pom.xml .
+COPY module1/pom.xml module1/
+COPY module2/pom.xml module2/
+RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline
+
+# Copy all source files
+COPY module1/src module1/src
+COPY module2/src module2/src
+RUN --mount=type=cache,target=/root/.m2 mvn clean package
+```
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for
-debugging. The recommended method for debugging applications built with Docker
-Hardened Images is to use [Docker
-Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these
-containers. Docker Debug provides a shell, common debugging tools, and lets you
-install other tools in an ephemeral, writable layer that only exists during the
-debugging session.
+For debugging build issues in Maven DHI containers, use Docker Debug to attach debugging tools:
 
-### Permissions
+```bash
+$ docker debug <container-name>
+```
 
-By default image variants intended for runtime, run as the nonroot user. Ensure
-that necessary files and directories are accessible to the nonroot user. You may
-need to copy files to different directories or change permissions so your
-application running as the nonroot user can access them.
-
-### Privileged ports
-
-Non-dev hardened images run as a nonroot user by default. As a result,
-applications in these images can't bind to privileged ports (below 1024) when
-running in Kubernetes or in Docker Engine versions older than 20.10. To avoid
-issues, configure your application to listen on port 1025 or higher inside the
-container, even if you map it to a lower port on the host. For example, `docker
-run -p 80:8080 my-image` will work because the port inside the container is 8080,
-and `docker run -p 80:81 my-image` won't work because the port inside the
-container is 81.
-
-### No shell
-
-By default, image variants intended for runtime don't contain a shell. Use `dev`
-images in build stages to run shell commands and then copy any necessary
-artifacts into the runtime stage. In addition, use Docker Debug to debug
-containers with no shell.
-
-### Entry point
-
-Docker Hardened Images may have different entry points than images such as
-Docker Official Images. Use `docker inspect` to inspect entry points for Docker
-Hardened Images and update your Dockerfile if necessary.
+This provides access to debugging tools and shell access even in minimal build environments.
