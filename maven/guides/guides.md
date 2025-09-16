@@ -90,23 +90,25 @@ $ docker run --rm -p 8080:8080 --name my-running-app my-spring-app
 
 | Feature | Docker Official Maven | Docker Hardened Maven |
 |---------|----------------------|------------------------|
-| Security | Standard base with common utilities | Minimal, hardened base with security patches |
-| Shell access | Full shell (bash/sh) available | Limited shell access in build environments |
-| Package manager | Package managers available | Package managers available (build-only images) |
+| Security | Standard base with common utilities | Custom hardened Debian with security patches |
+| Shell access | Direct shell access | Full shell access (requires ENTRYPOINT override) |
+| Package manager | Full package managers (apt, dpkg) | **No package managers (completely removed)** |
 | User | Runs as root by default | Runs as root (build environment) |
-| Attack surface | Larger due to additional utilities | Minimal, only essential build components |
+| Attack surface | Large (424+ utilities, full Ubuntu/Debian) | **Minimal (129 utilities, 70% fewer than standard)** |
 | Runtime variants | Available for some use cases | **Not available - build-only tool** |
-| Debugging | Traditional shell debugging | Use Docker Debug for troubleshooting |
+| Debugging | Traditional shell debugging | Use Docker Debug or ENTRYPOINT override |
+| Utilities | Full development toolchain (curl, wget, git, vim, tar, make) | **Extremely minimal (no curl, wget, git, vim, nano, tar, gzip, unzip, make)** |
 
-### Why no runtime variants?
+### Why such extreme minimization?
 
-Maven is a build tool, not a runtime. After Maven compiles and packages your application, you run the resulting artifacts (JAR, WAR, etc.) with appropriate runtime environments:
+Docker Hardened Maven images prioritize security through aggressive minimalism:
 
-- **Spring Boot applications**: Use JRE images like `eclipse-temurin:21-jre-alpine`
-- **Web applications**: Use application server images like Tomcat or Jetty  
-- **Microservices**: Use minimal JRE or native runtime images
+- **Complete package manager removal**: No way to install additional software during builds
+- **Utility reduction**: 70% fewer binaries than standard images (129 vs 424+)
+- **Custom hardened OS**: Purpose-built "Docker Hardened Images (Debian)" not standard distributions
+- **Essential-only toolset**: Only Maven, JDK, and core build utilities included
 
-The hardened Maven images focus exclusively on providing a secure, minimal build environment.
+The hardened images focus exclusively on providing a secure, minimal Maven build environment. After Maven compiles and packages your application, you run the resulting artifacts with appropriate runtime environments.
 
 ## Image variants
 
@@ -200,18 +202,7 @@ To migrate your Maven builds to Docker Hardened Images, you must update your Doc
 
 **Problem**: Dependencies fail to download or resolve during build.
 
-**Solutions**:
-- Mount custom `settings.xml` with repository configurations
-- Use cache mounts to persist the Maven local repository across builds
-- Verify network connectivity to Maven repositories
 
-```dockerfile
-# Custom settings
-COPY settings.xml /root/.m2/settings.xml
-
-# Cache mount for dependencies
-RUN --mount=type=cache,target=/root/.m2 mvn clean package
-```
 
 ### Build performance issues
 
