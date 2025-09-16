@@ -132,12 +132,7 @@ Maven DHI images follow this tag pattern: `<maven-version>-jdk<jdk-version>-<os>
 - `debian13` - Debian-based (default, ~647MB uncompressed)
 - `alpine3.22` - Alpine-based (~578MB uncompressed, ~69MB smaller)
 
-**Examples:**
-- `dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev` - Recommended for most projects
-- `dockerdevrel/dhi-maven:3.9-jdk17-alpine3.22-dev` - Smaller size, Java 17
-- `dockerdevrel/dhi-maven:3-jdk21-dev` - Always latest Maven 3.x (debian13 default)
 
-To view available image variants, select the Tags tab for this repository.
 
 ## Migrate to a Docker Hardened Image
 
@@ -198,76 +193,25 @@ To migrate your Maven builds to Docker Hardened Images, you must update your Doc
 
 ## Troubleshooting migration
 
-### Dependency resolution issues
-
-**Problem**: Dependencies fail to download or resolve during build.
-
-
-
-### Build performance issues
-
-**Problem**: Builds are slow due to repeated dependency downloads.
-
-**Solutions**:
-- Use Docker cache mounts for `/root/.m2` directory
-- Separate dependency installation from source compilation
-- Consider using Maven daemon for repeated local builds
-
-```dockerfile
-# Separate dependency download
-COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline
-
-# Then copy source and build
-COPY src ./src  
-RUN --mount=type=cache,target=/root/.m2 mvn compile
-```
-
-### JDK version mismatches
-
-**Problem**: Build succeeds but runtime fails due to JDK version incompatibility.
-
-**Solutions**:
-- Ensure build and runtime JDK versions are compatible
-- Use same major version for build and runtime (e.g., JDK 21 → JRE 21)
-- Consider using JDK runtime images if JRE is insufficient
-
-```dockerfile
-# Build with JDK 21
-FROM dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev AS build
-
-# Runtime with JRE 21 (compatible)
-FROM eclipse-temurin:21-jre-alpine AS runtime
-```
-
-### Multi-module project issues
-
-**Problem**: Multi-module Maven projects fail to build correctly.
-
-**Solutions**:
-- Copy the entire project structure including parent POM
-- Use proper WORKDIR and copy strategies for module dependencies
-- Consider building modules in correct dependency order
-
-```dockerfile
-# Copy entire project structure
-COPY pom.xml .
-COPY module1/pom.xml module1/
-COPY module2/pom.xml module2/
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline
-
-# Copy all source files
-COPY module1/src module1/src
-COPY module2/src module2/src
-RUN --mount=type=cache,target=/root/.m2 mvn clean package
-```
+The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-For debugging build issues in Maven DHI containers, use Docker Debug to attach debugging tools:
+Maven DHI images are build-only tools and contain shell access via ENTRYPOINT override. The recommended method for debugging applications built with Docker Hardened Images is to use Docker Debug to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
-```bash
-$ docker debug <container-name>
-```
+## Permisions
 
-This provides access to debugging tools and shell access even in minimal build environments.
+Maven DHI images run as the root user during builds (appropriate for build environments). When copying build artifacts to runtime stages, ensure that necessary files and directories have appropriate permissions for the runtime image's user context, as runtime images typically run as nonroot users.
+
+## Privileged Ports
+
+Applications built with Maven DHI will typically run in runtime images that use nonroot users by default. As a result, your applications can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, docker run -p 80:8080 my-app will work because the port inside the container is 8080, and docker run -p 80:81 my-app won't work because the port inside the container is 81.
+
+
+## No shell
+
+Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
+
+## Entry point
+
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use docker inspect to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
