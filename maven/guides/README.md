@@ -9,6 +9,7 @@
 - Maven builds applications, it doesn't run them
 - After Maven creates JARs/WARs, you run those with JRE/JDK images
 - There's no use case for a "runtime Maven container"
+- The Docker image already has mvn as its ENTRYPOINT, so we're accidentally running mvn mvn clean compile.
 
 
 ```
@@ -157,3 +158,97 @@ docker run --rm -v "$(pwd)":/app -w /app dockerdevrel/dhi-maven:3.9-jdk21-debian
 ```
 
 The Docker image already has mvn as the ENTRYPOINT, so all commands in the guide accidentally run mvn mvn ... instead of mvn ....
+
+
+
+```
+ajeetsraina  maven-test  ♥ 23:09  docker volume create maven-repo
+maven-repo
+ajeetsraina  maven-test  ♥ 23:10  docker run --rm \
+    -v "$(pwd)":/app -w /app \
+    -v maven-repo:/root/.m2 \
+    dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev \
+    clean package
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ---------------------< com.example:maven-dhi-test >---------------------
+[INFO] Building maven-dhi-test 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO]
+[INFO] --- clean:3.2.0:clean (default-clean) @ maven-dhi-test ---
+[INFO] Deleting /app/target
+[INFO]
+[INFO] --- resources:3.3.1:resources (default-resources) @ maven-dhi-test ---
+[INFO] skip non existing resourceDirectory /app/src/main/resources
+[INFO]
+[INFO] --- compiler:3.13.0:compile (default-compile) @ maven-dhi-test ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 1 source file with javac [debug target 21] to target/classes
+[INFO]
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ maven-dhi-test ---
+[INFO] skip non existing resourceDirectory /app/src/test/resources
+[INFO]
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ maven-dhi-test ---
+[INFO] No sources to compile
+[INFO]
+[INFO] --- surefire:3.2.5:test (default-test) @ maven-dhi-test ---
+[INFO] No tests to run.
+[INFO]
+[INFO] --- jar:3.3.0:jar (default-jar) @ maven-dhi-test ---
+[INFO] Building jar: /app/target/maven-dhi-test-1.0.0.jar
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  0.907 s
+[INFO] Finished at: 2025-09-16T17:40:11Z
+[INFO] ------------------------------------------------------------------------
+ajeetsraina  maven-test  ♥ 23:10  docker run --rm \
+    -v "$(pwd)":/app -w /app \
+    -v maven-repo:/root/.m2 \
+    dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev \
+    clean package
+[INFO] Scanning for projects...
+^C[INFO]
+[INFO] ---------------------< com.example:maven-dhi-test >---------------------
+[INFO] Building maven-dhi-test 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+ajeetsraina  maven-test  ♥ 23:11  docker build -t my-spring-app .
+[+] Building 3.6s (19/19) FINISHED                                            docker:desktop-linux
+ => [internal] load build definition from Dockerfile                                          0.0s
+ => => transferring dockerfile: 575B                                                          0.0s
+ => resolve image config for docker-image://docker.io/docker/dockerfile:1                     2.0s
+ => [auth] docker/dockerfile:pull token for registry-1.docker.io                              0.0s
+ => CACHED docker-image://docker.io/docker/dockerfile:1@sha256:dabfc0969b935b2080555ace70ee6  0.0s
+ => => resolve docker.io/docker/dockerfile:1@sha256:dabfc0969b935b2080555ace70ee69a5261af8a8  0.0s
+ => [internal] load metadata for docker.io/dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev      1.3s
+ => [internal] load metadata for docker.io/library/eclipse-temurin:21-jre-alpine              1.3s
+ => [auth] dockerdevrel/dhi-maven:pull token for registry-1.docker.io                         0.0s
+ => [auth] library/eclipse-temurin:pull token for registry-1.docker.io                        0.0s
+ => [internal] load .dockerignore                                                             0.0s
+ => => transferring context: 2B                                                               0.0s
+ => [build 1/5] FROM docker.io/dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev@sha256:ae74a332  0.0s
+ => => resolve docker.io/dockerdevrel/dhi-maven:3.9-jdk21-debian13-dev@sha256:ae74a3320c0495  0.0s
+ => [runtime 1/3] FROM docker.io/library/eclipse-temurin:21-jre-alpine@sha256:4ca7eff3ab0ef9  0.0s
+ => => resolve docker.io/library/eclipse-temurin:21-jre-alpine@sha256:4ca7eff3ab0ef9b41f5fef  0.0s
+ => [internal] load build context                                                             0.0s
+ => => transferring context: 249B                                                             0.0s
+ => CACHED [runtime 2/3] WORKDIR /app                                                         0.0s
+ => CACHED [build 2/5] WORKDIR /app                                                           0.0s
+ => CACHED [build 3/5] COPY pom.xml .                                                         0.0s
+ => CACHED [build 4/5] COPY src ./src                                                         0.0s
+ => CACHED [build 5/5] RUN --mount=type=cache,target=/root/.m2     mvn clean package -DskipT  0.0s
+ => CACHED [runtime 3/3] COPY --from=build /app/target/*.jar app.jar                          0.0s
+ => exporting to image                                                                        0.1s
+ => => exporting layers                                                                       0.0s
+ => => exporting manifest sha256:4432f9bae3acbfbb9a7a3a079b15c550dcf37282e290e735b190fe42e71  0.0s
+ => => exporting config sha256:2d7d60efef03ff72220d0ae38bd81d63420f2c43ba330c15ea01b096e45f5  0.0s
+ => => exporting attestation manifest sha256:32aa3575ce8c8a1e6109c25844fda5e0dc1db9cab47f2d9  0.0s
+ => => exporting manifest list sha256:d7c2115c3b4bade31f59e932dd8397a549ea86648999a9adbfade8  0.0s
+ => => naming to docker.io/library/my-spring-app:latest                                       0.0s
+ => => unpacking to docker.io/library/my-spring-app:latest                                    0.0s
+ajeetsraina  maven-test  ♥ 23:11  docker run --rm -p 8080:8080 --name my-running-app my-spring-app
+Hello from Maven DHI!
+ajeetsraina  maven-test  ♥ 23:11 
+```
