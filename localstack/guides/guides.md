@@ -16,6 +16,8 @@ $ docker run -d -p 4566:4566 -p 5678:5678 -p 4510-4559:4510-4559 <your-namespace
 $ curl -f http://localhost:4566/_localstack/health
 ```
 
+**Note**: Some services may require additional initialization time. If a service shows "available" in health check but connection fails, wait 10-15 seconds and retry.
+
 ## Common LocalStack use cases
 
 ### Run LocalStack for development
@@ -23,12 +25,24 @@ Start LocalStack with specific AWS services enabled:
 
 ```bash
 $ docker run -d -p 4566:4566 \
-    -e SERVICES=s3,dynamodb,lambda,sqs \
+    -e SERVICES=s3,sqs,sns,sts,iam,secretsmanager,ssm \
     <your-namespace>/dhi-localstack:<tag>
 
 # Test that services are available
 $ curl -f http://localhost:4566/_localstack/health
 ```
+
+### Services with known limitations
+Some services require Java runtime or system utilities not available in the minimized runtime image:
+
+```bash
+# Services that may fail due to missing dependencies
+SERVICES=dynamodb,lambda,elasticsearch,kinesis
+
+# Error example: "Installation of java 21 failed" or "command not found: rm"
+```
+
+**Workaround**: For Java-dependent services, consider using standard LocalStack images for development and LocalStack DHI only for services that work reliably, or use multi-stage builds to pre-install dependencies.
 
 ### Run LocalStack with persistence
 Enable data persistence across container restarts:
@@ -44,25 +58,25 @@ $ curl -f http://localhost:4566/_localstack/health
 ```
 
 ### Integration testing with multi-stage Dockerfile
-**Important**: LocalStack Docker Hardened Images come in both runtime and dev variants. Runtime variants are optimized for production deployment, while dev variants include additional tools for development and testing.
+**Important**: LocalStack Docker Hardened Images are runtime-only variants. Unlike other DHI products (like Maven), LocalStack DHI does not provide separate dev variants with additional tools.
 
 Here's a complete example for integration testing:
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-# Development stage - LocalStack DHI dev for testing setup
-FROM <your-namespace>/dhi-localstack:<tag>-dev AS test-setup
+# Development stage - Use standard LocalStack for testing setup
+FROM localstack/localstack AS test-setup
 
 WORKDIR /app
 
-# Install testing tools and dependencies
-RUN apk add --no-cache curl jq aws-cli
+# Install testing tools and dependencies (standard image has package managers)
+RUN apt-get update && apt-get install -y curl jq aws-cli
 
 # Copy test scripts and configuration
 COPY test-scripts/ ./test-scripts/
 COPY localstack-config/ ./config/
 
-# Runtime stage - LocalStack DHI for running services
+# Runtime stage - LocalStack DHI for production deployment
 FROM <your-namespace>/dhi-localstack:<tag> AS runtime
 
 WORKDIR /app
@@ -102,45 +116,52 @@ $ aws --endpoint-url=http://localhost:4566 s3 mb s3://test-bucket
 | Feature | Docker Official LocalStack | Docker Hardened LocalStack |
 |---------|----------------------------|----------------------------|
 | Security | Standard base with common utilities | Custom hardened Debian with security patches |
-| Shell access | Direct shell access | No shell access (runtime), full shell access (dev) |
-| Package manager | Full package managers (apt, pip) | No package managers (runtime only) |
-| User | Runs as root by default | Runs as nonroot user (runtime) |
-| Attack surface | Large (300+ utilities, full Ubuntu/Debian) | Minimal (150 utilities, 50% fewer than standard) |
-| Runtime variants | Single variant for all use cases | Separate runtime and dev variants |
-| Debugging | Traditional shell debugging | Use Docker Debug or dev variant |
-| Utilities | Full development toolchain (curl, wget, git, vim, nano) | Minimal utilities (no curl, wget, git, vim, nano) |
+| Shell access | Direct shell access | Basic shell access |
+| Package manager | Full package managers (apt, pip) | No package managers |
+| User | Runs as root by default | Runs as nonroot user |
+| Attack surface | Large (300+ utilities, full Ubuntu/Debian) | Minimal (50+ utilities, 85% fewer than standard) |
+| Service compatibility | All LocalStack services supported | Limited service support (see service limitations) |
+| Java services | DynamoDB, Lambda work out of box | Java services may fail due to missing dependencies |
+| Debugging | Traditional shell debugging | Basic shell available or use Docker Debug |
+| System utilities | Full system toolchain (id, ps, top, find, rm) | Extremely minimal (no id, ps, top, find, rm) |
+| Variants | Single variant for all use cases | Runtime-only (no dev variants) |
 
 ## Why such extreme minimization?
-Docker Hardened LocalStack images prioritize security through strategic minimalism:
+Docker Hardened LocalStack images prioritize security through aggressive minimalism:
 
 - **Complete package manager removal**: Runtime images cannot install additional software during execution
-- **Utility reduction**: 50% fewer binaries than standard images (150 vs 300+)
-- **Custom hardened OS**: Purpose-built "Docker Hardened Images (Debian)" not standard distributions
+- **Utility reduction**: 85% fewer binaries than standard images (50+ vs 300+)
+- **Custom hardened OS**: Purpose-built "Docker Hardened Images (Debian)" not standard distributions  
 - **Essential-only toolset**: Only LocalStack core, Python runtime, and essential AWS service libraries included
 
-The hardened runtime images focus exclusively on providing a secure, minimal LocalStack execution environment. Development and debugging tasks use the dev variants with additional tools.
+The hardened runtime images focus exclusively on providing a secure, minimal LocalStack execution environment while maintaining basic shell access for debugging. Development and testing tasks use the dev variants with additional tools.
 
 ## Image variants
-Docker Hardened Images come in different variants depending on their intended use.
+Docker Hardened LocalStack images are **runtime-only variants**. Unlike other DHI products (such as Maven), LocalStack DHI does not provide separate dev variants with additional development tools.
 
 **Runtime variants** are designed to run LocalStack in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
 - Run as the nonroot user
-- Do not include a shell or a package manager  
+- Include basic shell but no package manager  
 - Contain only the minimal set of libraries needed to run LocalStack
 
-**Build-time variants** typically include `dev` in the variant name and are intended for use in development and testing. These images typically:
-- Run as the root user
-- Include a shell and package manager
-- Are used for development, testing, and debugging
-
 ### Available variants
-LocalStack DHI images follow this tag pattern: `<localstack-version>` for runtime and `<localstack-version>-dev` for development.
+LocalStack DHI images follow this tag pattern: `<localstack-version>-<python-version>-<os>`. All available tags are runtime variants.
 
 **LocalStack versions:**
 - `4.8.1` - Specific patch version (recommended for production)
 - `4.8` - Latest patch of 4.8 series
 - `4` - Latest minor and patch version
-- `latest` - Latest stable release
+
+**Python versions:**
+- `python3.12` - Python 3.12 (recommended for new deployments)
+- `python3.11` - Python 3.11 (stable)
+- `python3.10` - Python 3.10 (legacy support)
+
+**Operating systems:**
+- `debian13` - Debian-based (default, ~115MB compressed)
+- `alpine3.22` - Alpine-based (if available, smaller footprint)
+
+**Note**: Multiple tag combinations may point to the same underlying image for organizational clarity.
 
 ## Migrate to a Docker Hardened Image
 To migrate your LocalStack deployment to Docker Hardened Images, you must update your deployment configuration and potentially your Dockerfile.
@@ -149,12 +170,13 @@ To migrate your LocalStack deployment to Docker Hardened Images, you must update
 |------|----------------|
 | Base image | Replace LocalStack base images with Docker Hardened LocalStack images |
 | Package management | Runtime images don't contain package managers. Use dev images for development tasks |
+| Service dependencies | Some services (DynamoDB, Lambda) may require dev variant due to Java dependencies |
 | Non-root user | Runtime images run as nonroot user. Ensure mounted files are accessible to nonroot user |
 | Multi-stage build | Use dev images for setup stages and runtime images for final deployment |
 | TLS certificates | Docker Hardened Images contain standard TLS certificates by default |
 | Ports | Applications run as nonroot user, but LocalStack is pre-configured for correct ports |
 | Entry point | Images use `localstack-supervisor` as ENTRYPOINT |
-| No shell | Runtime images don't contain shell. Use dev images or Docker Debug for debugging |
+| System utilities | Runtime images lack most system utilities (id, ps, top, find, rm) |
 
 ## Migration process
 
@@ -210,6 +232,59 @@ The following are common issues that you may encounter during migration.
 ### General debugging
 The hardened runtime images don't contain a shell or debugging tools. The recommended method for debugging LocalStack containers built with Docker Hardened Images is to use Docker Debug to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
+### Service dependencies and limitations
+LocalStack DHI has significant service limitations due to extreme minimization:
+
+```bash
+# Services that work reliably
+SERVICES=s3,sqs,sns,sts,iam,secretsmanager,ssm
+
+# Services that typically fail due to Java dependencies
+SERVICES=dynamodb,lambda,elasticsearch,kinesis
+```
+
+**Java-dependent services**: DynamoDB, Lambda, and other services require Java runtime installation, which fails due to missing system utilities (`rm`, `objcopy`, etc.). 
+
+**No workaround available**: Unlike other DHI products, LocalStack does not provide dev variants that include these dependencies.
+
+**Recommendation**: Use LocalStack DHI only for Python-based services (S3, SQS, etc.). For comprehensive LocalStack testing including Java services, use standard LocalStack images.
+
+### Missing system utilities
+The hardened image lacks most system utilities that some services need:
+
+```bash
+# Missing utilities cause service failures
+- rm, cp, mv (file operations for Java installation)
+- objcopy (from binutils, needed for Java linking)  
+- tar, gzip (archive utilities for dependency downloads)
+- id, ps, top, find (system inspection tools)
+```
+
+**Impact**: Services requiring these utilities for initialization will fail with "command not found" errors.
+
+**Solution**: Consider LocalStack DHI a **specialized tool for core AWS services only**, not a complete LocalStack replacement.
+
+### Service initialization timing
+Some LocalStack services may require additional time to fully initialize even after showing "available" in the health endpoint. If you receive connection refused errors:
+
+```bash
+# Check service status
+curl -f http://localhost:4566/_localstack/health | jq '.services'
+
+# Check container logs for dependency issues
+docker logs <container-id> | grep -E "(ERROR|WARN|Installation.*failed)"
+
+# Wait 10-15 seconds and retry the operation
+# Services typically initialize within 15-30 seconds after container start
+```
+
+**Note**: If you see "command not found" errors in logs for `rm`, `objcopy`, or other system utilities, the service requires dependencies not available in the hardened image. This is a fundamental limitation - no dev variant exists to provide these dependencies.
+
+**Recommendation**: For applications requiring Java-dependent services, consider:
+1. Using standard LocalStack images for full service compatibility
+2. Using LocalStack DHI only for specific Python-based services (S3, SQS, etc.)
+3. Hybrid approach: LocalStack DHI for core services + standard LocalStack for Java services
+
 ### Permissions  
 By default, runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so LocalStack running as the nonroot user can access them.
 
@@ -217,7 +292,7 @@ By default, runtime image variants run as the nonroot user. Ensure that necessar
 Runtime hardened images run as a nonroot user by default. LocalStack is pre-configured to use non-privileged ports (4566, 5678, 4510-4559), so this should not be an issue. However, if you customize LocalStack to use privileged ports (below 1024), it won't work in Kubernetes or Docker Engine versions older than 20.10.
 
 ### No shell
-By default, runtime image variants don't contain a shell. Use dev images for development tasks that require shell access, then deploy with runtime images. Use Docker Debug to debug containers with no shell.
+Runtime image variants contain basic shell access but lack most system utilities. Use dev images for development tasks that require full shell capabilities and system tools, then deploy with runtime images. Use Docker Debug for advanced debugging with additional tools.
 
 ### Entry point
 Docker Hardened LocalStack images use `localstack-supervisor` as the entry point, which may differ from other LocalStack distributions. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your deployment configuration if necessary.
