@@ -285,14 +285,18 @@ docker logs <container-id> | grep -E "(ERROR|WARN|Installation.*failed)"
 2. Using LocalStack DHI only for specific Python-based services (S3, SQS, etc.)
 3. Hybrid approach: LocalStack DHI for core services + standard LocalStack for Java services
 
-### Permissions  
+### Permissions
+
 By default, runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so LocalStack running as the nonroot user can access them.
 
 ### Privileged ports
+
 Runtime hardened images run as a nonroot user by default. LocalStack is pre-configured to use non-privileged ports (4566, 5678, 4510-4559), so this should not be an issue. However, if you customize LocalStack to use privileged ports (below 1024), it won't work in Kubernetes or Docker Engine versions older than 20.10.
 
 ### No shell
-Runtime image variants contain basic shell access but lack most system utilities. Use dev images for development tasks that require full shell capabilities and system tools, then deploy with runtime images. Use Docker Debug for advanced debugging with additional tools.
+
+Runtime image variants contain basic shell access but lack most system utilities. Since LocalStack DHI only provides runtime variants, use multi-stage builds with standard LocalStack images for development tasks that require full shell capabilities and system tools, then deploy with runtime images. Use Docker Debug for advanced debugging with additional tools.
 
 ### Entry point
-Docker Hardened LocalStack images use `localstack-supervisor` as the entry point, which may differ from other LocalStack distributions. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your deployment configuration if necessary.
+
+Docker Hardened LocalStack images use localstack-supervisor as the entry point, which may differ from other LocalStack distributions. Use docker inspect to inspect entry points for Docker Hardened Images and update your deployment configuration if necessary.
