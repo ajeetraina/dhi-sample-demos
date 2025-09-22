@@ -216,50 +216,24 @@ The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for
-debugging. The recommended method for debugging applications built with Docker
-Hardened Images is to use [Docker
-Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these
-containers. Docker Debug provides a shell, common debugging tools, and lets you
-install other tools in an ephemeral, writable layer that only exists during the
-debugging session.
+LocalStack DHI runtime images contain basic shell access but lack most system utilities for debugging. Common commands like ls, cat, id, ps, find, and rm are removed. The recommended method for debugging applications built with Docker Hardened Images is to use `docker debug` to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as a nonroot user. Ensure
-that necessary files and directories are accessible to that user. You may
-need to copy files to different directories or change permissions so your
-application running as a nonroot user can access them.
-
- To view the user for an image variant, select the **Tags** tab for this
- repository.
+By default, runtime image variants run as the non-root user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so LocalStack running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result,
-applications in these images can't bind to privileged ports (below 1024) when
-running in Kubernetes or in Docker Engine versions older than 20.10. To avoid
-issues, configure your application to listen on port 1025 or higher inside the
-container, even if you map it to a lower port on the host. For example, `docker
-run -p 80:8080 my-image` will work because the port inside the container is 8080,
-and `docker run -p 80:81 my-image` won't work because the port inside the
-container is 81.
+LocalStack DHI runs as a nonroot user by default. However, LocalStack is pre-configured to use non-privileged ports (4566, 5678, 4510-4559), so privileged port binding is not a concern for LocalStack deployments.
 
-### No shell
+### System utilities
 
-By default, image variants intended for runtime don't contain a shell. Use `dev`
-images in build stages to run shell commands and then copy any necessary
-artifacts into the runtime stage. In addition, use Docker Debug to debug
-containers with no shell.
+LocalStack DHI runtime images lack most system utilities that some services need for initialization. Missing utilities include rm, cp, mv (file operations), objcopy (from binutils), tar, gzip (archive utilities), and id, ps, find (system inspection tools). Since LocalStack DHI has no dev variants, use multi-stage builds with standard LocalStack for tasks requiring full system utilities, then copy necessary artifacts to the DHI runtime stage.
 
- To see if a shell is available in an image variant and which one, select the
- **Tags** tab for this repository.
+### Service dependencies
+
+Some LocalStack services require Java runtime or system utilities not available in the minimized image. Services like DynamoDB and Lambda may fail during initialization with "command not found" errors for utilities like rm or objcopy. Core services like S3, SQS, SNS, STS, and IAM work reliably in the hardened environment.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as
-Docker Official Images.
-
-To view the Entrypoint or CMD defined for an image variant, select the **Tags**
-tab for this repository, select a tag, and then select the **Specifications**
-tab.
+LocalStack DHI images use localstack-supervisor as the entry point, which may differ from other LocalStack distributions. Use docker inspect to inspect entry points for Docker Hardened Images and update your deployment configuration if necessary.
