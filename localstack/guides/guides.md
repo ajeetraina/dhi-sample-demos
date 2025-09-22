@@ -143,21 +143,17 @@ To migrate your LocalStack deployment to Docker Hardened Images, you must update
 
 LocalStack DHI has no dev variants, so you cannot use hardened images for all stages. The multi-stage approach with standard LocalStack for setup is the recommended pattern for complex deployments.
 
-### 1.  Understand LocalStack DHI variants
+1.  **Understand LocalStack DHI variants**
+    LocalStack DHI provides only runtime variants. There are no dev variants available. Tags like `4.8.1-python3.12-debian13` are all runtime variants with the same security hardening.
 
-LocalStack DHI provides only runtime variants. There are no dev variants available. Tags like `4.8.1-python3.12-debian13` are all runtime variants with the same security hardening.
+2. **Update the base image in your Dockerfile**
+   Update the base image in your application's Dockerfile to the LocalStack DHI you found in the previous step. 
 
-### 2. Update the base image in your Dockerfile
+3. **Use multi-stage builds for custom setups**
+   Since LocalStack DHI lacks development tools, use standard LocalStack for setup stages and LocalStack DHI for the final runtime stage. Standard LocalStack has the package managers and utilities needed for installation tasks.
 
-Update the base image in your application's Dockerfile to the LocalStack DHI you found in the previous step. 
-
-### 3. Use multi-stage builds for custom setups
-
-Since LocalStack DHI lacks development tools, use standard LocalStack for setup stages and LocalStack DHI for the final runtime stage. Standard LocalStack has the package managers and utilities needed for installation tasks.
-
-### 4. Handle missing system utilities
-
-LocalStack DHI removes most system utilities for security. If your setup requires tools like curl, jq, or package managers, perform those tasks in a setup stage using standard LocalStack, then copy the results to the DHI runtime stage.
+4. **Handle missing system utilities**
+   LocalStack DHI removes most system utilities for security. If your setup requires tools like curl, jq, or package managers, perform those tasks in a setup stage using standard LocalStack, then copy the results to the DHI runtime stage.
 
 
 ### 5. Test core services
@@ -167,26 +163,26 @@ LocalStack DHI works well with Python-based AWS services but may have issues wit
 ## Troubleshooting migration
 The following are common issues that you may encounter during migration.
 
-## General debugging
+### General debugging
 
 LocalStack DHI runtime images contain basic shell access but lack most system utilities for debugging. Common commands like `ls`, `cat`, `id`, `ps`, `find`, and `rm` are removed. The recommended method for debugging applications built with Docker Hardened Images is to use `docker debug` to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
-## Permissions
+### Permissions
 
 By default, runtime image variants run as the non-root user. Ensure that necessary files and directories are accessible to the non-root user. You may need to copy files to different directories or change permissions so LocalStack running as the nonroot user can access them.
 
-## Privileged ports
+### Privileged ports
 
 LocalStack DHI runs as a non-root user by default. However, LocalStack is pre-configured to use non-privileged ports (`4566`, `5678`, `4510-4559`), so privileged port binding is not a concern for LocalStack deployments.
 
-## System utilities
+### System utilities
 
 LocalStack DHI runtime images lack most system utilities that some services need for initialization. Missing utilities include `rm`, `cp`, `mv` (file operations), objcopy (from binutils), `tar`, `gzip` (archive utilities), and `id`, `ps`, `find` (system inspection tools). Since LocalStack DHI has no dev variants, use multi-stage builds with standard LocalStack for tasks requiring full system utilities, then copy necessary artifacts to the DHI runtime stage.
 
-## Service dependencies
+### Service dependencies
 
 Some LocalStack services require Java runtime or system utilities not available in the minimized image. Services like DynamoDB and Lambda may fail during initialization with "command not found" errors for utilities like rm or objcopy. Core services like S3, SQS, SNS, STS, and IAM work reliably in the hardened environment.
 
-## Entry point
+### Entry point
 
 LocalStack DHI images use `localstack-supervisor` as the entry point, which may differ from other LocalStack distributions. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your deployment configuration if necessary.
