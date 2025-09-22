@@ -35,6 +35,7 @@ $ curl -f http://localhost:4566/_localstack/health
 Enable data persistence across container restarts:
 
 ```bash
+$ docker volume create localstack-data
 $ docker run -d -p 4566:4566 \
     -e PERSISTENCE=1 \
     -v localstack-data:/var/lib/localstack \
