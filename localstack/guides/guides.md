@@ -34,15 +34,39 @@ $ curl -f http://localhost:4566/_localstack/health
 ### Run LocalStack with persistence
 Enable data persistence across container restarts:
 
-```bash
+
+```
+# create a volume
 $ docker volume create localstack-data
-$ docker run -d -p 4566:4566 \
+$ docker run -d --name ls-persist-test \
+    -p 4566:4566 \
     -e PERSISTENCE=1 \
     -v localstack-data:/var/lib/localstack \
-    <your-namespace>/dhi-localstack:<tag>
+    dockerdevrel/dhi-localstack:4.8.1-python3.12-debian13
 
-# Verify LocalStack is running with persistence enabled
+# Step 2: Verify LocalStack is running
 $ curl -f http://localhost:4566/_localstack/health
+
+# Create test data
+aws --endpoint-url=http://localhost:4566 s3 mb s3://persistence-test-bucket
+aws --endpoint-url=http://localhost:4566 s3 cp /etc/hosts s3://persistence-test-bucket/test-file.txt
+
+# Verify data exists
+aws --endpoint-url=http://localhost:4566 s3 ls
+aws --endpoint-url=http://localhost:4566 s3 ls s3://persistence-test-bucket
+
+# Start new container with same volume
+docker run -d --name ls-persist-test2 \
+    -p 4566:4566 \
+    -e PERSISTENCE=1 \
+    -v localstack-data:/var/lib/localstack \
+    dockerdevrel/dhi-localstack:4.8.1-python3.12-debian13
+
+
+# Verify data persisted
+echo "Data after restart:"
+aws --endpoint-url=http://localhost:4566 s3 ls
+aws --endpoint-url=http://localhost:4566 s3 ls s3://persistence-test-bucket
 ```
 
 ### Integration testing with multi-stage Dockerfile
