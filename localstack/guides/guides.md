@@ -8,8 +8,6 @@ To start a LocalStack instance, run the following command. Replace `<your-namesp
 $ docker run -d -p 4566:4566 -p 5678:5678 -p 4510-4559:4510-4559 <your-namespace>/dhi-localstack:<tag>
 ```
 
-**Important**: LocalStack DHI images use `localstack-supervisor` as their ENTRYPOINT. The container starts LocalStack services automatically and listens on the configured ports.
-
 **Test the LocalStack instance**: Use the health endpoint to verify LocalStack is running:
 
 ```bash
@@ -32,17 +30,6 @@ $ docker run -d -p 4566:4566 \
 $ curl -f http://localhost:4566/_localstack/health
 ```
 
-### Services with known limitations
-Some services require Java runtime or system utilities not available in the minimized runtime image:
-
-```bash
-# Services that may fail due to missing dependencies
-SERVICES=dynamodb,lambda,elasticsearch,kinesis
-
-# Error example: "Installation of java 21 failed" or "command not found: rm"
-```
-
-**Workaround**: For Java-dependent services, consider using standard LocalStack images for development and LocalStack DHI only for services that work reliably, or use multi-stage builds to pre-install dependencies.
 
 ### Run LocalStack with persistence
 Enable data persistence across container restarts:
