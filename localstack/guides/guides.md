@@ -143,22 +143,20 @@ To migrate your LocalStack deployment to Docker Hardened Images, you must update
 
 LocalStack DHI has no dev variants, so you cannot use hardened images for all stages. The multi-stage approach with standard LocalStack for setup is the recommended pattern for complex deployments.
 
-1.  **Understand LocalStack DHI variants**
+1.  **Understand LocalStack DHI variants.**
     LocalStack DHI provides only runtime variants. There are no dev variants available. Tags like `4.8.1-python3.12-debian13` are all runtime variants with the same security hardening.
 
-2. **Update the base image in your Dockerfile**
+2. **Update the base image in your Dockerfile.**
    Update the base image in your application's Dockerfile to the LocalStack DHI you found in the previous step. 
 
-3. **Use multi-stage builds for custom setups**
+3. **Use multi-stage builds for custom setups.**
    Since LocalStack DHI lacks development tools, use standard LocalStack for setup stages and LocalStack DHI for the final runtime stage. Standard LocalStack has the package managers and utilities needed for installation tasks.
 
-4. **Handle missing system utilities**
+4. **Handle missing system utilities.**
    LocalStack DHI removes most system utilities for security. If your setup requires tools like curl, jq, or package managers, perform those tasks in a setup stage using standard LocalStack, then copy the results to the DHI runtime stage.
 
-
-### 5. Test core services
-
-LocalStack DHI works well with Python-based AWS services but may have issues with Java-dependent services like DynamoDB or Lambda due to missing system utilities required for Java installation.
+5. **Test core services**
+   LocalStack DHI works well with Python-based AWS services but may have issues with Java-dependent services like DynamoDB or Lambda due to missing system utilities required for Java installation.
 
 ## Troubleshooting migration
 The following are common issues that you may encounter during migration.
