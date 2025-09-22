@@ -108,12 +108,9 @@ EXPOSE 4566 5678 4510-4559
 |---------|----------------------------|----------------------------|
 | Security | Standard base with common utilities | Custom hardened Debian with security patches |
 | Shell access | Direct shell access | Basic shell access |
-| Package manager | Full package managers (apt, pip) | No package managers |
+| Package manager | Full package managers (apt, pip) | System package managers removed (apt removed, pip retained) |
 | User | Runs as root by default | Runs as nonroot user |
 | Attack surface | Large (300+ utilities, full Ubuntu/Debian) | Minimal (50+ utilities, 85% fewer than standard) |
-| Service compatibility | All LocalStack services supported | Limited service support (see service limitations) |
-| Java services | DynamoDB, Lambda work out of box | Java services may fail due to missing dependencies |
-| Debugging | Traditional shell debugging | Basic shell available or use Docker Debug |
 | System utilities | Full system toolchain (id, ps, top, find, rm) | Extremely minimal (no id, ps, top, find, rm) |
 | Variants | Single variant for all use cases | Runtime-only (no dev variants) |
 
@@ -134,25 +131,6 @@ Docker Hardened LocalStack images are **runtime-only variants**. Unlike other DH
 - Run as the nonroot user
 - Include basic shell but no package manager  
 - Contain only the minimal set of libraries needed to run LocalStack
-
-### Available variants
-LocalStack DHI images follow this tag pattern: `<localstack-version>-<python-version>-<os>`. All available tags are runtime variants.
-
-**LocalStack versions:**
-- `4.8.1` - Specific patch version (recommended for production)
-- `4.8` - Latest patch of 4.8 series
-- `4` - Latest minor and patch version
-
-**Python versions:**
-- `python3.12` - Python 3.12 (recommended for new deployments)
-- `python3.11` - Python 3.11 (stable)
-- `python3.10` - Python 3.10 (legacy support)
-
-**Operating systems:**
-- `debian13` - Debian-based (default, ~115MB compressed)
-- `alpine3.22` - Alpine-based (if available, smaller footprint)
-
-**Note**: Multiple tag combinations may point to the same underlying image for organizational clarity.
 
 ## Migrate to a Docker Hardened Image
 To migrate your LocalStack deployment to Docker Hardened Images, you must update your deployment configuration and potentially your Dockerfile.
