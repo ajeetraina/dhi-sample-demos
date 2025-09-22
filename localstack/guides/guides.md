@@ -106,30 +106,21 @@ EXPOSE 4566 5678 4510-4559
 
 | Feature | Docker Official LocalStack | Docker Hardened LocalStack |
 |---------|----------------------------|----------------------------|
-| Security | Standard base with common utilities | Custom hardened Debian with security patches |
-| Shell access | Direct shell access | Basic shell access |
+| Security | Standard base with common utilities | Hardened base with reduced utilities |
+| Shell access | Direct shell access (bash) | Basic shell access (sh) |
 | Package manager | Full package managers (apt, pip) | System package managers removed (apt removed, pip retained) |
 | User | Runs as root by default | Runs as nonroot user |
-| Attack surface | Large (300+ utilities, full Ubuntu/Debian) | Minimal (50+ utilities, 85% fewer than standard) |
-| System utilities | Full system toolchain (id, ps, top, find, rm) | Extremely minimal (no id, ps, top, find, rm) |
+| Attack surface | Full system utilities available | Significantly reduced (tested utilities removed) |
+| System utilities | Full system toolchain (ls, cat, id, ps, find, rm all present) | Extremely minimal (ls, cat, id, ps, find, rm all removed) |
 | Variants | Single variant for all use cases | Runtime-only (no dev variants) |
 
-## Why such extreme minimization?
-Docker Hardened LocalStack images prioritize security through aggressive minimalism:
-
-- **Complete package manager removal**: Runtime images cannot install additional software during execution
-- **Utility reduction**: 85% fewer binaries than standard images (50+ vs 300+)
-- **Custom hardened OS**: Purpose-built "Docker Hardened Images (Debian)" not standard distributions  
-- **Essential-only toolset**: Only LocalStack core, Python runtime, and essential AWS service libraries included
-
-The hardened runtime images focus exclusively on providing a secure, minimal LocalStack execution environment while maintaining basic shell access for debugging. Development and testing tasks use the dev variants with additional tools.
 
 ## Image variants
 Docker Hardened LocalStack images are **runtime-only variants**. Unlike other DHI products (such as Maven), LocalStack DHI does not provide separate dev variants with additional development tools.
 
 **Runtime variants** are designed to run LocalStack in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
 - Run as the nonroot user
-- Include basic shell but no package manager  
+- Include basic shell with system package managers removed (pip retained for LocalStack functionality)  
 - Contain only the minimal set of libraries needed to run LocalStack
 
 ## Migrate to a Docker Hardened Image
