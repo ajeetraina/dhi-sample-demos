@@ -169,19 +169,19 @@ The following are common issues that you may encounter during migration.
 
 ## General debugging
 
-LocalStack DHI runtime images contain basic shell access but lack most system utilities for debugging. Common commands like ls, cat, id, ps, find, and rm are removed. The recommended method for debugging applications built with Docker Hardened Images is to use Docker Debug to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+LocalStack DHI runtime images contain basic shell access but lack most system utilities for debugging. Common commands like `ls`, `cat`, `id`, `ps`, `find`, and `rm` are removed. The recommended method for debugging applications built with Docker Hardened Images is to use `docker debug` to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ## Permissions
 
-By default, runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so LocalStack running as the nonroot user can access them.
+By default, runtime image variants run as the non-root user. Ensure that necessary files and directories are accessible to the non-root user. You may need to copy files to different directories or change permissions so LocalStack running as the nonroot user can access them.
 
 ## Privileged ports
 
-LocalStack DHI runs as a nonroot user by default. However, LocalStack is pre-configured to use non-privileged ports (4566, 5678, 4510-4559), so privileged port binding is not a concern for LocalStack deployments.
+LocalStack DHI runs as a non-root user by default. However, LocalStack is pre-configured to use non-privileged ports (`4566`, `5678`, `4510-4559`), so privileged port binding is not a concern for LocalStack deployments.
 
 ## System utilities
 
-LocalStack DHI runtime images lack most system utilities that some services need for initialization. Missing utilities include rm, cp, mv (file operations), objcopy (from binutils), tar, gzip (archive utilities), and id, ps, find (system inspection tools). Since LocalStack DHI has no dev variants, use multi-stage builds with standard LocalStack for tasks requiring full system utilities, then copy necessary artifacts to the DHI runtime stage.
+LocalStack DHI runtime images lack most system utilities that some services need for initialization. Missing utilities include `rm`, `cp`, `mv` (file operations), objcopy (from binutils), `tar`, `gzip` (archive utilities), and `id`, `ps`, `find` (system inspection tools). Since LocalStack DHI has no dev variants, use multi-stage builds with standard LocalStack for tasks requiring full system utilities, then copy necessary artifacts to the DHI runtime stage.
 
 ## Service dependencies
 
@@ -189,4 +189,4 @@ Some LocalStack services require Java runtime or system utilities not available 
 
 ## Entry point
 
-LocalStack DHI images use localstack-supervisor as the entry point, which may differ from other LocalStack distributions. Use docker inspect to inspect entry points for Docker Hardened Images and update your deployment configuration if necessary.RetryClaude can make mistakes. Please double-check responses.Research Sonnet 4
+LocalStack DHI images use `localstack-supervisor` as the entry point, which may differ from other LocalStack distributions. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your deployment configuration if necessary.
