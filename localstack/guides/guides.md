@@ -32,6 +32,9 @@ $ curl -f http://localhost:4566/_localstack/health
 
 
 ### Run LocalStack with persistence
+
+This example demonstrates how to enable data persistence in LocalStack, which means your AWS service data (S3 buckets, SQS queues, etc.) will survive container restarts instead of being lost each time. The setup requires creating a Docker volume (localstack-data) and mounting it to LocalStack's data directory (`/var/lib/localstack`) while setting the `PERSISTENCE=1` environment variable. This tells LocalStack to save all service data to the mounted volume instead of keeping it only in memory.
+
 Enable data persistence across container restarts:
 
 
@@ -42,7 +45,7 @@ $ docker run -d --name ls-persist-test \
     -p 4566:4566 \
     -e PERSISTENCE=1 \
     -v localstack-data:/var/lib/localstack \
-    dockerdevrel/dhi-localstack:4.8.1-python3.12-debian13
+    <your-namespace>/dhi-localstack:<tag>
 
 # Step 2: Verify LocalStack is running
 $ curl -f http://localhost:4566/_localstack/health
@@ -60,7 +63,7 @@ docker run -d --name ls-persist-test2 \
     -p 4566:4566 \
     -e PERSISTENCE=1 \
     -v localstack-data:/var/lib/localstack \
-    dockerdevrel/dhi-localstack:4.8.1-python3.12-debian13
+    <your-namespace>/dhi-localstack:<tag>
 
 
 # Verify data persisted
@@ -70,7 +73,7 @@ aws --endpoint-url=http://localhost:4566 s3 ls s3://persistence-test-bucket
 ```
 
 ### Integration testing with multi-stage Dockerfile
-**Important**: LocalStack Docker Hardened Images are runtime-only variants. Unlike other DHI products (like Maven), LocalStack DHI does not provide separate dev variants with additional tools.
+**Important**: LocalStack Docker Hardened Images are runtime-only variants. LocalStack DHI does not provide separate dev variants.
 
 Here's a complete example for integration testing:
 
@@ -98,30 +101,6 @@ EXPOSE 4566 5678 4510-4559
 # Use default LocalStack entrypoint
 ```
 
-### Run with custom configuration
-Use environment variables and mounted configuration:
-
-```bash
-# Create a persistent volume for LocalStack data
-$ docker volume create localstack-data
-
-# Use the volume for persistent data across restarts
-$ docker run -d \
-    -p 4566:4566 -p 5678:5678 \
-    -e DEBUG=1 \
-    -e SERVICES=s3,dynamodb,sqs,sns \
-    -v localstack-data:/var/lib/localstack \
-    <your-namespace>/dhi-localstack:<tag>
-```
-
-**Note**: The first startup initializes services (~3-5 seconds), while subsequent startups with persistence are faster (~1-2 seconds).
-
-You can then test LocalStack services:
-
-```bash
-$ curl -f http://localhost:4566/_localstack/health
-$ aws --endpoint-url=http://localhost:4566 s3 mb s3://test-bucket
-```
 
 ## Non-hardened images vs Docker Hardened Images
 
