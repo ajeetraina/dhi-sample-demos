@@ -8,14 +8,26 @@ Run the following command to run a Nodejs container. Replace `<your-namespace>` 
 $ docker run --rm <your-namespace>/dhi-node:<tag> node --version
 ```
 
-## Quick Start: Hello World Example
+### Getting Started
 
-Here's a complete, working example that demonstrates how to use Docker Hardened Node.js images with a simple web server.
+In this example, we'll create a basic HTTP server that responds with a greeting message. The server will listen on port 3000 and demonstrate the key characteristics of Docker Hardened Node.js images, including running as a nonroot user and using non-privileged ports.
 
-### Create the application files
+First, let's create a project structure for our example:
 
-**package.json**
-```json
+```
+mkdir -p ~/hello-world-node/src && cd ~/hello-world-node
+```
+
+This creates the following folder structure and sets our working directory to the root hello-world-node folder:
+
+```
+hello-world-node
+└── src
+```
+Now let's create a package.json file, which provides metadata about the project, including dependencies:
+
+```
+cat << 'EOF' > package.json
 {
   "name": "hello-world-app",
   "version": "1.0.0",
@@ -26,10 +38,15 @@ Here's a complete, working example that demonstrates how to use Docker Hardened 
   },
   "dependencies": {}
 }
+EOF
 ```
 
-**src/index.js**
-```javascript
+The above defines a package, hello-world-app, with no external dependencies that will run the code in src/index.js when started.
+
+Let's create our application code now. 
+
+```
+cat << 'EOF' > src/index.js
 const http = require('http');
 
 const server = http.createServer((req, res) => {
@@ -41,10 +58,16 @@ const port = process.env.PORT || 3000;
 server.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
 });
+EOF
 ```
 
-**Dockerfile**
-```dockerfile
+This application code creates a simple HTTP server using Node.js built-in http module. The server listens on port 3000 (or the PORT environment variable) and responds to all requests with a greeting message.
+
+
+Finally, let's create a Dockerfile for our image build:
+
+```
+cat << 'EOF' > Dockerfile
 # syntax=docker/dockerfile:1
 # Use dev variant for building
 FROM <your-namespace>/dhi-node:22-dev AS build-stage
@@ -76,21 +99,43 @@ EXPOSE 3000
 
 # Start the application
 CMD ["node", "src/index.js"]
+EOF
 ```
 
-### Build and run the application
+This Dockerfile uses a multi-stage build with the `-dev` variant for building and the `runtime` variant for the final image. It sets the NODE_ENV environment variable to production, copies our application files, and runs our Node.js server.
 
-```bash
-# Build the Docker image
-$ docker build -t hello-world-node .
 
-# Run the container
-$ docker run --rm -p 3000:3000 --name hello-world-app hello-world-node
+### Build and run the image
 
-# Test the application
-$ curl http://localhost:3000
+```
+docker build -t hello-world-node .
+```
+
+Finally, run the container:
+
+```
+docker run --rm -p 3000:3000 --name hello-world-app hello-world-node
+```
+
+You should see the following output:
+
+```
+Server running on port 3000
+```
+
+You can test the application by opening another terminal and running:
+
+```
+curl http://localhost:3000
+```
+
+This should produce the following output:
+
+```
 Hello World from Docker Hardened Node.js!
 ```
+
+You can also visit `http://localhost:3000` in your browser to see the same message.
 
 
 ## Non-hardened images vs Docker Hardened Images
