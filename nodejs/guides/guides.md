@@ -70,7 +70,7 @@ Finally, let's create a Dockerfile for our image build:
 cat << 'EOF' > Dockerfile
 # syntax=docker/dockerfile:1
 # Use dev variant for building
-FROM <your-namespace>/dhi-node:22-dev AS build-stage
+FROM <your-namespace>/dhi-node:<tag>-dev AS build-stage
 
 ENV NODE_ENV=production
 WORKDIR /usr/src/app
@@ -78,16 +78,16 @@ WORKDIR /usr/src/app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (though this example has none)
-RUN npm ci --omit=dev
+# Install dependencies and ensure node_modules exists
+RUN npm i --omit=dev && mkdir -p node_modules
 
 # Use runtime variant for final image
-FROM <your-namespace>/dhi-node:22 AS runtime-stage
+FROM <your-namespace>/dhi-node:<tag> AS runtime-stage
 
 ENV NODE_ENV=production
 WORKDIR /usr/src/app
 
-# Copy node_modules from build stage (if any)
+# Copy node_modules from build stage
 COPY --from=build-stage /usr/src/app/node_modules ./node_modules
 
 # Copy application code
