@@ -8,53 +8,90 @@ Run the following command to run a Nodejs container. Replace `<your-namespace>` 
 $ docker run --rm <your-namespace>/dhi-node:<tag> node --version
 ```
 
-### Common Node.js use cases
+## Quick Start: Hello World Example
 
-### Run a Node.js application
+Here's a complete, working example that demonstrates how to use Docker Hardened Node.js images with a simple web server.
 
-Run your Node.js application directly from the container:
+### Create the application files
 
+**package.json**
+```json
+{
+  "name": "hello-world-app",
+  "version": "1.0.0",
+  "description": "Simple Node.js hello world server",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {}
+}
 ```
-$ docker run -p 3000:3000 -v $(pwd):/app -w /app <your-namespace>/dhi-node:<tag>-dev node index.js
+
+**src/index.js**
+```javascript
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Hello World from Docker Hardened Node.js!\n');
+});
+
+const port = process.env.PORT || 3000;
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Server running on port ${port}`);
+});
 ```
 
-### Build and run a Node.js application
-
-The recommended way to use this image is to use a multi-stage Dockerfile with
-the `dev` variant as the build environment and the runtime variant as the
-runtime environment. In your Dockerfile, writing something along the lines of
-the following will compile and run a simple project.
-
-
-```Dockerfile
+**Dockerfile**
+```dockerfile
 # syntax=docker/dockerfile:1
-# Use a tag with the -dev suffix (e.g., 22-dev)
-FROM <your-namespace>/dhi-node:<tag> AS build-stage
+# Use dev variant for building
+FROM <your-namespace>/dhi-node:22-dev AS build-stage
 
 ENV NODE_ENV=production
 WORKDIR /usr/src/app
-RUN --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=package-lock.json,target=package-lock.json \
-    --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev
 
-# Use the same tag as above but without the -dev suffix (e.g., 22)
-FROM <your-namespace>/dhi-node:<tag> AS runtime-stage
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies (though this example has none)
+RUN npm ci --omit=dev
+
+# Use runtime variant for final image
+FROM <your-namespace>/dhi-node:22 AS runtime-stage
 
 ENV NODE_ENV=production
 WORKDIR /usr/src/app
+
+# Copy node_modules from build stage (if any)
 COPY --from=build-stage /usr/src/app/node_modules ./node_modules
+
+# Copy application code
 COPY src ./src
+COPY package*.json ./
+
+# Expose port (use non-privileged port)
 EXPOSE 3000
+
+# Start the application
 CMD ["node", "src/index.js"]
 ```
 
-You can then build and run the Docker image:
+### Build and run the application
 
+```bash
+# Build the Docker image
+$ docker build -t hello-world-node .
+
+# Run the container
+$ docker run --rm -p 3000:3000 --name hello-world-app hello-world-node
+
+# Test the application
+$ curl http://localhost:3000
+Hello World from Docker Hardened Node.js!
 ```
-$ docker build -t my-node-app .
-$ docker run --rm -p 3000:3000 --name my-running-app my-node-app
-```
+
 
 ## Non-hardened images vs Docker Hardened Images
 
