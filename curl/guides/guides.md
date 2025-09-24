@@ -111,18 +111,6 @@ docker run --rm my-curl-dhi-app https://api.github.com/repos/docker/mcp-gateway
 ```
 
 
-### Choosing between variants
-
-**Alpine variants** (`8.14.1-alpine3.22`):
-- **Pros**: Smallest size (~5MB), fastest downloads, ideal for CI/CD
-- **Cons**: Limited system libraries, musl libc instead of glibc
-- **Use when**: Bandwidth matters, simple HTTP operations, container orchestration
-
-**Debian variants** (`8.14.1-debian13`):
-- **Pros**: Better compatibility, glibc, more predictable behavior
-- **Cons**: Larger size (~15MB), longer download times
-- **Use when**: Complex applications, compatibility requirements, enterprise environments
-
 ## Non-hardened images vs Docker Hardened Images
 
 | Feature | Standard curl Images | Docker Hardened curl |
@@ -148,6 +136,18 @@ Docker Hardened curl images are runtime-only variants. Unlike other DHI products
 - Include basic shell with system package managers removed
 - Contain only the minimal set of libraries needed to run curl
 - Support HTTP/HTTPS, FTP, and other protocols curl supports
+
+### Choosing between variants
+
+**Alpine variants** (`8.14.1-alpine3.22`):
+- **Pros**: Smallest size (~5MB), fastest downloads, ideal for CI/CD
+- **Cons**: Limited system libraries, musl libc instead of glibc
+- **Use when**: Bandwidth matters, simple HTTP operations, container orchestration
+
+**Debian variants** (`8.14.1-debian13`):
+- **Pros**: Better compatibility, glibc, more predictable behavior
+- **Cons**: Larger size (~15MB), longer download times
+- **Use when**: Complex applications, compatibility requirements, enterprise environments
 
 ## Migrate to a Docker Hardened Image
 
