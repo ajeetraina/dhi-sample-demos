@@ -105,6 +105,7 @@ COPY --from=test-setup /app/config/ /etc/curl/
 | **SSL/TLS** | Full certificate management tools | Basic certificates included |
 
 
+
 ## Image variants
 
 Docker Hardened curl images are runtime-only variants. Unlike other DHI products, curl DHI does not provide separate dev variants with additional development tools.
@@ -130,6 +131,7 @@ To migrate your curl deployment to Docker Hardened Images, you must update your 
 | **TLS certificates** | Standard certificates included |
 | **File permissions** | Ensure mounted files are accessible to nonroot user |
 | **System utilities** | Runtime images lack most system utilities (ls, cat, id, ps, find, rm removed) |
+
 
 
 The following steps outline the general migration process.
