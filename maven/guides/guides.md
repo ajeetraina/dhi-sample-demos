@@ -44,7 +44,7 @@ $ git clone https://github.com/spring-projects/spring-petclinic.git
 $ cd spring-petclinic
 
 # Build using Maven DHI
-docker run --rm \
+# docker run --rm \
     -v "$(pwd)":/app -w /app \
     -v maven-repo:/root/.m2 \
     <your-namespace>/dhi-maven:<tag>-dev \
