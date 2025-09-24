@@ -191,7 +191,7 @@ To migrate your Maven builds to Docker Hardened Images, you must update your Doc
    # ... Maven build commands ...
 
    # Runtime stage
-   FROM eclipse-temurin:21-jre-alpine AS runtime
+   FROM eclipse-temurin:<tag> AS runtime
    COPY --from=build /app/target/app.jar .
    # ... runtime configuration ...
    ```
