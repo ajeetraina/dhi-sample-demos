@@ -56,20 +56,6 @@ cat /tmp/curl-dhi-file-test/upload-test.json
 rm -rf /tmp/curl-dhi-file-test
 ```
 
-### Integration in CI/CD pipelines
-
-Use curl DHI for health checks and API testing:
-
-```bash
-# Health check with retry logic (Alpine variant saves bandwidth)
-$ docker run --rm <your-namespace>/dhi-curl:<tag> \
-    --retry 5 \
-    --retry-delay 2 \
-    --fail \
-    https://docker.com
-
-echo "Return code: $?"
-```
 
 ### Multi-stage Dockerfile integration
 
@@ -79,7 +65,7 @@ Here's a complete example for integration testing:
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-# Development stage - Use standard curl for testing setup
+# Development stage - Use standard curl for setup and testing
 FROM curlimages/curl AS test-setup
 
 WORKDIR /app
@@ -88,18 +74,42 @@ WORKDIR /app
 USER root
 RUN apk add --no-cache jq bash
 
-# Copy test scripts and configuration
-COPY test-scripts/ ./test-scripts/
-COPY curl-config/ ./config/
+# Download docker/cagent configuration during build
+RUN curl -o cagent-config.json https://raw.githubusercontent.com/docker/cagent/main/README.md || \
+    echo '{"agent_name": "default", "project": "docker/cagent"}' > cagent-config.json
+
+# Test docker/cagent repository availability during build
+RUN curl --fail --silent https://api.github.com/repos/docker/cagent > /dev/null && \
+    echo "docker/cagent repository accessible"
+
+# Create a simple configuration file
+RUN echo '{"curl_config": "production", "endpoints": ["docker/cagent", "docker/mcp-gateway"]}' > config.json
 
 # Runtime stage - Curl DHI for production deployment
 FROM dockerdevrel/dhi-curl:8.14.1-alpine3.22 AS runtime
 
 WORKDIR /app
-COPY --from=test-setup /app/config/ /etc/curl/
 
-# Use default curl DHI entrypoint
+# Copy prepared configuration from setup stage
+COPY --from=test-setup /app/config.json /app/config.json
+
+# Default command to check docker/cagent status
+CMD ["https://api.github.com/repos/docker/cagent"]
 ```
+
+To build and test this:
+
+```
+# Build the multi-stage image
+docker build -t my-curl-dhi-app .
+
+# Run the application
+docker run --rm my-curl-dhi-app
+
+# Test with different endpoint
+docker run --rm my-curl-dhi-app https://api.github.com/repos/docker/mcp-gateway
+```
+
 
 ### Choosing between variants
 
