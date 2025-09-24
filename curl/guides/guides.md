@@ -1,49 +1,136 @@
 ## How to use this image
 
-### Run a container to fetch website headers
+### Start a curl DHI container
 
-Run the following command to run a container.
 Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
+
+```
+$ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 --version
+```
+
+## Common curl DHI use cases
+
+### Basic HTTP requests
+
+
+Run a container to fetch website headers
 
 ```
 $ docker run --rm <your-namespace>/dhi-curl:<tag> -I https://www.docker.com
 ```
 
+### File operations with volume mounts
+
+Download files or work with local data:
+
+```bash
+# Download file to host
+$ docker run --rm -v $(pwd):/data dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
+    -o /data/downloaded-file.txt \
+    https://example.com/file.txt
+
+# Upload file from host
+$ docker run --rm -v $(pwd):/data dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
+    -X PUT \
+    -T /data/upload-file.txt \
+    https://httpbin.org/put
+```
+
+### Integration in CI/CD pipelines
+
+Use curl DHI for health checks and API testing:
+
+```bash
+# Health check with retry logic (Alpine variant saves bandwidth)
+$ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
+    --retry 5 \
+    --retry-delay 2 \
+    --fail \
+    https://my-service.com/health
+```
+
+### Multi-stage Dockerfile integration
+
+**Important**: Curl DHI images are runtime-only variants. Curl DHI does not provide separate dev variants.
+
+Here's a complete example for integration testing:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+# Development stage - Use standard curl for testing setup
+FROM curlimages/curl AS test-setup
+
+WORKDIR /app
+
+# Install testing tools and dependencies (standard image has package managers)
+USER root
+RUN apk add --no-cache jq bash
+
+# Copy test scripts and configuration
+COPY test-scripts/ ./test-scripts/
+COPY curl-config/ ./config/
+
+# Runtime stage - Curl DHI for production deployment
+FROM dockerdevrel/dhi-curl:8.14.1-alpine3.22 AS runtime
+
+WORKDIR /app
+COPY --from=test-setup /app/config/ /etc/curl/
+
+# Use default curl DHI entrypoint
+```
+
+### Choosing between variants
+
+**Alpine variants** (`8.14.1-alpine3.22`):
+- **Pros**: Smallest size (~5MB), fastest downloads, ideal for CI/CD
+- **Cons**: Limited system libraries, musl libc instead of glibc
+- **Use when**: Bandwidth matters, simple HTTP operations, container orchestration
+
+**Debian variants** (`8.14.1-debian13`):
+- **Pros**: Better compatibility, glibc, more predictable behavior
+- **Cons**: Larger size (~15MB), longer download times
+- **Use when**: Complex applications, compatibility requirements, enterprise environments
+
+## Non-hardened images vs Docker Hardened Images
+
+| Feature | Standard curl Images | Docker Hardened curl |
+|---------|---------------------|---------------------|
+| **Security** | Standard base with common utilities | Hardened base with reduced utilities |
+| **Shell access** | Full shell access (bash/ash) | Basic shell access (sh) |
+| **Package manager** | Full package managers (apk, apt) | System package managers removed |
+| **User** | Runs as curl user or root | Runs as nonroot user |
+| **Attack surface** | Full system utilities available | Significantly reduced |
+| **System utilities** | Full system toolchain (ls, cat, id, ps, find, rm present) | Extremely minimal (ls, cat, id, ps, find, rm removed) |
+| **Variants** | Multiple variants for different use cases | Runtime-only (no dev variants) |
+| **SSL/TLS** | Full certificate management tools | Basic certificates included |
+
+
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use.
+Docker Hardened curl images are runtime-only variants. Unlike other DHI products, curl DHI does not provide separate dev variants with additional development tools.
 
-- Runtime variants are designed to run your application in production. These
-  images are intended to be used either directly or as the `FROM` image in the
-  final stage of a multi-stage build. These images typically:
-   - Run as the nonroot user
-   - Do not include a shell or a package manager
-   - Contain only the minimal set of libraries needed to run the app
+**Runtime variants** are designed to run curl commands in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
 
-- Build-time variants typically include `dev` in the variant name and are
-  intended for use in the first stage of a multi-stage Dockerfile. These images
-  typically:
-   - Run as the root user
-   - Include a shell and package manager
-   - Are used to build or compile applications
+- Run as the nonroot user
+- Include basic shell with system package managers removed
+- Contain only the minimal set of libraries needed to run curl
+- Support HTTP/HTTPS, FTP, and other protocols curl supports
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your
-Dockerfile. At minimum, you must update the base image in your existing
-Dockerfile to a Docker Hardened Image. This and a few other common changes are
-listed in the following table of migration notes.
+To migrate your curl deployment to Docker Hardened Images, you must update your deployment configuration and potentially your Dockerfile.
 
-| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
-|:-------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
-| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                                                                                                   |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+| Item | Migration note |
+|------|----------------|
+| **Base image** | Replace standard curl images with Docker Hardened curl images |
+| **Package management** | System package managers removed (apk/apt removed) |
+| **Protocol support** | Basic protocols supported, some advanced features may be limited |
+| **Non-root user** | Runtime images run as nonroot user |
+| **Multi-stage build** | Use standard curl images for setup stages and curl DHI for final deployment |
+| **TLS certificates** | Standard certificates included |
+| **File permissions** | Ensure mounted files are accessible to nonroot user |
+| **System utilities** | Runtime images lack most system utilities (ls, cat, id, ps, find, rm removed) |
+
 
 The following steps outline the general migration process.
 
@@ -87,13 +174,7 @@ The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for
-debugging. The recommended method for debugging applications built with Docker
-Hardened Images is to use [Docker
-Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these
-containers. Docker Debug provides a shell, common debugging tools, and lets you
-install other tools in an ephemeral, writable layer that only exists during the
-debugging session.
+Curl DHI runtime images contain basic shell access but lack most system utilities for debugging. Common commands like `ls`, `cat`, `id`, `ps`, `find`, and `rm` are removed. The recommended method for debugging applications built with Docker Hardened Images is to use `docker debug` to attach to these containers.
 
 ### Permissions
 
