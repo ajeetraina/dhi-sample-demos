@@ -1,8 +1,8 @@
-# How to use this image
+## How to use this image
 
-Refer to the [Apache Maven documentation](https://maven.apache.org/guides/) for configuring Maven for your project's needs.
+Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository** > **Mirror to repository**, and then follow the on-screen instructions.
 
-## Start a Maven build
+### Start a Maven build
 
 Run the following command to execute Maven commands using a Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
@@ -30,60 +30,85 @@ Create application artifacts like JAR or WAR files by building your Maven projec
 $ docker run --rm -v "$(pwd)":/app -w /app <your-namespace>/dhi-maven:<tag>-dev clean package
 ```
 
-### Build and run with multi-stage Dockerfile
+## Build and run with Multi-stage Dockerfile
 
 **Important**: Maven Docker Hardened Images are build-only tools. They contain no runtime variants because Maven builds applications but doesn't run them. You must use multi-stage Dockerfiles to copy build artifacts to appropriate runtime images.
 
-Here's a complete example for a Spring Boot application:
+This example demonstrates building the Spring Pet Clinic application using Maven Docker Hardened Images. Pet Clinic is a canonical Spring Boot sample application that showcases typical enterprise Java development patterns.
+
+### Clone and build PetClinic app
+
+```
+# Clone the Spring Pet Clinic repository
+$ git clone https://github.com/spring-projects/spring-petclinic.git
+$ cd spring-petclinic
+
+# Build using Maven DHI
+docker run --rm \
+    -v "$(pwd)":/app -w /app \
+    -v maven-repo:/root/.m2 \
+    <your-namespace>/dhi-maven:<tag>-dev \
+    clean package -DskipTests
+```
+
+Create a `Dockerfile` in the Pet Clinic directory:
+
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-# Build stage - Maven DHI for building
+# Build stage - Maven DHI for building Pet Clinic
 FROM <your-namespace>/dhi-maven:<tag>-dev AS build
 
 WORKDIR /app
 
-# Copy dependency files for better caching
-COPY pom.xml .
+# Copy Maven files for dependency caching
+COPY .mvn/ .mvn
+COPY mvnw pom.xml ./
+
+# Download dependencies (cached layer)
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn dependency:go-offline -B
+
+# Copy source code
 COPY src ./src
 
-# Build the application
+# Build the Pet Clinic application
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn clean package -DskipTests
+    mvn clean package -DskipTests -B
 
-# Runtime stage - JRE for running the application
-FROM eclipse-temurin:21-jre-alpine AS runtime
+# Runtime stage - JRE for running Pet Clinic
+FROM eclipse-temurin:<tag> AS runtime
+
+# Create non-root user for security
+RUN addgroup -g 1001 petclinic && \
+    adduser -u 1001 -G petclinic -s /bin/sh -D petclinic
 
 WORKDIR /app
-COPY --from=build /app/target/*.jar app.jar
 
+# Copy the built JAR from build stage
+COPY --from=build /app/target/spring-petclinic-*.jar app.jar
+
+# Change ownership to petclinic user
+RUN chown petclinic:petclinic app.jar
+
+USER petclinic
+
+# Pet Clinic runs on port 8080 by default
 EXPOSE 8080
+
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
 
-### Build with dependency caching
+### Build and run Pet Clinic
 
-Use Docker volumes to speed up builds by persisting the Maven local repository across builds:
-
-```bash
-# Create a persistent volume for Maven dependencies
-$ docker volume create maven-repo
-
-# Use the volume for faster subsequent builds
-$ docker run --rm \
-    -v "$(pwd)":/app -w /app \
-    -v maven-repo:/root/.m2 \
-    <your-namespace>/dhi-maven:<tag>-dev \
-    clean package
 ```
+# Build the Docker image
+$ docker build -t petclinic-hardened .
 
-**Note**: The first build will download dependencies (~4-5 seconds), while subsequent builds use cached dependencies (~0.7-1 seconds). Cache mounts (`--mount type=cache`) only work in Dockerfiles, not with `docker run` commands.
+# Run Pet Clinic
+$ docker run --rm -p 8080:8080 --name petclinic petclinic-hardened
 
-You can then build and run the Docker image:
-
-```bash
-$ docker build -t my-spring-app .
-$ docker run --rm -p 8080:8080 --name my-running-app my-spring-app
+# Access Pet Clinic at http://localhost:8080
 ```
 
 ## Non-hardened images vs Docker Hardened Images
@@ -120,7 +145,7 @@ Maven DHI images follow this tag pattern: `<maven-version>-jdk<jdk-version>-<os>
 
 **Maven versions:**
 - `3.9.11` - Specific patch version (recommended for production)
-- `3.9` - Latest patch of 3.9 series  
+- `3.9` - Latest patch of 3.9 series
 - `3` - Latest minor and patch version
 
 **JDK versions:**
@@ -131,8 +156,6 @@ Maven DHI images follow this tag pattern: `<maven-version>-jdk<jdk-version>-<os>
 **Operating systems:**
 - `debian13` - Debian-based (default, ~647MB uncompressed)
 - `alpine3.22` - Alpine-based (~578MB uncompressed, ~69MB smaller)
-
-
 
 ## Migrate to a Docker Hardened Image
 
@@ -152,29 +175,29 @@ To migrate your Maven builds to Docker Hardened Images, you must update your Doc
 ### Migration process
 
 1. **Identify your build requirements**
-   
+
    Choose the appropriate Maven DHI dev variant based on your needs:
    - JDK version matching your application requirements
    - OS preference (Debian for compatibility, Alpine for size)
    - Maven version pinning strategy
 
 2. **Convert to multi-stage build**
-   
+
    Update your Dockerfile to use Maven DHI dev variant in the build stage:
 
    ```dockerfile
    # Build stage
    FROM <your-namespace>/dhi-maven:<tag>-dev AS build
    # ... Maven build commands ...
-   
-   # Runtime stage  
+
+   # Runtime stage
    FROM eclipse-temurin:21-jre-alpine AS runtime
    COPY --from=build /app/target/app.jar .
    # ... runtime configuration ...
    ```
 
 3. **Optimize dependency caching**
-   
+
    Copy `pom.xml` before source code and use cache mounts:
 
    ```dockerfile
@@ -185,7 +208,7 @@ To migrate your Maven builds to Docker Hardened Images, you must update your Doc
    ```
 
 4. **Select appropriate runtime image**
-   
+
    Choose runtime images that match your build environment:
    - Same JDK major version (21 in build → JRE 21 in runtime)
    - Consider security and size requirements
@@ -199,19 +222,18 @@ The following are common issues that you may encounter during migration.
 
 Maven DHI images are build-only tools and contain shell access via ENTRYPOINT override. The recommended method for debugging applications built with Docker Hardened Images is to use Docker Debug to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
-## Permisions
+### Permisions
 
 Maven DHI images run as the root user during builds (appropriate for build environments). When copying build artifacts to runtime stages, ensure that necessary files and directories have appropriate permissions for the runtime image's user context, as runtime images typically run as nonroot users.
 
-## Privileged Ports
+### Privileged Ports
 
 Applications built with Maven DHI will typically run in runtime images that use nonroot users by default. As a result, your applications can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, docker run -p 80:8080 my-app will work because the port inside the container is 8080, and docker run -p 80:81 my-app won't work because the port inside the container is 81.
 
-
-## No shell
+### No shell
 
 Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
-## Entry point
+### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use docker inspect to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
