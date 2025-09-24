@@ -5,18 +5,29 @@
 Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
 ```
-$ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 --version
+# Using Alpine variant (recommended for minimal size)
+$ docker run --rm <your-namespace>/dhi-curl:<tag>-alpine3.22 --version
+
+# Using Debian variant (for compatibility)
+$ docker run --rm <your-namespace>/dhi-curl:<tag> --version
 ```
 
 ## Common curl DHI use cases
 
 ### Basic HTTP requests
 
-
-Run a container to fetch website headers
+Execute simple HTTP requests:
 
 ```
-$ docker run --rm <your-namespace>/dhi-curl:<tag> -I https://www.docker.com
+# GET request (Alpine variant recommended for CI/CD)
+$ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 https://api.github.com/repos/docker/cagent
+
+# POST request with data
+$ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"key":"value"}' \
+    https://api.github.com/repos/docker/cagent/issues
 ```
 
 ### File operations with volume mounts
@@ -24,16 +35,25 @@ $ docker run --rm <your-namespace>/dhi-curl:<tag> -I https://www.docker.com
 Download files or work with local data:
 
 ```bash
-# Download file to host
-$ docker run --rm -v $(pwd):/data dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
-    -o /data/downloaded-file.txt \
-    https://example.com/file.txt
-
 # Upload file from host
-$ docker run --rm -v $(pwd):/data dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
-    -X PUT \
-    -T /data/upload-file.txt \
-    https://httpbin.org/put
+mkdir -p /tmp/curl-dhi-file-test
+
+# Create a simple test file
+echo '{"project": "docker/cagent", "test": "upload", "timestamp": "'$(date)'"}' > /tmp/curl-dhi-file-test/upload-test.json
+
+# Upload file to docker/cagent repository
+docker run --rm -v /tmp/curl-dhi-file-test:/data dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -T /data/upload-test.json \
+    https://api.github.com/repos/docker/cagent/issues
+
+# Verify the file was created
+ls -la /tmp/curl-dhi-file-test/
+cat /tmp/curl-dhi-file-test/upload-test.json
+
+# Cleanup
+rm -rf /tmp/curl-dhi-file-test
 ```
 
 ### Integration in CI/CD pipelines
@@ -42,11 +62,13 @@ Use curl DHI for health checks and API testing:
 
 ```bash
 # Health check with retry logic (Alpine variant saves bandwidth)
-$ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
+$ docker run --rm <your-namespace>/dhi-curl:<tag> \
     --retry 5 \
     --retry-delay 2 \
     --fail \
-    https://my-service.com/health
+    https://docker.com
+
+echo "Return code: $?"
 ```
 
 ### Multi-stage Dockerfile integration
