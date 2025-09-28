@@ -11,6 +11,8 @@ $ docker run --name some-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d <your-name
 
 ### Connect to MySQL from the MySQL command line client
 
+Important: DHI MySQL images are server-only and cannot be used as client containers. For client connections, use the official MySQL image.
+
 The following command starts another `mysql` container instance and runs the `mysql` command line client against your original DHI MySQL container, allowing you to execute SQL statements against your database instance:
 
 ```console
