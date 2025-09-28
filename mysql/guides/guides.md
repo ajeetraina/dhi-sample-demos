@@ -8,11 +8,6 @@ $ docker run --name some-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d <your-name
 
 ... where `some-mysql` is the name you want to assign to your container, `my-secret-pw` is the password to be set for the MySQL root user and `<tag>` is the tag specifying the MySQL version you want.
 
-For FIPS-compliant environments:
-
-```console
-$ docker run --name some-mysql-fips -e MYSQL_ROOT_PASSWORD=my-secret-pw --network some-network -d <your-namespace>/dhi-mysql:<tag>-fips
-```
 
 ### Connect to MySQL from the MySQL command line client
 
