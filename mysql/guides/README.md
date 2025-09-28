@@ -1,0 +1,5 @@
+## Bug 1
+
+DHI MySQL containers systematically fail to apply the MYSQL_ROOT_PASSWORD environment variable during database initialization, creating a critical security vulnerability. Container logs confirm the entrypoint script correctly reads the password (ROOT: my-secret-pw) but then proceeds to initialize MySQL with the --initialize-insecure option, resulting in "root@localhost is created with an empty password" despite explicit password configuration. The script attempts to fix this during the "Creating root user..." phase but fails, leaving the root account accessible without authentication.
+
+This bug affects all tested DHI MySQL variants (8.0 and 8.0-fips) across different deployment methods (docker run, docker-compose), creating production deployments with unprotected database access. The entrypoint script's failure to properly handle password initialization breaks fundamental MySQL container security expectations and requires manual password setting as a workaround. This represents a systematic flaw in the DHI MySQL implementation that does not occur in Docker Official MySQL images, where MYSQL_ROOT_PASSWORD functions correctly.
