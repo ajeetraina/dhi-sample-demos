@@ -124,7 +124,7 @@ For all other applications, you need to configure your application to listen on 
 - `docker run -p 80:8080 my-image` ✅ works (internal port is 8080)
 - `docker run -p 80:81 my-image` ❌ fails (internal port 81 is still privileged on older Docker versions)
 
-### No shell
+### Shell availability
 
 Check image specifications to determine if a shell is available.
 
