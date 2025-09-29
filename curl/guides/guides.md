@@ -116,7 +116,7 @@ docker run --rm my-curl-dhi-app https://api.github.com/repos/docker/mcp-gateway
 | Feature | Standard curl Images | Docker Hardened curl |
 |---------|---------------------|---------------------|
 | **Security** | Standard base with common utilities | Hardened base with reduced utilities |
-| **Shell access** | Full shell access (bash/ash) | Basic shell access (sh) |
+| **Shell access** | Full shell access (bash/ash) | No shell access |
 | **Package manager** | Full package managers (apk, apt) | System package managers removed |
 | **User** | Runs as curl user or root | Runs as nonroot user |
 | **Attack surface** | Full system utilities available | Significantly reduced |
@@ -128,14 +128,14 @@ docker run --rm my-curl-dhi-app https://api.github.com/repos/docker/mcp-gateway
 
 ## Image variants
 
-Docker Hardened curl images are runtime-only variants. Unlike other DHI products, curl DHI does not provide separate dev variants with additional development tools.
+Docker Hardened curl images are runtime-only variants. It doesn't provide separate dev variants with additional development tools.
 
 **Runtime variants** are designed to run curl commands in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
 
 - Run as the nonroot user
-- Include basic shell with system package managers removed
-- Contain only the minimal set of libraries needed to run curl
+- Contain ONLY the curl binary (no shell, no system utilities)
 - Support HTTP/HTTPS, FTP, and other protocols curl supports
+- Require `docker debug` for any debugging needs
 
 ### Choosing between variants
 
@@ -162,7 +162,9 @@ To migrate your curl deployment to Docker Hardened Images, you must update your 
 | **Multi-stage build** | Use standard curl images for setup stages and curl DHI for final deployment |
 | **TLS certificates** | Standard certificates included |
 | **File permissions** | Ensure mounted files are accessible to nonroot user |
-| **System utilities** | Runtime images lack most system utilities (ls, cat, id, ps, find, rm removed) |
+| **System utilities** | Runtime images lack ALL system utilities (ls, cat, id, ps, find, rm removed) |
+| **Shell access** | NO shell exists - cannot run shell commands or override entrypoint to shell |
+| **Debugging** | Requires docker debug for any debugging needs | 
 
 
 
