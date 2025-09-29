@@ -167,6 +167,7 @@ To migrate your curl deployment to Docker Hardened Images, you must update your 
 | **Debugging** | Requires docker debug for any debugging needs | 
 
 
+## Migration Process
 
 The following steps outline the general migration process.
 
@@ -178,31 +179,24 @@ The following steps outline the general migration process.
 2. Update the base image in your Dockerfile.
 
    Update the base image in your application's Dockerfile to the hardened image
-   you found in the previous step. For framework images, this is typically going
-   to be an image tagged as `dev` because it has the tools needed to install
-   packages and dependencies.
+   you found in the previous step. Note that curl DHI does not provide `dev`
+   variants - use standard curl images (like `curlimages/curl`) for build stages that require package installation and development tools.
 
-3. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
+4. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
 
-   To ensure that your final image is as minimal as possible, you should use a
-   multi-stage build. All stages in your Dockerfile should use a hardened image.
-   While intermediary stages will typically use images tagged as `dev`, your
-   final runtime stage should use a non-dev image variant.
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. Build stages should use standard curl images for development tasks, while your final runtime stage should use curl DHI for maximum security
 
-4. Install additional packages
+5. Install additional packages
 
-   Docker Hardened Images contain minimal packages in order to reduce the
-   potential attack surface. You may need to install additional packages in your
-   Dockerfile. Inspect the image variants to identify which packages are already
-   installed.
+   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface.
+   You may need to install additional packages in your Dockerfile.
+   Inspect the image variants to identify which packages are already installed.
 
-   Only images tagged as `dev` typically have package managers. You should use a
-   multi-stage Dockerfile to install the packages. Install the packages in the
-   build stage that uses a `dev` image. Then, if needed, copy any necessary
-   artifacts to the runtime stage that uses a non-dev image.
+   Curl DHI has no `dev` variants and no package managers.
+   You must use a multi-stage Dockerfile with standard curl images (like `curlimages/curl`) for the build stage.
+   Install packages in the build stage using standard images, then copy any necessary artifacts to the curl DHI runtime stage.
 
-   For Alpine-based images, you can use `apk` to install packages. For
-   Debian-based images, you can use `apt-get` to install packages.
+   For Alpine-based build stages, you can use `apk` to install packages. For Debian-based build stages, you can use `apt-get` to install packages.
 
 ## Troubleshooting migration
 
@@ -210,35 +204,25 @@ The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-Curl DHI runtime images contain basic shell access but lack most system utilities for debugging. Common commands like `ls`, `cat`, `id`, `ps`, `find`, and `rm` are removed. The recommended method for debugging applications built with Docker Hardened Images is to use `docker debug` to attach to these containers.
+Curl DHI runtime images contain NO shell or system utilities for debugging. Commands like `ls`, `cat`, `id`, `ps`, `find`, and `rm` are completely removed, and no shell exists. The only method for debugging applications built with Docker Hardened Images is to use `docker debug` to attach to these containers.
+
+```bash
+# Debug a running curl DHI container
+$ docker debug <container-id>
+```
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user. Ensure
-that necessary files and directories are accessible to the nonroot user. You may
-need to copy files to different directories or change permissions so your
-application running as the nonroot user can access them.
+By default, runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result,
-applications in these images can't bind to privileged ports (below 1024) when
-running in Kubernetes or in Docker Engine versions older than 20.10. To avoid
-issues, configure your application to listen on port 1025 or higher inside the
-container, even if you map it to a lower port on the host. For example, `docker
-run -p 80:8080 my-image` will work because the port inside the container is 8080,
-and `docker run -p 80:81 my-image` won't work because the port inside the
-container is 81.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is `808`0, and `docker run -p 80:81 my-image` won't work because the port inside the container is `81`.
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use `dev`
-images in build stages to run shell commands and then copy any necessary
-artifacts into the runtime stage. In addition, use Docker Debug to debug
-containers with no shell.
+Runtime image variants do not contain a shell. Use standard curl images (like `curlimages/curl`) in build stages to run shell commands and then copy any necessary artifacts into the curl DHI runtime stage. In addition, use `docker debug` to debug containers with no shell.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as
-Docker Official Images. Use `docker inspect` to inspect entry points for Docker
-Hardened Images and update your Dockerfile if necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. Curl DHI uses `curl` as the entrypoint.
