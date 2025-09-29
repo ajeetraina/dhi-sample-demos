@@ -1,5 +1,6 @@
 ## How to use this image
 
+Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository** > **Mirror to repository**, and then follow the on-screen instructions.
 
 ### Run a Grist container
 
@@ -10,7 +11,7 @@ To run a Grist container, run the following command. Replace
 $ docker run -p 8484:8484 <your-namespace>/dhi-grist:<tag>
 ```
 
-Then visit http://localhost:8484 in your browser.
+Then visit `http://localhost:8484` in your browser.
 
 ### Run with persistent data
 
@@ -43,10 +44,9 @@ volumes:
 
 ## Image variants
 
-Docker Hardened Images typically come in different variants depending on their intended use. Image variants are identified by their tag.
-For dockerdevrel/dhi-grist, only ONE variant is currently available:
+Docker Hardened Images typically come in different variants depending on their intended use. Image variants are identified by their tag. For Grist DHI images, only ONE variant is currently available:
 
-- Tag: 1.7.3-debian13 (runtime variant)
+- Tag: `1.7.3-debian13` (runtime variant)
 
 Runtime variants are designed to run your application in production. These images are intended to be used directly. Runtime variants typically:
 
@@ -54,7 +54,7 @@ Runtime variants are designed to run your application in production. These image
 - Do not include package managers
 - Contain only the minimal set of libraries needed to run the app
 
-Note: No dev variant exists for dhi-grist. Multi-stage builds and package installation are not possible with this image.
+Note: No `dev` variant exists for `dhi-grist`.
 
 
 To view the image variants and get more information about them, select the
@@ -62,7 +62,7 @@ To view the image variants and get more information about them, select the
 
 ## Migrate to a Docker Hardened Image
 
-Important for dockerdevrel/dhi-grist: This is a pre-built, ready-to-run Grist application. Use it directly via docker run rather than as a base image in a Dockerfile. Most migration scenarios below do not apply to this image.
+Important Note: This is a pre-built, ready-to-run Grist application. Use it directly via docker run rather than as a base image in a Dockerfile. Most migration scenarios below do not apply to this image.
 
 
 | Item               | Migration note                                                                                                                                                                                                                                                                                                               |
@@ -139,5 +139,3 @@ For dhi-grist:
 
 - Entrypoint: `/grist/sandbox/docker_entrypoint.sh`
 - CMD: `node /grist/sandbox/supervisor.mjs`
-
-
