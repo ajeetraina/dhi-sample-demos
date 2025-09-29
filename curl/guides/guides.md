@@ -18,7 +18,7 @@ $ docker run --rm <your-namespace>/dhi-curl:<tag> --version
 
 Execute simple HTTP requests:
 
-```
+```bash
 # GET request (Alpine variant recommended for CI/CD)
 $ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 https://api.github.com/repos/docker/cagent
 
