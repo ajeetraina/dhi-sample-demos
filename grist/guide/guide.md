@@ -1,9 +1,5 @@
 ## How to use this image
 
-Before you can use any Docker Hardened Image, you must mirror the image
-repository from the catalog to your organization. To mirror the repository,
-select either **Mirror to repository** or **View in repository** > **Mirror to
-repository**, and then follow the on-screen instructions.
 
 ### Run a Grist container
 
@@ -16,45 +12,69 @@ $ docker run -p 8484:8484 <your-namespace>/dhi-grist:<tag>
 
 Then visit http://localhost:8484 in your browser.
 
+### Run with persistent data
+
+```
+docker run -d \
+  -p 8484:8484 \
+  -v grist-data:/persist \
+  -e GRIST_DEFAULT_EMAIL=admin@company.com \
+  <your-namespace>/dhi-grist:<tag>
+```
+
+## Docker Compose example
+
+```
+services:
+  grist:
+    image: <your-namespace>/dhi-grist:<tag>
+    ports:
+      - "8484:8484"
+    volumes:
+      - grist-data:/persist
+    environment:
+      - GRIST_DEFAULT_EMAIL=admin@company.com
+      - GRIST_SINGLE_ORG=myorg
+    restart: unless-stopped
+
+volumes:
+  grist-data:
+```
+
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended
-use. Image variants are identified by their tag.
+Docker Hardened Images typically come in different variants depending on their intended use. Image variants are identified by their tag.
+For dockerdevrel/dhi-grist, only ONE variant is currently available:
 
-- Runtime variants are designed to run your application in production. These
-  images are intended to be used either directly or as the `FROM` image in the
-  final stage of a multi-stage build. These images typically:
-   - Run as a nonroot user
-   - Do not include a shell or a package manager
-   - Contain only the minimal set of libraries needed to run the app
+- Tag: 1.7.3-debian13 (runtime variant)
 
-- Build-time variants typically include `dev` in the tag name and are
-  intended for use in the first stage of a multi-stage Dockerfile. These images
-  typically:
-   - Run as the root user
-   - Include a shell and package manager
-   - Are used to build or compile applications
+Runtime variants are designed to run your application in production. These images are intended to be used directly. Runtime variants typically:
+
+- Run as a nonroot user
+- Do not include package managers
+- Contain only the minimal set of libraries needed to run the app
+
+Note: No dev variant exists for dhi-grist. Multi-stage builds and package installation are not possible with this image.
+
 
 To view the image variants and get more information about them, select the
 **Tags** tab for this repository, and then select a tag.
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your
-Dockerfile. At minimum, you must update the base image in your existing
-Dockerfile to a Docker Hardened Image. This and a few other common changes are
-listed in the following table of migration notes.
+Important for dockerdevrel/dhi-grist: This is a pre-built, ready-to-run Grist application. Use it directly via docker run rather than as a base image in a Dockerfile. Most migration scenarios below do not apply to this image.
+
 
 | Item               | Migration note                                                                                                                                                                                                                                                                                                               |
 |:-------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
-| Nonroot user       | By default, non-dev images, intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user.                                                                                                                                                                            |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
+| Base image         |  This is a pre-built application - use directly via docker run, not as a base image in Dockerfile.                                                                                                                                                                                                                                                  |
+| Package management | No package managers present (no apt, apk, yum). Cannot install additional packages at runtime.                                                                                                                                                                                                  |
+| Nonroot user       | Runs as UID 65532 (user: nonroot). Writable directories: /persist and /tmp. Application directory /grist is read-only.                                                                                                                                                                            |
+| Multi-stage build  |  Only one variant exists (1.7.3-debian13). No dev or static variants available.                                                                                                                                                                       |
+| TLS certificates   | System CA certificates are not present. However, Node.js includes its own certificate bundle, so HTTPS connections work correctly. No action needed for Grist functionality.                                                                                                                                                                                                         |
 | Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+| Entry point        | Custom entrypoint configured: `/grist/sandbox/docker_entrypoint.sh` with `CMD: node /grist/sandbox/supervisor.mjs`                                                                                                                                |
+
 
 The following steps outline the general migration process.
 
