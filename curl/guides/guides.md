@@ -35,24 +35,17 @@ $ docker run --rm dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
 Download files or work with local data:
 
 ```bash
-# Upload file from host
+# Upload file and verify POST functionality
 mkdir -p /tmp/curl-dhi-file-test
 
-# Create a simple test file
 echo '{"project": "docker/cagent", "test": "upload", "timestamp": "'$(date)'"}' > /tmp/curl-dhi-file-test/upload-test.json
 
-# Upload file to docker/cagent repository
 docker run --rm -v /tmp/curl-dhi-file-test:/data dockerdevrel/dhi-curl:8.14.1-alpine3.22 \
     -X POST \
     -H "Content-Type: application/json" \
     -T /data/upload-test.json \
-    https://api.github.com/repos/docker/cagent/issues
+    https://httpbin.org/post
 
-# Verify the file was created
-ls -la /tmp/curl-dhi-file-test/
-cat /tmp/curl-dhi-file-test/upload-test.json
-
-# Cleanup
 rm -rf /tmp/curl-dhi-file-test
 ```
 
