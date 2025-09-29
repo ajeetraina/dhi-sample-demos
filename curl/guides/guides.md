@@ -20,7 +20,7 @@ Execute simple HTTP requests:
 
 ```bash
 # GET request (Alpine variant recommended for CI/CD)
-$ docker run --rm <your-namespace>/dhi-curl:<tag>-alpine3.22 https://api.github.com/repos/docker/cagent
+$ docker run --rm <your-namespace>/dhi-curl:<tag> https://api.github.com/repos/docker/cagent
 ```
 
 ### File operations with volume mounts
@@ -33,7 +33,7 @@ mkdir -p /tmp/curl-dhi-file-test
 
 echo '{"project": "docker/cagent", "test": "upload", "timestamp": "'$(date)'"}' > /tmp/curl-dhi-file-test/upload-test.json
 
-docker run --rm -v /tmp/curl-dhi-file-test:/data <your-namespace>/dhi-curl:<tag>-alpine3.22 \
+docker run --rm -v /tmp/curl-dhi-file-test:/data <your-namespace>/dhi-curl:<tag> \
     -X POST \
     -H "Content-Type: application/json" \
     -T /data/upload-test.json \
@@ -72,7 +72,7 @@ RUN curl --fail --silent https://api.github.com/repos/docker/cagent > /dev/null 
 RUN echo '{"curl_config": "production", "endpoints": ["docker/cagent", "docker/mcp-gateway"]}' > config.json
 
 # Runtime stage - Curl DHI for production deployment
-FROM <your-namespace>/dhi-curl:<tag>-alpine3.22 AS runtime
+FROM <your-namespace>/dhi-curl:<tag> AS runtime
 
 WORKDIR /app
 
