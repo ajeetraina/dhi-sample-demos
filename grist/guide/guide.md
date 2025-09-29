@@ -82,7 +82,7 @@ The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-For Grist DHI image, shell access is available. Use standard docker exec commands:
+For Grist DHI image, shell access is available. Use standard `docker exec` commands:
 
 ```
 docker exec -it <container-id> /bin/bash
@@ -90,7 +90,7 @@ docker exec -it <container-id> /bin/bash
 docker exec -it <container-id> sh
 ```
 
-Alternatively, you can use `docker debug` which provides additional debugging tools in an ephemeral layer. Docker Debug is the recommended method for debugging these containers, as it provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+Alternatively, you can use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) which provides additional debugging tools in an ephemeral layer. Docker Debug is the recommended method for debugging these containers, as it provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
