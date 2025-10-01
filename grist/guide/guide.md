@@ -54,7 +54,7 @@ Runtime variants are designed to run your application in production. These image
 - Do not include package managers
 - Contain only the minimal set of libraries needed to run the app
 
-Note: No `dev` variant exists for `dhi-grist`.
+Note: No `dev` variant exists for Grist DHI.
 
 
 To view the image variants and get more information about them, select the
