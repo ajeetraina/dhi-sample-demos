@@ -105,8 +105,8 @@ The following steps outline the general migration process.
     the build stage that uses a dev image. Then, if needed, copy any necessary 
     artifacts to the runtime stage that uses a non-dev image.
     
-    For Alpine-based images, you can use apk to install packages. For 
-    Debian-based images, you can use apt-get to install packages.
+    For Alpine-based images, you can use `apk` to install packages. For 
+    Debian-based images, you can use `apt-get` to install packages.
 
 ## Troubleshoot migration
 
