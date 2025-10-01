@@ -74,69 +74,66 @@ Important Note: This is a pre-built, ready-to-run Grist application. Use it dire
 | TLS certificates   | Node.js includes its own certificate bundle, so HTTPS connections work correctly. No action needed for Grist functionality.                                                                                                                                                                                                         |
 | Ports              | Pre-configured to listen on port 8484 (non-privileged). Compatible with nonroot user. No configuration needed. |
 | Entry point        | Custom entrypoint configured: `/grist/sandbox/docker_entrypoint.sh` with `CMD: node /grist/sandbox/supervisor.mjs`                                                                                                                                |
+The following steps outline the general migration process.
 
+1. **Find hardened images for your app.**
+    
+    A hardened image may have several variants. Inspect the image tags and 
+    find the image variant that meets your needs.
+    
+2. **Update the base image in your Dockerfile.**
+    
+    Update the base image in your application's Dockerfile to the hardened 
+    image you found in the previous step. For framework images, this is typically going to be an image tagged as dev because it has the tools needed to install packages and dependencies.
+    
+3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
+    
+    To ensure that your final image is as minimal as possible, you should 
+    use a multi-stage build. All stages in your Dockerfile should use a 
+    hardened image. While intermediary stages will typically use images 
+    tagged as dev, your final runtime stage should use a non-dev image variant.
+    
+4. **Install additional packages**
+    
+    Docker Hardened Images contain minimal packages in order to reduce the 
+    potential attack surface. You may need to install additional packages in 
+    your Dockerfile. Inspect the image variants to identify which packages are 
+    already installed.
+    
+    Only images tagged as dev typically have package managers. You should use 
+    a multi-stage Dockerfile to install the packages. Install the packages in 
+    the build stage that uses a dev image. Then, if needed, copy any necessary 
+    artifacts to the runtime stage that uses a non-dev image.
+    
+    For Alpine-based images, you can use apk to install packages. For 
+    Debian-based images, you can use apt-get to install packages.
 
-## Troubleshooting migration
-
-The following are common issues that you may encounter during migration.
+## Troubleshoot migration
 
 ### General debugging
 
-For Grist DHI image, shell access is available. Use standard `docker exec` commands:
+Docker Hardened Images provide robust debugging capabilities through **Docker Debug**, which attaches comprehensive debugging tools to running containers while maintaining the security benefits of minimal runtime images.
 
-```
-docker exec -it <container-id> /bin/bash
-# or
-docker exec -it <container-id> sh
+**Docker Debug** provides a shell, common debugging tools, and lets you install additional tools in an ephemeral, writable layer that only exists during the debugging session:
+
+```bash
+docker debug <container-name>
 ```
 
-Alternatively, you can use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) which provides additional debugging tools in an ephemeral layer. Docker Debug is the recommended method for debugging these containers, as it provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+**Docker Debug advantages:**
+- Full debugging environment with shells and tools
+- Temporary, secure debugging layer that doesn't modify the runtime container
+- Install additional debugging tools as needed during the session
+- Perfect for troubleshooting DHI containers while preserving security
 
 ### Permissions
 
-Image runs as a nonroot user (UID 65532). Ensure that necessary files and directories are accessible to that user.
-For dhi-grist:
-
-- /persist directory is writable (use for data persistence)
-- /tmp directory is writable
-- /grist directory is read-only
-
-If mounting host directories, ensure they have appropriate permissions:
-
-```
-# Create directory with proper permissions
-mkdir -p grist-data
-chmod 755 grist-data
-
-# Run with volume mount
-docker run -p 8484:8484 -v ./grist-data:/persist <your-namespace>/dhi-grist:<tag>
-```
-
-To view the user for an image variant, select the Tags tab for this repository.
+Runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to copy files to different directories or change permissions so your application running as a nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
-
-For `dhi-grist` no action is required. Grist is pre-configured to listen on port 8484 (non-privileged).
-For all other applications, you need to configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example:
-
-- `docker run -p 80:8080 my-image` ✅ works (internal port is 8080)
-- `docker run -p 80:81 my-image` ❌ fails (internal port 81 is still privileged on older Docker versions)
-
-### Shell availability
-
-Check image specifications to determine if a shell is available.
-
-- For dhi-grist: Shell is available (/bin/sh and /bin/bash). Standard docker exec commands work for debugging and running scripts.
-- For other DHI images: Some DHI runtime images may not include a shell. For those images, use `docker debug` to access debugging tools.
-
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Configure your Rust applications to listen on ports 8000, 8080, or other ports above 1024.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images.
-For dhi-grist:
-
-- Entrypoint: `/grist/sandbox/docker_entrypoint.sh`
-- CMD: `node /grist/sandbox/supervisor.mjs`
-
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
