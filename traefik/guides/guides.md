@@ -28,6 +28,7 @@ providers:
 # API and dashboard
 api:
   dashboard: true
+  insecure: true
 EOF
 
 # Create basic routing configuration
@@ -44,7 +45,7 @@ http:
     webapp-service:
       loadBalancer:
         servers:
-          - url: "http://nginx:80"
+          - url: "http://nginx:8080"
 EOF
 ```
 
@@ -55,7 +56,11 @@ Run Traefik with the configuration:
 docker network create traefik-net
 
 # Start Traefik
-docker run -d --network traefik-net -p 8081:8080 -p 81:80 -p 443:443 \
+docker run -d --name traefik \
+  --network traefik-net \
+  -p 8081:8080 \
+  -p 81:80 \
+  -p 443:443 \
   -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
@@ -81,8 +86,8 @@ docker logs traefik
 # Test routing to nginx backend
 curl -H "Host: app.localhost" http://localhost:81
 
-# Access dashboard
-echo "Dashboard available at: http://localhost:8081/dashboard/"
+# Access dashboard in browser
+echo "Dashboard: http://localhost:8081/dashboard/"
 ```
 
 You should see the nginx welcome page when testing the routing, and the Traefik dashboard should be accessible in your browser at http://localhost:8081/dashboard/.
