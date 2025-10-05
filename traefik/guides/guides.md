@@ -4,13 +4,50 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 ## Start a Traefik instance
 
-Run the following command and replace <your-namespace> with your organization's namespace and <tag> with the image variant you want to run.
+Traefik requires configuration to function. Create a basic configuration file:
 
 ```
-docker run -d -p 80:80 -p 443:443 -p 8080:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  <your-namespace>/dhi-traefik:<tag>
+cat > traefik.yml <<EOF
+# API and dashboard configuration
+api:
+  insecure: true
+
+# Entry points
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+# Docker provider
+providers:
+  docker:
+    defaultRule: "Host(\`{{ trimPrefix \`/\` .Name }}.docker.localhost\`)"
+EOF
 ```
+
+Run Traefik with the configuration:
+
+```
+docker run -d -p 8080:8080 -p 80:80 -p 443:443 \
+  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  dockerdevrel/dhi-traefik:3.5.3
+```
+
+Note: The nonroot user (UID 65532) cannot access the Docker socket on Docker Desktop. 
+You must add --user 0:0 which reduces security benefits:
+
+```
+docker run -d -p 8080:8080 -p 80:80 -p 443:443 \
+  --user 0:0 \
+  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  dockerdevrel/dhi-traefik:3.5.3
+```
+
+Production recommendation: Use Kubernetes Ingress or file-based providers instead of Docker socket to maintain security benefits.
+
 
 ## Common Traefik use cases
 
@@ -19,132 +56,49 @@ docker run -d -p 80:80 -p 443:443 -p 8080:8080 \
 Run Traefik as a reverse proxy that automatically discovers and routes to Docker containers.
 
 ```
-# Create a network for Traefik and services
-docker network create traefik-public
+# Create configuration
+cat > traefik.yml <<EOF
+providers:
+  docker:
+    defaultRule: "Host(\`{{ trimPrefix \`/\` .Name }}.docker.localhost\`)"
 
-# Start Traefik with Docker provider
+api:
+  insecure: true
+  
+entryPoints:
+  web:
+    address: ":80"
+EOF
+
+# Start Traefik (add --user 0:0 on Docker Desktop)
 docker run -d --name traefik \
-  --network traefik-public \
   -p 80:80 \
   -p 8080:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  <your-namespace>/dhi-traefik:<tag> \
-  --api.insecure=true \
-  --providers.docker=true \
-  --providers.docker.exposedbydefault=false \
-  --entrypoints.web.address=:80
+  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  dockerdevrel/dhi-traefik:3.5.3
 
 # Start a sample web service
-docker run -d --name whoami \
-  --network traefik-public \
-  --label "traefik.enable=true" \
-  --label "traefik.http.routers.whoami.rule=Host(\`whoami.localhost\`)" \
-  --label "traefik.http.routers.whoami.entrypoints=web" \
-  traefik/whoami
+docker run -d --name whoami traefik/whoami
 
 # Test the routing
-curl -H "Host: whoami.localhost" http://localhost
+curl -H "Host: whoami.docker.localhost" http://localhost
 
 # Access Traefik dashboard
 curl http://localhost:8080/api/rawdata
+# Or visit: http://localhost:8080/dashboard/
 ```
 
 ### HTTPS with Let's Encrypt automatic certificates
 
-Deploy Traefik with automatic SSL/TLS certificate management using Let's Encrypt.
+Deploy Traefik with automatic SSL/TLS certificate management.
 
 ```
-# Create network and volume for certificates
-docker network create traefik-public
+# Create volume for certificates
 docker volume create traefik-certificates
 
-# Start Traefik with Let's Encrypt
-docker run -d --name traefik \
-  --network traefik-public \
-  -p 80:80 \
-  -p 443:443 \
-  -p 8080:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -v traefik-certificates:/letsencrypt \
-  <your-namespace>/dhi-traefik:<tag> \
-  --api.insecure=true \
-  --providers.docker=true \
-  --providers.docker.exposedbydefault=false \
-  --entrypoints.web.address=:80 \
-  --entrypoints.websecure.address=:443 \
-  --certificatesresolvers.myresolver.acme.email=your-email@example.com \
-  --certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json \
-  --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
-
-# Deploy service with HTTPS
-docker run -d --name myapp \
-  --network traefik-public \
-  --label "traefik.enable=true" \
-  --label "traefik.http.routers.myapp.rule=Host(\`myapp.example.com\`)" \
-  --label "traefik.http.routers.myapp.entrypoints=websecure" \
-  --label "traefik.http.routers.myapp.tls.certresolver=myresolver" \
-  nginx:alpine
-```
-
-### Load balancing with health checks
-
-Use Traefik to load balance traffic across multiple service instances with health monitoring.
-
-```
-# Create network
-docker network create traefik-public
-
-# Start Traefik with health check configuration
-docker run -d --name traefik \
-  --network traefik-public \
-  -p 80:80 \
-  -p 8080:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  <your-namespace>/dhi-traefik:<tag> \
-  --api.insecure=true \
-  --providers.docker=true \
-  --providers.docker.exposedbydefault=false \
-  --entrypoints.web.address=:80
-
-# Start multiple instances of a service
-for i in 1 2 3; do
-  docker run -d --name backend-$i \
-    --network traefik-public \
-    --label "traefik.enable=true" \
-    --label "traefik.http.routers.backend.rule=Host(\`api.localhost\`)" \
-    --label "traefik.http.routers.backend.entrypoints=web" \
-    --label "traefik.http.services.backend.loadbalancer.healthcheck.path=/health" \
-    --label "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s" \
-    traefik/whoami
-done
-
-# Verify load balancing
-for i in {1..5}; do
-  curl -H "Host: api.localhost" http://localhost
-done
-```
-
-## Multi-stage Dockerfile integration
-
-Traefik DHI images do NOT provide dev variants. For build stages that require shell access and package managers, use standard Docker Official Traefik images.
-
-```
-# syntax=docker/dockerfile:1
-# Build stage - Use standard Traefik image (has shell and package managers)
-FROM traefik:3.5.3 AS builder
-
-USER root
-
-# Create custom configuration and dynamic configs
-RUN mkdir -p /app/config /app/dynamic && \
-    apk add --no-cache bash yq
-
-# Create static configuration
-RUN cat > /app/config/traefik.yml <<EOF
-api:
-  dashboard: true
-  insecure: false
-
+# Create configuration
+cat > traefik.yml <<EOF
 entryPoints:
   web:
     address: ":80"
@@ -156,24 +110,127 @@ entryPoints:
   websecure:
     address: ":443"
 
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: your-email@example.com
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
 providers:
   docker:
-    endpoint: "unix:///var/run/docker.sock"
-    exposedByDefault: false
+    defaultRule: "Host(\`{{ trimPrefix \`/\` .Name }}.docker.localhost\`)"
+
+api:
+  insecure: true
+EOF
+
+# Start Traefik (add --user 0:0 on Docker Desktop)
+docker run -d --name traefik \
+  -p 80:80 \
+  -p 443:443 \
+  -p 8080:8080 \
+  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v traefik-certificates:/letsencrypt \
+  dockerdevrel/dhi-traefik:3.5.3
+
+# Deploy service with HTTPS labels
+docker run -d --name myapp \
+  --label "traefik.enable=true" \
+  --label "traefik.http.routers.myapp.rule=Host(\`myapp.example.com\`)" \
+  --label "traefik.http.routers.myapp.entrypoints=websecure" \
+  --label "traefik.http.routers.myapp.tls.certresolver=letsencrypt" \
+  nginx:alpine
+```
+
+## File-based provider (production-ready, no Docker socket)
+
+Use file-based configuration to avoid Docker socket security concerns.
+
+
+```
+# Create config directories
+mkdir -p config/dynamic
+
+# Create static configuration
+cat > traefik.yml <<EOF
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
   file:
     directory: "/config/dynamic"
     watch: true
 
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: admin@example.com
-      storage: /letsencrypt/acme.json
-      httpChallenge:
-        entryPoint: web
+api:
+  dashboard: true
 EOF
 
-# Create dynamic configuration for middleware
+# Create dynamic configuration
+cat > config/dynamic/services.yml <<EOF
+http:
+  routers:
+    my-service:
+      rule: "Host(\`app.example.com\`)"
+      service: my-service
+      entryPoints:
+        - web
+        
+  services:
+    my-service:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8080"
+EOF
+
+# Start Traefik (runs as nonroot without socket)
+docker run -d --name traefik \
+  -p 80:80 \
+  -p 443:443 \
+  -p 8080:8080 \
+  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
+  -v $PWD/config/dynamic:/config/dynamic:ro \
+  dockerdevrel/dhi-traefik:3.5.3
+```
+
+## Multi-stage Dockerfile integration
+
+Traefik DHI images do NOT provide dev variants. For build stages that require shell access and package managers, use standard Docker Official Traefik images.
+
+```
+# syntax=docker/dockerfile:1
+# Build stage - Use standard Traefik image
+FROM traefik:3.5.3 AS builder
+
+USER root
+
+# Create custom configuration
+RUN mkdir -p /app/config /app/dynamic && \
+    apk add --no-cache bash
+
+# Create static configuration
+RUN cat > /app/config/traefik.yml <<EOF
+api:
+  dashboard: true
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  file:
+    directory: "/config/dynamic"
+    watch: true
+EOF
+
+# Create dynamic configuration
 RUN cat > /app/dynamic/middleware.yml <<EOF
 http:
   middlewares:
@@ -188,13 +245,12 @@ EOF
 RUN chown -R 65532:65532 /app
 
 # Runtime stage - Use Docker Hardened Traefik
-FROM <your-namespace>/dhi-traefik:<tag> AS runtime
+FROM dockerdevrel/dhi-traefik:3.5.3 AS runtime
 
 # Copy configuration from builder
 COPY --from=builder --chown=traefik:traefik /app/config/traefik.yml /etc/traefik/traefik.yml
 COPY --from=builder --chown=traefik:traefik /app/dynamic /config/dynamic
 
-# Expose ports
 EXPOSE 80 443 8080
 ```
 
@@ -202,17 +258,15 @@ Build and run:
 
 ```
 docker build -t my-traefik-app .
-```
 
-```
 docker run -d --name my-traefik \
   -p 80:80 \
   -p 443:443 \
   -p 8080:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -v traefik-certs:/letsencrypt \
   my-traefik-app
 ```
+
+
 
 ## Non-hardened images vs Docker Hardened Images
 
