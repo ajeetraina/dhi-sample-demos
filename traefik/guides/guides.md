@@ -61,7 +61,34 @@ docker run -d --network traefik-net -p 8081:8080 -p 81:80 -p 443:443 \
   dockerdevrel/dhi-traefik:3.5.3
 ```
 
-Access the dashboard at `http://localhost/dashboard/`
+### Step 6: Start a backend service
+
+```
+docker run -d --name nginx 
+--network traefik-net 
+dockerdevrel/dhi-nginx:1.29.1-alpine3.21
+```
+
+### Step 7: Verify the setup
+
+```
+# Check containers are running
+docker ps
+
+# Check Traefik logs
+docker logs traefik
+
+# Test routing to nginx backend
+curl -H "Host: app.localhost" http://localhost:81
+
+# Access dashboard
+echo "Dashboard available at: http://localhost:8081/dashboard/"
+```
+
+You should see the nginx welcome page when testing the routing, and the Traefik dashboard should be accessible in your browser at http://localhost:8081/dashboard/.
+
+Note on ports: This example uses non-privileged ports (81 and 8081) which work reliably with the nonroot user (UID 65532) across all environments. 
+You can also use standard ports 80 and 8080 on Docker Engine 20.10+ and recent Docker Desktop versions.
 
 
 
@@ -72,49 +99,93 @@ Access the dashboard at `http://localhost/dashboard/`
 Run Traefik as a reverse proxy that automatically discovers and routes to Docker containers.
 
 ```
-# Create configuration
-cat > traefik.yml <<EOF
-providers:
-  docker:
-    defaultRule: "Host(\`{{ trimPrefix \`/\` .Name }}.docker.localhost\`)"
+# Step 1: Create configuration structure
+mkdir -p traefik/config/dynamic
 
-api:
-  insecure: true
-  
+# Step 2: Create static configuration
+cat > traefik/traefik.yml <<'EOF'
 entryPoints:
   web:
     address: ":80"
+
+providers:
+  file:
+    directory: "/config/dynamic"
+    watch: true
+
+api:
+  dashboard: true
 EOF
 
-# Start Traefik (add --user 0:0 on Docker Desktop)
+# Step 3: Create dynamic routing configuration for multiple services
+cat > traefik/config/dynamic/services.yml <<'EOF'
+http:
+  routers:
+    webapp:
+      rule: "Host(`app.localhost`)"
+      service: webapp-service
+      entryPoints:
+        - web
+    
+    api-router:
+      rule: "Host(`api.localhost`)"
+      service: api-service
+      entryPoints:
+        - web
+        
+  services:
+    webapp-service:
+      loadBalancer:
+        servers:
+          - url: "http://nginx-backend:80"
+    
+    api-service:
+      loadBalancer:
+        servers:
+          - url: "http://api-backend:80"
+EOF
+
+# Step 4: Create network
+docker network create traefik-net
+
+# Step 5: Start Traefik
 docker run -d --name traefik \
-  -p 80:80 \
-  -p 8080:8080 \
-  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
-  -v /var/run/docker.sock:/var/run/docker.sock \
+  --network traefik-net \
+  -p 81:80 \
+  -p 8081:8080 \
+  -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
+  -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
 
-# Start a sample web service
-docker run -d --name whoami traefik/whoami
+# Step 6: Start backend services
+docker run -d --name nginx-backend \
+  --network traefik-net \
+  dockerdevrel/dhi-nginx:1.29.1-alpine3.21
 
-# Test the routing
-curl -H "Host: whoami.docker.localhost" http://localhost
+docker run -d --name api-backend \
+  --network traefik-net \
+  dockerdevrel/dhi-nginx:1.29.1-alpine3.21
 
-# Access Traefik dashboard
-curl http://localhost:8080/api/rawdata
-# Or visit: http://localhost:8080/dashboard/
+# Step 7: Test routing
+curl -H "Host: app.localhost" http://localhost:81
+curl -H "Host: api.localhost" http://localhost:81
+
+# Step 8: Access dashboard
+echo "Dashboard: http://localhost:8081/dashboard/"
 ```
 
 ### HTTPS with Let's Encrypt automatic certificates
 
-Deploy Traefik with automatic SSL/TLS certificate management.
+Deploy Traefik with automatic SSL/TLS certificate management using file-based configuration.
+
 
 ```
-# Create volume for certificates
+# Step 1: Create configuration structure and certificate volume
+mkdir -p traefik/config/dynamic
 docker volume create traefik-certificates
 
-# Create configuration
-cat > traefik.yml <<EOF
+# Step 2: Create static configuration with Let's Encrypt
+cat > traefik/traefik.yml <<'EOF'
 entryPoints:
   web:
     address: ":80"
@@ -135,48 +206,66 @@ certificatesResolvers:
         entryPoint: web
 
 providers:
-  docker:
-    defaultRule: "Host(\`{{ trimPrefix \`/\` .Name }}.docker.localhost\`)"
+  file:
+    directory: "/config/dynamic"
+    watch: true
 
 api:
-  insecure: true
+  dashboard: true
 EOF
 
-# Start Traefik (add --user 0:0 on Docker Desktop)
+# Step 3: Create HTTPS service configuration
+cat > traefik/config/dynamic/https-services.yml <<'EOF'
+http:
+  routers:
+    secure-app:
+      rule: "Host(`app.example.com`)"
+      service: app-service
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+        
+  services:
+    app-service:
+      loadBalancer:
+        servers:
+          - url: "http://backend:80"
+EOF
+
+# Step 4: Create network
+docker network create traefik-net
+
+# Step 5: Start Traefik
 docker run -d --name traefik \
-  -p 80:80 \
+  --network traefik-net \
+  -p 81:80 \
   -p 443:443 \
-  -p 8080:8080 \
-  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
-  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p 8081:8080 \
+  -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
+  -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   -v traefik-certificates:/letsencrypt \
   dockerdevrel/dhi-traefik:3.5.3
 
-# Deploy service with HTTPS labels
-docker run -d --name myapp \
-  --label "traefik.enable=true" \
-  --label "traefik.http.routers.myapp.rule=Host(\`myapp.example.com\`)" \
-  --label "traefik.http.routers.myapp.entrypoints=websecure" \
-  --label "traefik.http.routers.myapp.tls.certresolver=letsencrypt" \
-  nginx:alpine
+# Step 6: Start backend service
+docker run -d --name backend \
+  --network traefik-net \
+  dockerdevrel/dhi-nginx:1.29.1-alpine3.21
 ```
 
-## File-based provider (production-ready, no Docker socket)
+## Load balancing with health checks
 
-Use file-based configuration to avoid Docker socket security concerns.
-
+Configure Traefik to load balance traffic across multiple backend instances with health monitoring.
 
 ```
-# Create config directories
-mkdir -p config/dynamic
+# Step 1: Create configuration structure
+mkdir -p traefik/config/dynamic
 
-# Create static configuration
-cat > traefik.yml <<EOF
+# Step 2: Create static configuration
+cat > traefik/traefik.yml <<'EOF'
 entryPoints:
   web:
     address: ":80"
-  websecure:
-    address: ":443"
 
 providers:
   file:
@@ -187,31 +276,55 @@ api:
   dashboard: true
 EOF
 
-# Create dynamic configuration
-cat > config/dynamic/services.yml <<EOF
+# Step 3: Create load balancing configuration with health checks
+cat > traefik/config/dynamic/loadbalancer.yml <<'EOF'
 http:
   routers:
-    my-service:
-      rule: "Host(\`app.example.com\`)"
-      service: my-service
+    api-lb:
+      rule: "Host(`api.localhost`)"
+      service: api-loadbalanced
       entryPoints:
         - web
         
   services:
-    my-service:
+    api-loadbalanced:
       loadBalancer:
         servers:
-          - url: "http://backend:8080"
+          - url: "http://backend-1:80"
+          - url: "http://backend-2:80"
+          - url: "http://backend-3:80"
+        healthCheck:
+          path: /
+          interval: "10s"
+          timeout: "3s"
 EOF
 
-# Start Traefik (runs as nonroot without socket)
+# Step 4: Create network
+docker network create traefik-net
+
+# Step 5: Start Traefik
 docker run -d --name traefik \
-  -p 80:80 \
-  -p 443:443 \
-  -p 8080:8080 \
-  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
-  -v $PWD/config/dynamic:/config/dynamic:ro \
+  --network traefik-net \
+  -p 81:80 \
+  -p 8081:8080 \
+  -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
+  -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
+
+# Step 6: Start multiple backend instances
+for i in 1 2 3; do
+  docker run -d --name backend-$i \
+    --network traefik-net \
+    traefik/whoami
+done
+
+# Step 7: Verify load balancing
+for i in {1..6}; do
+  curl -H "Host: api.localhost" http://localhost:81
+  echo "---"
+done
+
+# You should see responses from different backend instances
 ```
 
 ## Multi-stage Dockerfile integration
@@ -220,20 +333,17 @@ Traefik DHI images do NOT provide dev variants. For build stages that require sh
 
 ```
 # syntax=docker/dockerfile:1
-# Build stage - Use standard Traefik image
+# Build stage - Use standard Traefik image (has shell and package managers)
 FROM traefik:3.5.3 AS builder
 
 USER root
 
 # Create custom configuration
 RUN mkdir -p /app/config /app/dynamic && \
-    apk add --no-cache bash
+    apk add --no-cache bash yq
 
 # Create static configuration
-RUN cat > /app/config/traefik.yml <<EOF
-api:
-  dashboard: true
-
+RUN cat > /app/config/traefik.yml <<'EOF'
 entryPoints:
   web:
     address: ":80"
@@ -244,10 +354,21 @@ providers:
   file:
     directory: "/config/dynamic"
     watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@example.com
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
+api:
+  dashboard: true
 EOF
 
 # Create dynamic configuration
-RUN cat > /app/dynamic/middleware.yml <<EOF
+RUN cat > /app/dynamic/middleware.yml <<'EOF'
 http:
   middlewares:
     security-headers:
@@ -268,18 +389,6 @@ COPY --from=builder --chown=traefik:traefik /app/config/traefik.yml /etc/traefik
 COPY --from=builder --chown=traefik:traefik /app/dynamic /config/dynamic
 
 EXPOSE 80 443 8080
-```
-
-Build and run:
-
-```
-docker build -t my-traefik-app .
-
-docker run -d --name my-traefik \
-  -p 80:80 \
-  -p 443:443 \
-  -p 8080:8080 \
-  my-traefik-app
 ```
 
 
