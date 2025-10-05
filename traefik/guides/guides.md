@@ -4,14 +4,14 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 ## Start a Traefik instance
 
-Traefik requires configuration to function. Create a basic configuration file:
+Traefik requires configuration to function. Create a configuration file and dynamic routing rules:
 
 ```
-cat > traefik.yml <<EOF
-# API and dashboard configuration
-api:
-  insecure: true
+# Create directory structure
+mkdir -p traefik/config/dynamic
 
+# Create static configuration
+cat > traefik/traefik.yml <<'EOF'
 # Entry points
 entryPoints:
   web:
@@ -19,21 +19,56 @@ entryPoints:
   websecure:
     address: ":443"
 
-# Docker provider
+# File provider for dynamic configuration
 providers:
-  docker:
-    defaultRule: "Host(\`{{ trimPrefix \`/\` .Name }}.docker.localhost\`)"
+  file:
+    directory: "/config/dynamic"
+    watch: true
+
+# API and dashboard
+api:
+  dashboard: true
+EOF
+
+# Create basic routing configuration
+cat > traefik/config/dynamic/routes.yml <<'EOF'
+http:
+  routers:
+    webapp:
+      rule: "Host(`app.localhost`)"
+      service: webapp-service
+      entryPoints:
+        - web
+        
+  services:
+    webapp-service:
+      loadBalancer:
+        servers:
+          - url: "http://nginx:80"
 EOF
 ```
 
 Run Traefik with the configuration:
 
 ```
-docker run -d -p 8081:8080 -p 81:80 -p 443:443 \
-  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
-  -v /var/run/docker.sock:/var/run/docker.sock \
+# Create backend network
+docker network create traefik-net
+
+# Start Traefik
+docker run -d -p 8080:8080 -p 80:80 -p 443:443 \
+  -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
+  -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
+
+# Start backend service
+docker run -d --name nginx-backend \
+  --network traefik-net \
+  nginx:alpine
+
+# Test routing
+curl -H "Host: app.localhost" http://localhost
 ```
+
 
 
 ## Common Traefik use cases
