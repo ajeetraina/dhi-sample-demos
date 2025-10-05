@@ -104,10 +104,13 @@ You can also use standard ports 80 and 8080 on Docker Engine 20.10+ and recent D
 Run Traefik as a reverse proxy that automatically discovers and routes to Docker containers.
 
 ```
-# Step 1: Create configuration structure
+# Step 1. Remove existing containers
+docker rm -f traefik nginx nginx-backend api-backend 2>/dev/null || true
+
+# Step 2: Create configuration structure
 mkdir -p traefik/config/dynamic
 
-# Step 2: Create static configuration
+# Step 3: Create static configuration
 cat > traefik/traefik.yml <<'EOF'
 entryPoints:
   web:
@@ -122,7 +125,7 @@ api:
   dashboard: true
 EOF
 
-# Step 3: Create dynamic routing configuration for multiple services
+# Step 4: Create dynamic routing configuration for multiple services
 cat > traefik/config/dynamic/services.yml <<'EOF'
 http:
   routers:
@@ -150,10 +153,10 @@ http:
           - url: "http://api-backend:80"
 EOF
 
-# Step 4: Create network
+# Step 5: Create network
 docker network create traefik-net
 
-# Step 5: Start Traefik
+# Step 6: Start Traefik
 docker run -d --name traefik \
   --network traefik-net \
   -p 81:80 \
@@ -162,7 +165,7 @@ docker run -d --name traefik \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
 
-# Step 6: Start backend services
+# Step 7: Start backend services
 docker run -d --name nginx-backend \
   --network traefik-net \
   dockerdevrel/dhi-nginx:1.29.1-alpine3.21
@@ -171,11 +174,11 @@ docker run -d --name api-backend \
   --network traefik-net \
   dockerdevrel/dhi-nginx:1.29.1-alpine3.21
 
-# Step 7: Test routing
+# Step 8: Test routing
 curl -H "Host: app.localhost" http://localhost:81
 curl -H "Host: api.localhost" http://localhost:81
 
-# Step 8: Access dashboard
+# Step 9: Access dashboard
 echo "Dashboard: http://localhost:8081/dashboard/"
 ```
 
