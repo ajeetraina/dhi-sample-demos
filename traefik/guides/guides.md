@@ -59,15 +59,9 @@ docker run -d -p 8080:8080 -p 80:80 -p 443:443 \
   -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
-
-# Start backend service
-docker run -d --name nginx-backend \
-  --network traefik-net \
-  nginx:alpine
-
-# Test routing
-curl -H "Host: app.localhost" http://localhost
 ```
+
+Access the dashboard at `http://localhost/dashboard/`
 
 
 
