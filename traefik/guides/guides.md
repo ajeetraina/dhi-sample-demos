@@ -123,6 +123,7 @@ providers:
 
 api:
   dashboard: true
+insecure: true
 EOF
 
 # Step 4: Create dynamic routing configuration for multiple services
@@ -180,12 +181,23 @@ docker run -d --name api-backend \
   --network traefik-net \
   dockerdevrel/dhi-nginx:1.29.1-alpine3.21
 
-# Step 8: Test routing
+# Step 8: Wait for containers to start
+sleep 3
+
+# Step 9: Verify setup
+echo "=== Checking containers ==="
+docker ps | grep -E "traefik|nginx-backend|api-backend"
+
+echo ""
+echo "=== Testing routing ==="
 curl -H "Host: app.localhost" http://localhost:81
+echo ""
+echo "---"
 curl -H "Host: api.localhost" http://localhost:81
 
-# Step 9: Access dashboard
-echo "Dashboard: http://localhost:8081/dashboard/"
+echo ""
+echo "=== Dashboard available at ==="
+echo "http://localhost:8081/dashboard/"
 ```
 
 ### HTTPS with Let's Encrypt automatic certificates
