@@ -145,13 +145,20 @@ http:
     webapp-service:
       loadBalancer:
         servers:
-          - url: "http://nginx-backend:80"
+          - url: "http://nginx-backend:8080"
     
     api-service:
       loadBalancer:
         servers:
-          - url: "http://api-backend:80"
+          - url: "http://api-backend:8080"
 EOF
+
+# Wait for Traefik to reload (watch: true)
+sleep 3
+
+# Test again
+curl -H "Host: app.localhost" http://localhost:81
+curl -H "Host: api.localhost" http://localhost:81
 
 # Step 5: Create network
 docker network create traefik-net
