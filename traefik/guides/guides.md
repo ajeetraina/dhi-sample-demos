@@ -55,7 +55,7 @@ Run Traefik with the configuration:
 docker network create traefik-net
 
 # Start Traefik
-docker run -d -p 8080:8080 -p 80:80 -p 443:443 \
+docker run -d --network traefik-net -p 8081:8080 -p 81:80 -p 443:443 \
   -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
