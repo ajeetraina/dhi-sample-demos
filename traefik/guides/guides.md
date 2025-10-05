@@ -35,19 +35,6 @@ docker run -d -p 8081:8080 -p 81:80 -p 443:443 \
   dockerdevrel/dhi-traefik:3.5.3
 ```
 
-Note: The nonroot user (UID 65532) cannot access the Docker socket on Docker Desktop. 
-You must add --user 0:0 which reduces security benefits:
-
-```
-docker run -d -p 8081:8080 -p 81:80 -p 443:443 \
-  --user 0:0 \
-  -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  dockerdevrel/dhi-traefik:3.5.3
-```
-
-Production recommendation: Use Kubernetes Ingress or file-based providers instead of Docker socket to maintain security benefits.
-
 
 ## Common Traefik use cases
 
