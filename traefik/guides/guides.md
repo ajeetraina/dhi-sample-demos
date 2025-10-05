@@ -158,7 +158,6 @@ sleep 3
 
 # Test again
 curl -H "Host: app.localhost" http://localhost:81
-curl -H "Host: api.localhost" http://localhost:81
 
 # Step 5: Create network
 docker network create traefik-net
