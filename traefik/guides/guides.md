@@ -64,8 +64,8 @@ docker run -d --network traefik-net -p 8081:8080 -p 81:80 -p 443:443 \
 ### Step 6: Start a backend service
 
 ```
-docker run -d --name nginx 
---network traefik-net 
+docker run -d --name nginx \
+--network traefik-net \
 dockerdevrel/dhi-nginx:1.29.1-alpine3.21
 ```
 
