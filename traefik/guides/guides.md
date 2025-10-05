@@ -29,7 +29,7 @@ EOF
 Run Traefik with the configuration:
 
 ```
-docker run -d -p 8080:8080 -p 80:80 -p 443:443 \
+docker run -d -p 8081:8080 -p 81:80 -p 443:443 \
   -v $PWD/traefik.yml:/etc/traefik/traefik.yml \
   -v /var/run/docker.sock:/var/run/docker.sock \
   dockerdevrel/dhi-traefik:3.5.3
