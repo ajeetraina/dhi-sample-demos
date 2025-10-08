@@ -66,7 +66,7 @@ docker run -d --name traefik \
   dockerdevrel/dhi-traefik:3.5.3
 ```
 
-### Step 6: Start a backend service
+### Start a backend service
 
 ```
 docker run -d --name nginx \
@@ -74,7 +74,7 @@ docker run -d --name nginx \
 dockerdevrel/dhi-nginx:1.29.1-alpine3.21
 ```
 
-### Step 7: Verify the setup
+### Verify the setup
 
 ```
 # Check containers are running
