@@ -104,8 +104,9 @@ You can also use standard ports 80 and 8080 on Docker Engine 20.10+ and recent D
 Configure Traefik to route traffic to multiple backend services using file-based configuration.
 
 ```
-# Step 1: Remove existing containers
-docker rm -f traefik nginx nginx-backend api-backend 2>/dev/null || true
+# Step 1: Clean up previous example
+docker rm -f traefik nginx nginx-backend api-backend backend backend-1 backend-2 backend-3 2>/dev/null || true
+rm -f traefik/config/dynamic/*.yml  # ⚠️ Remove old config files
 
 # Step 2: Create configuration structure (if needed)
 mkdir -p traefik/config/dynamic
