@@ -124,7 +124,7 @@ providers:
 
 api:
   dashboard: true
-insecure: true
+  insecure: true
 EOF
 
 # Step 4: Create dynamic routing configuration for multiple services
