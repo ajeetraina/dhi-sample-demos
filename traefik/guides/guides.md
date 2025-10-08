@@ -195,101 +195,17 @@ echo "=== Dashboard available at ==="
 echo "http://localhost:8081/dashboard/"
 ```
 
-### HTTPS with Let's Encrypt automatic certificates
-
-Deploy Traefik with automatic SSL/TLS certificate management using file-based configuration.
-
-
-```
-# Step 1: Remove existing containers
-docker rm -f traefik backend 2>/dev/null || true
-
-# Step 2: Create configuration structure and certificate volume
-mkdir -p traefik/config/dynamic
-docker volume create traefik-certificates
-
-# Step 3: Create static configuration with Let's Encrypt
-cat > traefik/traefik.yml <<'EOF'
-entryPoints:
-  web:
-    address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-  websecure:
-    address: ":443"
-
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: your-email@example.com
-      storage: /letsencrypt/acme.json
-      httpChallenge:
-        entryPoint: web
-
-providers:
-  file:
-    directory: "/config/dynamic"
-    watch: true
-
-api:
-  dashboard: true
-  insecure: true  # ⚠️ Development only
-EOF
-
-# Step 4: Create HTTPS service configuration
-cat > traefik/config/dynamic/https-services.yml <<'EOF'
-http:
-  routers:
-    secure-app:
-      rule: "Host(`app.example.com`)"
-      service: app-service
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-        
-  services:
-    app-service:
-      loadBalancer:
-        servers:
-          - url: "http://backend:8080"
-EOF
-
-# Step 5: Create network (ignore if exists)
-docker network create traefik-net 2>/dev/null || true
-
-# Step 6: Start Traefik
-docker run -d --name traefik \
-  --network traefik-net \
-  -p 81:80 \
-  -p 443:443 \
-  -p 8081:8080 \
-  -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
-  -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
-  -v traefik-certificates:/letsencrypt \
-  dockerdevrel/dhi-traefik:3.5.3
-
-# Step 7: Start backend service
-docker run -d --name backend \
-  --network traefik-net \
-  dockerdevrel/dhi-nginx:1.29.1-alpine3.21
-```
 
 ## Load balancing with health checks
 
 Configure Traefik to load balance traffic across multiple backend instances with health monitoring.
 
 ```
-# Step 1: Remove existing containers
-docker rm -f traefik backend-1 backend-2 backend-3 2>/dev/null || true
+# Step 1: Clean up previous example
+docker rm -f traefik nginx-backend api-backend backend-1 backend-2 backend-3 2>/dev/null || true
+rm -f traefik/config/dynamic/*.yml
 
-# Step 2: Create configuration structure (if needed)
-mkdir -p traefik/config/dynamic
-
-# Step 3: Create static configuration
+# Step 2: Create static configuration
 cat > traefik/traefik.yml <<'EOF'
 entryPoints:
   web:
@@ -305,7 +221,7 @@ api:
   insecure: true  # ⚠️ Development only
 EOF
 
-# Step 4: Create load balancing configuration with health checks
+# Step 3: Create load balancing configuration with health checks
 cat > traefik/config/dynamic/loadbalancer.yml <<'EOF'
 http:
   routers:
@@ -328,10 +244,7 @@ http:
           timeout: "3s"
 EOF
 
-# Step 5: Create network (ignore if exists)
-docker network create traefik-net 2>/dev/null || true
-
-# Step 6: Start Traefik
+# Step 4: Start Traefik
 docker run -d --name traefik \
   --network traefik-net \
   -p 81:80 \
@@ -340,23 +253,21 @@ docker run -d --name traefik \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
 
-# Step 7: Start multiple backend instances
+# Step 5: Start multiple backend instances
 for i in 1 2 3; do
   docker run -d --name backend-$i \
     --network traefik-net \
     traefik/whoami
 done
 
-# Step 8: Wait for containers to start
+# Step 6: Wait for containers to start
 sleep 3
 
-# Step 9: Verify load balancing
+# Step 7: Verify load balancing (you'll see different hostnames!)
 for i in {1..6}; do
-  curl -H "Host: api.localhost" http://localhost:81
+  curl -H "Host: api.localhost" http://localhost:81 | grep Hostname
   echo "---"
 done
-
-# You should see responses from different backend instances
 ```
 
 ## Multi-stage Dockerfile integration
