@@ -99,16 +99,15 @@ You can also use standard ports 80 and 8080 on Docker Engine 20.10+ and recent D
 
 ## Common Traefik use cases
 
-### Basic reverse proxy with Docker provider
+### Basic reverse proxy with multiple services
 
-Run Traefik as a reverse proxy that automatically discovers and routes to Docker containers.
+Configure Traefik to route traffic to multiple backend services using file-based configuration.
 
 ```
-# Step 1. Remove existing containers and network
+# Step 1: Remove existing containers
 docker rm -f traefik nginx nginx-backend api-backend 2>/dev/null || true
-docker network rm traefik-net
 
-# Step 2: Create configuration structure
+# Step 2: Create configuration structure (if needed)
 mkdir -p traefik/config/dynamic
 
 # Step 3: Create static configuration
@@ -124,7 +123,7 @@ providers:
 
 api:
   dashboard: true
-  insecure: true
+  insecure: true  # ⚠️ Development only
 EOF
 
 # Step 4: Create dynamic routing configuration for multiple services
@@ -155,14 +154,8 @@ http:
           - url: "http://api-backend:8080"
 EOF
 
-# Wait for Traefik to reload (watch: true)
-sleep 3
-
-# Test again
-curl -H "Host: app.localhost" http://localhost:81
-
-# Step 5: Create network
-docker network create traefik-net
+# Step 5: Create network (ignore if exists)
+docker network create traefik-net 2>/dev/null || true
 
 # Step 6: Start Traefik
 docker run -d --name traefik \
@@ -207,11 +200,14 @@ Deploy Traefik with automatic SSL/TLS certificate management using file-based co
 
 
 ```
-# Step 1: Create configuration structure and certificate volume
+# Step 1: Remove existing containers
+docker rm -f traefik backend 2>/dev/null || true
+
+# Step 2: Create configuration structure and certificate volume
 mkdir -p traefik/config/dynamic
 docker volume create traefik-certificates
 
-# Step 2: Create static configuration with Let's Encrypt
+# Step 3: Create static configuration with Let's Encrypt
 cat > traefik/traefik.yml <<'EOF'
 entryPoints:
   web:
@@ -239,9 +235,10 @@ providers:
 
 api:
   dashboard: true
+  insecure: true  # ⚠️ Development only
 EOF
 
-# Step 3: Create HTTPS service configuration
+# Step 4: Create HTTPS service configuration
 cat > traefik/config/dynamic/https-services.yml <<'EOF'
 http:
   routers:
@@ -257,13 +254,13 @@ http:
     app-service:
       loadBalancer:
         servers:
-          - url: "http://backend:80"
+          - url: "http://backend:8080"
 EOF
 
-# Step 4: Create network
-docker network create traefik-net
+# Step 5: Create network (ignore if exists)
+docker network create traefik-net 2>/dev/null || true
 
-# Step 5: Start Traefik
+# Step 6: Start Traefik
 docker run -d --name traefik \
   --network traefik-net \
   -p 81:80 \
@@ -274,7 +271,7 @@ docker run -d --name traefik \
   -v traefik-certificates:/letsencrypt \
   dockerdevrel/dhi-traefik:3.5.3
 
-# Step 6: Start backend service
+# Step 7: Start backend service
 docker run -d --name backend \
   --network traefik-net \
   dockerdevrel/dhi-nginx:1.29.1-alpine3.21
@@ -285,10 +282,13 @@ docker run -d --name backend \
 Configure Traefik to load balance traffic across multiple backend instances with health monitoring.
 
 ```
-# Step 1: Create configuration structure
+# Step 1: Remove existing containers
+docker rm -f traefik backend-1 backend-2 backend-3 2>/dev/null || true
+
+# Step 2: Create configuration structure (if needed)
 mkdir -p traefik/config/dynamic
 
-# Step 2: Create static configuration
+# Step 3: Create static configuration
 cat > traefik/traefik.yml <<'EOF'
 entryPoints:
   web:
@@ -301,9 +301,10 @@ providers:
 
 api:
   dashboard: true
+  insecure: true  # ⚠️ Development only
 EOF
 
-# Step 3: Create load balancing configuration with health checks
+# Step 4: Create load balancing configuration with health checks
 cat > traefik/config/dynamic/loadbalancer.yml <<'EOF'
 http:
   routers:
@@ -326,10 +327,10 @@ http:
           timeout: "3s"
 EOF
 
-# Step 4: Create network
-docker network create traefik-net
+# Step 5: Create network (ignore if exists)
+docker network create traefik-net 2>/dev/null || true
 
-# Step 5: Start Traefik
+# Step 6: Start Traefik
 docker run -d --name traefik \
   --network traefik-net \
   -p 81:80 \
@@ -338,14 +339,17 @@ docker run -d --name traefik \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
   dockerdevrel/dhi-traefik:3.5.3
 
-# Step 6: Start multiple backend instances
+# Step 7: Start multiple backend instances
 for i in 1 2 3; do
   docker run -d --name backend-$i \
     --network traefik-net \
     traefik/whoami
 done
 
-# Step 7: Verify load balancing
+# Step 8: Wait for containers to start
+sleep 3
+
+# Step 9: Verify load balancing
 for i in {1..6}; do
   curl -H "Host: api.localhost" http://localhost:81
   echo "---"
