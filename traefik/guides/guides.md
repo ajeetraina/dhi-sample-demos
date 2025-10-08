@@ -1,6 +1,6 @@
 ## How to use this image
 
-Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either Mirror to repository or View in repository > Mirror to repository, and then follow the on-screen instructions.
+Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository** > **Mirror to repository**, and then follow the on-screen instructions.
 
 ## Start a Traefik instance
 
@@ -63,7 +63,7 @@ docker run -d --name traefik \
   -p 443:443 \
   -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
-  dockerdevrel/dhi-traefik:3.5.3
+  <your-namespace>/dhi-traefik:<tag>
 ```
 
 ### Start a backend service
@@ -71,7 +71,7 @@ docker run -d --name traefik \
 ```
 docker run -d --name nginx \
 --network traefik-net \
-dockerdevrel/dhi-nginx:1.29.1-alpine3.21
+<your-namespace>/dhi-nginx:<tag>-alpine<tag>
 ```
 
 ### Verify the setup
@@ -165,16 +165,16 @@ docker run -d --name traefik \
   -p 8081:8080 \
   -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
-  dockerdevrel/dhi-traefik:3.5.3
+ <your-namespace>/dhi-traefik:<tag>
 
 # Step 7: Start backend services
 docker run -d --name nginx-backend \
   --network traefik-net \
-  dockerdevrel/dhi-nginx:1.29.1-alpine3.21
+  <your-namespace>/dhi-nginx:<tag>-alpine<tag>
 
 docker run -d --name api-backend \
   --network traefik-net \
-  dockerdevrel/dhi-nginx:1.29.1-alpine3.21
+  <your-namespace>/dhi-nginx:<tag>-alpine<tag>
 
 # Step 8: Wait for containers to start
 sleep 3
@@ -251,7 +251,7 @@ docker run -d --name traefik \
   -p 8081:8080 \
   -v $PWD/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
   -v $PWD/traefik/config/dynamic:/config/dynamic:ro \
-  dockerdevrel/dhi-traefik:3.5.3
+  <your-namespace>/dhi-traefik:<tag>
 
 # Step 5: Start multiple backend instances
 for i in 1 2 3; do
@@ -325,7 +325,7 @@ EOF
 RUN chown -R 65532:65532 /app
 
 # Runtime stage - Use Docker Hardened Traefik
-FROM dockerdevrel/dhi-traefik:3.5.3 AS runtime
+FROM <your-namespace>/dhi-traefik:<tag> AS runtime
 
 # Copy configuration from builder
 COPY --from=builder --chown=traefik:traefik /app/config/traefik.yml /etc/traefik/traefik.yml
@@ -388,11 +388,6 @@ Runtime variants are designed to run your application in production. These image
 - Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the app
 
-**Note**: Traefik DHI does NOT provide dev variants. For build stages requiring shell access or package managers, use standard Docker Official Traefik images (such as `traefik:3.5.3` or `traefik:2.11.29`).
-
-Available tags:
-- `3.5.3`, `3.5.3-debian13`, `3.5`, `3.5-debian13`, `3` (latest v3)
-- `2.11.29`, `2.11.29-debian13`, `2.11`, `2.11-debian13`, `2` (latest v2)
 
 ## Migrate to a Docker Hardened Image
 
