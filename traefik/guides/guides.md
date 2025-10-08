@@ -106,7 +106,7 @@ Configure Traefik to route traffic to multiple backend services using file-based
 ```
 # Step 1: Clean up previous example
 docker rm -f traefik nginx nginx-backend api-backend backend backend-1 backend-2 backend-3 2>/dev/null || true
-rm -f traefik/config/dynamic/*.yml  # ⚠️ Remove old config files
+rm -f traefik/config/dynamic/*.yml  
 
 # Step 2: Create configuration structure (if needed)
 mkdir -p traefik/config/dynamic
@@ -124,7 +124,7 @@ providers:
 
 api:
   dashboard: true
-  insecure: true  # ⚠️ Development only
+  insecure: true 
 EOF
 
 # Step 4: Create dynamic routing configuration for multiple services
@@ -218,7 +218,7 @@ providers:
 
 api:
   dashboard: true
-  insecure: true  # ⚠️ Development only
+  insecure: true  
 EOF
 
 # Step 3: Create load balancing configuration with health checks
