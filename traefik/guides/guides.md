@@ -104,8 +104,9 @@ You can also use standard ports 80 and 8080 on Docker Engine 20.10+ and recent D
 Run Traefik as a reverse proxy that automatically discovers and routes to Docker containers.
 
 ```
-# Step 1. Remove existing containers
+# Step 1. Remove existing containers and network
 docker rm -f traefik nginx nginx-backend api-backend 2>/dev/null || true
+docker network rm traefik-net
 
 # Step 2: Create configuration structure
 mkdir -p traefik/config/dynamic
