@@ -12,52 +12,153 @@ $ docker run -p 9000:9000 <your-namespace>/dhi-minio:<tag>
 To start a MinIO instance with the Console (Web UI) run:
 
 ```
-docker run -p 9000:9000 -p 9001:9001 <your-namespace>/dhi-minio:<tag> server --console-address=":9001"
+$ docker run -p 9000:9000 -p 9001:9001 <your-namespace>/dhi-minio:<tag> server --console-address=":9001"
 ```
 
-Then visit http://localhost:9001 in your browser.
+Then visit http://localhost:9001 in your browser. Login with the default credentials `minioadmin / minioadmin` (or your custom credentials if set)
 
-## Configuration
+## Common MinIO use cases
 
-Some configuration settings need to be set in the command while other can be set via environment variables.
+Run MinIO for development
 
-For example this changes the default port and binds the service to a specific IP.
-
-```
-docker run -p 8080:8080 <your-namespace>/dhi-minio:<tag> server /data --address="1.2.3.4:8080"
-```
-
-See the
-[MinIO Server parameters documenatatiom](https://docs.min.io/community/minio-object-store/reference/minio-server/minio-server.html#minio-server-parameters)
-for more details.
-
-The following example changes the storage folder using an environment variable.
+Start MinIO with custom credentials:
 
 ```
-docker run -e MINIO_VOLUMES=/my-volume -v myvolume:/my-volume <your-namespace>/dhi-minio:<tag>
+$ docker run -d -p 9000:9000 -p 9001:9001 \
+    -e MINIO_ROOT_USER=myadmin \
+    -e MINIO_ROOT_PASSWORD=mypassword123 \
+    <your-namespace>/dhi-minio:<tag> \
+    server /data --console-address ":9001"
+
+# Test that MinIO is available
+$ curl -f http://localhost:9000/minio/health/live
+
+# Access console at http://localhost:9001 with credentials: myadmin / mypassword123
 ```
 
-See the
-[MinIO Settings documentation](https://docs.min.io/community/minio-object-store/reference/minio-server/settings.html)
-for more details.
+## Run MinIO with persistence
+
+This example demonstrates how to enable data persistence in MinIO, which means your object storage data will survive container restarts instead of being lost each time. The setup requires creating a Docker volume (minio-data) and mounting it to MinIO's data directory (/data).
+
+Enable data persistence across container restarts:
+
+```
+# Create a volume
+$ docker volume create minio-data
+
+$ docker run -d --name minio-persist-test \
+    -p 9000:9000 -p 9001:9001 \
+    -e MINIO_ROOT_USER=myadmin \
+    -e MINIO_ROOT_PASSWORD=mypassword123 \
+    -v minio-data:/data \
+    <your-namespace>/dhi-minio:<tag> \
+    server /data --console-address ":9001"
+
+# Verify MinIO is running
+$ curl -f http://localhost:9000/minio/health/live
+
+# Create test data using MinIO client (mc) or AWS CLI
+aws --endpoint-url=http://localhost:9000 s3 mb s3://test-bucket
+aws --endpoint-url=http://localhost:9000 s3 cp /etc/hosts s3://test-bucket/test-file.txt
+
+# Verify data exists
+aws --endpoint-url=http://localhost:9000 s3 ls
+aws --endpoint-url=http://localhost:9000 s3 ls s3://test-bucket
+
+# Stop the container
+$ docker stop minio-persist-test
+$ docker rm minio-persist-test
+
+# Start new container with same volume
+$ docker run -d --name minio-persist-test2 \
+    -p 9000:9000 -p 9001:9001 \
+    -e MINIO_ROOT_USER=myadmin \
+    -e MINIO_ROOT_PASSWORD=mypassword123 \
+    -v minio-data:/data \
+    <your-namespace>/dhi-minio:<tag> \
+    server /data --console-address ":9001"
+
+# Verify data persisted
+echo "Data after restart:"
+aws --endpoint-url=http://localhost:9000 s3 ls
+aws --endpoint-url=http://localhost:9000 s3 ls s3://test-bucket
+```
+Note: When using AWS CLI with MinIO, set your credentials as environment variables:
+
+```
+export AWS_ACCESS_KEY_ID=myadmin
+export AWS_SECRET_ACCESS_KEY=mypassword123
+```
+
+## Integration testing with multi-stage Dockerfile
+
+Important: MinIO Docker Hardened Images are runtime-only variants. MinIO DHI does not provide separate dev variants.
+
+Here's a complete example for integration testing:
+
+```
+# syntax=docker/dockerfile:1
+# Development stage - Use standard MinIO for testing setup
+FROM minio/minio AS test-setup
+
+WORKDIR /app
+
+# Install testing tools and dependencies (standard image has package managers)
+RUN apt-get update && apt-get install -y curl jq awscli
+
+# Copy test scripts and configuration
+COPY test-scripts/ ./test-scripts/
+COPY minio-config/ ./config/
+
+# Runtime stage - MinIO DHI for production deployment
+FROM <your-namespace>/dhi-minio:<tag> AS runtime
+
+WORKDIR /app
+COPY --from=test-setup /app/config/ /etc/minio/
+
+EXPOSE 9000 9001
+# Use default MinIO entrypoint
+```
+
+## Non-hardened images vs Docker Hardened Images
+
+| Feature | Docker Official MinIO | Docker Hardened MinIO |
+|---------|----------------------|----------------------|
+| Security | Standard base with common utilities | Hardened base with reduced utilities |
+| Shell access | Direct shell access (bash/sh) | Basic shell access (sh) |
+| Package manager | Full package managers (apt/apk) | System package managers removed |
+| User | Runs as root by default | Runs as nonroot user |
+| Attack surface | Full system utilities available | Significantly reduced (tested utilities removed) |
+| System utilities | Full system toolchain (ls, cat, id, ps, find, rm all present) | Extremely minimal (ls, cat, id, ps, find, rm all removed) |
+| Variants | Single variant for all use cases | Runtime-only (no dev variants) |
+| Default credentials | minioadmin / minioadmin | minioadmin / minioadmin (should be changed) |
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use.
+Docker Hardened MinIO images are runtime-only variants. Unlike other DHI products (such as Maven), MinIO DHI does not provide separate dev variants with additional development tools.
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either
-  directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+Runtime variants are designed to run MinIO in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
 
-  - Run as the nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+- Run as the nonroot user
+- Include basic shell with system package managers removed
+- Contain only the minimal set of libraries needed to run MinIO
+- Support both regular and `-dev` tags (dev tags include debugging tools but maintain the same security posture)
+- Use default credentials `minioadmin` / `minioadmin` (must be changed for production)
 
-- Build-time variants typically include `dev` in the variant name and are intended for use in the first stage of a
-  multi-stage Dockerfile. These images typically:
 
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
+## Image variants
+
+Docker Hardened MinIO images are runtime-only variants. Unlike other DHI products (such as Maven), MinIO DHI does not provide separate dev variants with additional development tools.
+
+Runtime variants are designed to run MinIO in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
+
+- Run as the nonroot user
+- Include basic shell with system package managers removed
+- Contain only the minimal set of libraries needed to run MinIO
+- Support both regular and `-dev` tags (dev tags include debugging tools but maintain the same security posture)
+- Use default credentials `minioadmin` / `minioadmin` (must be changed for production)
+
+## Migrate to a Docker Hardened Image
 
 ## Migrate to a Docker Hardened Image
 
