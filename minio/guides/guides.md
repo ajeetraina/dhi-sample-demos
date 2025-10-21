@@ -18,16 +18,18 @@ $ docker run -p 9000:9000 -p 9001:9001 <your-namespace>/dhi-minio:<tag> server -
 - Port 9000 - API endpoint (health checks work here)
 - Port 9001 - Web Console (HTML interface)
 
-Then visit http://localhost:9001 in your browser. Login with the default credentials `minioadmin / minioadmin` (or your custom credentials if set)
+Then visit http://localhost:9001 in your browser. Login with the default credentials `minioadmin / minioadmin` (or your custom credentials if set). The default credentials should be changed immediately in production environments. Use the `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` environment variables to set custom credentials (minimum 8 characters for password).
 
 ## Common MinIO use cases
 
 Run MinIO for development
 
-### Start MinIO with custom credentials:
+### Start MinIO with custom credentials
+
+Ensure that no containers are running on the required ports:
 
 ```
-$ docker run -d -p 9000:9000 -p 9001:9001 \
+$ docker run -d --name minio-test -p 9000:9000 -p 9001:9001 \
     -e MINIO_ROOT_USER=myadmin \
     -e MINIO_ROOT_PASSWORD=mypassword123 \
     <your-namespace>/dhi-minio:<tag> \
@@ -36,62 +38,77 @@ $ docker run -d -p 9000:9000 -p 9001:9001 \
 # Test that MinIO is available
 $ curl -f http://localhost:9000/minio/health/live
 
+# Try to login to console with new credentials
+# Open: http://localhost:9001
+# Use: testadmin / testpassword123
+
 # Access console at http://localhost:9001 with credentials: myadmin / mypassword123
+
+# Cleanup
+docker stop minio-test && docker rm minio-test
 ```
 
 ### Run MinIO with persistence
 
-This example demonstrates how to enable data persistence in MinIO, which means your object storage data will survive container restarts instead of being lost each time. The setup requires creating a Docker volume (minio-data) and mounting it to MinIO's data directory (/data).
 
-Enable data persistence across container restarts:
+First, clean up any existing container:
 
 ```
-# Create a volume
-$ docker volume create minio-data
+# Create volume
+docker volume create minio-data
 
-$ docker run -d --name minio-persist-test \
+# Start MinIO with persistent volume
+docker run -d --name minio-persist-test \
     -p 9000:9000 -p 9001:9001 \
     -e MINIO_ROOT_USER=myadmin \
     -e MINIO_ROOT_PASSWORD=mypassword123 \
     -v minio-data:/data \
-    <your-namespace>/dhi-minio:<tag> \
+    dockerdevrel/dhi-minio:0.20251015.172955-debian13 \
     server /data --console-address ":9001"
 
-# Verify MinIO is running
-$ curl -f http://localhost:9000/minio/health/live
+sleep 10
 
-# Create test data using MinIO client (mc) or AWS CLI
-aws --endpoint-url=http://localhost:9000 s3 mb s3://test-bucket
-aws --endpoint-url=http://localhost:9000 s3 cp /etc/hosts s3://test-bucket/test-file.txt
-
-# Verify data exists
-aws --endpoint-url=http://localhost:9000 s3 ls
-aws --endpoint-url=http://localhost:9000 s3 ls s3://test-bucket
-
-# Stop the container
-$ docker stop minio-persist-test
-$ docker rm minio-persist-test
-
-# Start new container with same volume
-$ docker run -d --name minio-persist-test2 \
-    -p 9000:9000 -p 9001:9001 \
-    -e MINIO_ROOT_USER=myadmin \
-    -e MINIO_ROOT_PASSWORD=mypassword123 \
-    -v minio-data:/data \
-    <your-namespace>/dhi-minio:<tag> \
-    server /data --console-address ":9001"
-
-# Verify data persisted
-echo "Data after restart:"
-aws --endpoint-url=http://localhost:9000 s3 ls
-aws --endpoint-url=http://localhost:9000 s3 ls s3://test-bucket
-```
-Note: When using AWS CLI with MinIO, set your credentials as environment variables:
-
-```
+# Configure AWS CLI
 export AWS_ACCESS_KEY_ID=myadmin
 export AWS_SECRET_ACCESS_KEY=mypassword123
+
+# Create bucket and upload file
+aws --endpoint-url=http://localhost:9000 s3 mb s3://test-bucket
+echo "Test persistence data" > test-file.txt
+aws --endpoint-url=http://localhost:9000 s3 cp test-file.txt s3://test-bucket/
+
+# Verify
+aws --endpoint-url=http://localhost:9000 s3 ls s3://test-bucket/
+# Expected: test-file.txt
+
+# Stop and remove container
+docker stop minio-persist-test && docker rm minio-persist-test
+
+# Start new container with same volume
+docker run -d --name minio-persist-test2 \
+    -p 9000:9000 -p 9001:9001 \
+    -e MINIO_ROOT_USER=myadmin \
+    -e MINIO_ROOT_PASSWORD=mypassword123 \
+    -v minio-data:/data \
+    dockerdevrel/dhi-minio:0.20251015.172955-debian13 \
+    server /data --console-address ":9001"
+
+sleep 10
+
+# Check if data persisted
+aws --endpoint-url=http://localhost:9000 s3 ls s3://test-bucket/
+# Expected: test-file.txt should still be there
+
+# Download and verify content
+aws --endpoint-url=http://localhost:9000 s3 cp s3://test-bucket/test-file.txt downloaded.txt
+cat downloaded.txt
+# Expected: "Test persistence data"
+
+# Cleanup
+docker stop minio-persist-test2 && docker rm minio-persist-test2
+docker volume rm minio-data
 ```
+
 
 ## Integration testing with multi-stage Dockerfile
 
