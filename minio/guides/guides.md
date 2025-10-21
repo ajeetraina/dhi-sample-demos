@@ -15,13 +15,16 @@ To start a MinIO instance with the Console (Web UI) run:
 $ docker run -p 9000:9000 -p 9001:9001 <your-namespace>/dhi-minio:<tag> server --console-address=":9001"
 ```
 
+- Port 9000 - API endpoint (health checks work here)
+- Port 9001 - Web Console (HTML interface)
+
 Then visit http://localhost:9001 in your browser. Login with the default credentials `minioadmin / minioadmin` (or your custom credentials if set)
 
 ## Common MinIO use cases
 
 Run MinIO for development
 
-Start MinIO with custom credentials:
+### Start MinIO with custom credentials:
 
 ```
 $ docker run -d -p 9000:9000 -p 9001:9001 \
@@ -36,7 +39,7 @@ $ curl -f http://localhost:9000/minio/health/live
 # Access console at http://localhost:9001 with credentials: myadmin / mypassword123
 ```
 
-## Run MinIO with persistence
+### Run MinIO with persistence
 
 This example demonstrates how to enable data persistence in MinIO, which means your object storage data will survive container restarts instead of being lost each time. The setup requires creating a Docker volume (minio-data) and mounting it to MinIO's data directory (/data).
 
