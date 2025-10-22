@@ -243,37 +243,36 @@ docker exec minio-server cat /etc/minio/build-info.txt
 
 Docker Hardened MinIO provides two image variants to support different use cases:
 
-### Runtime variant (production-ready)
+### Runtime variant 
 
 Tags without the `-dev` suffix are optimized for production deployments. These images:
 
 - Are minimal in size: 60.63 MB (amd64) / 56.95 MB (arm64)
 - Run as the nonroot user
-- Include a basic shell with system package managers removed
+- Have NO shell at all (maximum security hardening)
 - Contain only the minimal set of libraries needed to run MinIO
 - Are designed to be used directly or as the FROM image in the final stage of a multi-stage build
 
 ### Development variant (-dev tags)
 
-Tags with the `-dev` suffix include additional debugging and development tools while maintaining the same security posture. These images:
+Tags with the `-dev` suffix include debugging and development tools while maintaining the same security posture. These images:
 
 - Are larger: 71.48 MB (amd64) / 67.69 MB (arm64)
-- Include debugging tools for troubleshooting and development
-- Run as the nonroot user
-- Maintain the same security hardening as runtime variants
+- Include a basic shell (sh) and limited debugging tools for troubleshooting
+- Run as the root user (for debugging capabilities)
+- Include system package managers removed
+- Maintain the same security hardening as runtime variants (120 binaries vs 146 in official images)
 
 ### Common characteristics
 
 Both variants:
 
-- Run as the nonroot user
-- Include a basic shell with system package managers removed
-- Use default credentials `minioadmin` / `minioadmin` (must be changed for production use)
-- Support both `linux/amd64` and `linux/arm64` architectures
+* Have system package managers removed (no apt-get, apk)
+* Include only partial system utilities (ls, cat, id, ps present; find, rm, curl, wget absent)
+* Use default credentials `minioadmin` / `minioadmin` (must be changed for production use)
+* Support both `linux/amd64` and `linux/arm64` architectures
+* Are significantly smaller than official MinIO images (~76% size reduction)
 
-
-
-## Migrate to a Docker Hardened Image
 
 ## Migrate to a Docker Hardened Image
 
@@ -366,47 +365,3 @@ with no shell.
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
 to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
-
-### Grype-specific troubleshooting
-
-#### Database connectivity issues
-
-If Grype fails to download vulnerability databases, ensure network connectivity:
-
-```bash
-# Test database update separately
-docker run --rm <your-namespace>/dhi-grype:<tag> db update
-
-# Check database status
-docker run --rm <your-namespace>/dhi-grype:<tag> db status
-```
-
-#### Large image scanning performance
-
-For very large images, consider increasing memory limits:
-
-```bash
-# Increase memory for large scans
-docker run --rm --memory=4g <your-namespace>/dhi-grype:<tag> huge-image:latest
-```
-
-#### False positive management
-
-Use ignore rules and VEX documents to manage false positives systematically:
-
-```bash
-# Test ignore rules configuration
-docker run --rm -v $(pwd)/.grype.yaml:/root/.grype.yaml <your-namespace>/dhi-grype:<tag> ubuntu:latest
-
-# Validate VEX document application
-docker run --rm -v $(pwd)/filter.vex.json:/vex.json <your-namespace>/dhi-grype:<tag> ubuntu:latest --vex /vex.json
-```
-
-#### Template formatting issues
-
-For custom templates, validate template syntax:
-
-```bash
-# Test custom template with simple data
-echo '{"matches": []}' | docker run --rm -i -v $(pwd)/template.tmpl:/template <your-namespace>/dhi-grype:<tag> -o template -t /template
-```
