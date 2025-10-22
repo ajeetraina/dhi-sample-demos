@@ -225,10 +225,9 @@ Both variants:
 
 - Run as the nonroot user
 - Include a basic shell with system package managers removed
-- Use default credentials minioadmin / minioadmin (must be changed for production use)
-- Support both linux/amd64 and linux/arm64 architectures
+- Use default credentials `minioadmin` / `minioadmin` (must be changed for production use)
+- Support both `linux/amd64` and `linux/arm64` architectures
 
-Note: The -debian13 notation in tag names indicates the base OS but does not create separate image variants—tags with and without this notation reference the same image digests.
 
 
 ## Migrate to a Docker Hardened Image
