@@ -112,8 +112,6 @@ docker volume rm minio-data
 
 ## Integration testing with multi-stage Dockerfile
 
-Important: MinIO Docker Hardened Images are runtime-only variants. MinIO DHI does not provide separate dev variants.
-
 Here's a complete example for integration testing:
 
 ```
