@@ -19,3 +19,30 @@ git commit -m "localstack: update guides" \
            -m "- Corrected multi-stage build examples to use standard LocalStack for setup stages" \
            -m "- Updated troubleshooting section with tested findings"
 ```
+
+
+## Fix GPG TTY Issue
+
+```
+# Fix GPG TTY
+export GPG_TTY=$(tty)
+
+# Make it permanent (choose your shell)
+echo 'export GPG_TTY=$(tty)' >> ~/.zshrc  # for zsh
+# echo 'export GPG_TTY=$(tty)' >> ~/.bashrc  # for bash
+
+# Now sign and push
+git commit --amend --no-edit -S
+git push origin minio-guide --force-with-lease
+```
+
+OR
+
+# Step 1: Export GPG_TTY environment variable
+export GPG_TTY=$(tty)
+
+# Step 2: Now try to amend and sign the commit
+git commit --amend --no-edit -S
+
+# Step 3: Push
+git push origin minio-guide --force-with-lease
