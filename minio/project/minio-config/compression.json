@@ -1,0 +1,7 @@
+{
+  "compression": {
+    "enabled": true,
+    "extensions": [".txt", ".log", ".json", ".xml", ".csv"],
+    "mime_types": ["text/*", "application/json", "application/xml"]
+  }
+}
