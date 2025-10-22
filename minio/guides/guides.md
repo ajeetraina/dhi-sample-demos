@@ -112,65 +112,158 @@ docker volume rm minio-data
 
 ## Integration testing with multi-stage Dockerfile
 
-Here's a complete example for integration testing:
+MinIO Docker Hardened Images provide both development and runtime variants. 
+The `-dev` variant includes debugging tools useful for setup and validation stages. Use -dev for build/setup stages and the production variant for the final runtime stage.
+
+This example demonstrates deploying MinIO with custom configuration and initialization scripts using MinIO Docker Hardened Images.
+
+- Create project structure
+
+```
+# Create project directory
+mkdir minio-deployment
+cd minio-deployment
+
+# Create configuration directory
+mkdir -p config scripts
+```
+
+- Add configuration files
+
+Create `config/config.json`:
+
+```
+{
+  "version": "1",
+  "browser": "on",
+  "worm": "off"
+}
+```
+
+Create `scripts/init-buckets.sh`:
+
+```
+#!/bin/sh
+echo "MinIO initialization script"
+echo "Create buckets and configure policies here"
+```
+
+Create a Dockerfile in the project directory:
 
 ```
 # syntax=docker/dockerfile:1
-# Multi-Stage Dockerfile using MinIO DHI variants
 # ============================================================================
-# STAGE 1: Setup Stage using MinIO DHI dev variant
+# STAGE 1: Setup stage using MinIO DHI dev variant
 # ============================================================================
-FROM <your_namespace>/dhi-minio:<tag>-dev AS setup
+FROM <your-namespace>/dhi-minio:<tag>-dev AS setup
 
 WORKDIR /app
 
-# Copy project files
-COPY test-scripts/ ./test-scripts/
-COPY minio-config/ ./config/
+# Copy configuration and scripts
+COPY config/ ./config/
+COPY scripts/ ./scripts/
 
-# Add build info (using available shell commands)
+# Add build metadata
 RUN echo "Built at: $(date)" > ./config/build-info.txt && \
     echo "Architecture: $(uname -m)" >> ./config/build-info.txt && \
     echo "MinIO version: $(minio --version)" >> ./config/build-info.txt
 
-# Verify files copied correctly
+# Verify files (dev variant includes debugging tools)
 RUN echo "=== Setup Stage ===" && \
-    echo "Config files:" && \
+    echo "Configuration files:" && \
     ls -lh ./config/ && \
-    echo "Test scripts:" && \
-    ls -lh ./test-scripts/
-
-# The -dev variant provides debugging tools for validation
-RUN echo "✓ Configuration validated" && \
-    echo "✓ Scripts prepared"
+    echo "Scripts:" && \
+    ls -lh ./scripts/ && \
+    echo "✓ Configuration validated"
 
 # ============================================================================
-# STAGE 2: Runtime Stage using MinIO DHI runtime variant
+# STAGE 2: Runtime stage using MinIO DHI production variant
 # ============================================================================
-FROM <your_namespace>/dhi-minio:<tag> AS runtime
+FROM <your-namespace>/dhi-minio:<tag> AS runtime
 
 WORKDIR /app
 
-# Copy from setup stage
+# Copy validated configuration from setup stage
 COPY --from=setup /app/config/ /etc/minio/
-COPY --from=setup /app/test-scripts/ /app/scripts/
+COPY --from=setup /app/scripts/ /app/scripts/
 
 # Environment variables
 ENV MINIO_ROOT_USER=admin \
     MINIO_ROOT_PASSWORD=password123
 
 # Metadata
-LABEL maintainer="devrel@docker.com" \
-      description="MinIO DHI with multi-stage build" \
-      setup.image="dockerdevrel/dhi-minio:0.20251015.172955-debian13-dev" \
-      runtime.image="dockerdevrel/dhi-minio:0.20251015.172955-debian13"
+LABEL maintainer="your-team@example.com" \
+      description="MinIO DHI with custom configuration" \
+      setup.image="<your-namespace>/dhi-minio:<tag>-dev" \
+      runtime.image="<your-namespace>/dhi-minio:<tag>"
 
-# Ports
+# MinIO ports
 EXPOSE 9000 9001
 
-# Command
+# Start MinIO server
 CMD ["server", "/data", "--console-address", ":9001"]
 ```
+
+- Build and run MinIO
+
+```
+# Build the Docker image
+docker build -t minio-production .
+
+# Run MinIO with persistent storage
+docker run -d \
+  --name minio-server \
+  -p 9000:9000 \
+  -p 9001:9001 \
+  -v minio-data:/data \
+  minio-production
+
+# Check build information
+docker exec minio-server cat /etc/minio/build-info.txt
+
+# Access MinIO Console at http://localhost:9001
+# Use credentials: admin / password123
+```
+
+- Using Docker Compose
+
+Create docker-compose.yml for easier management:
+
+```
+services:
+  minio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: minio-production:latest
+    container_name: minio-server
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  minio-data:
+    driver: local
+```
+
+- Deploy with Docker Compose:
+
+```
+# Start MinIO
+docker-compose up -d
+```
+
 
 ## Non-hardened images vs Docker Hardened Images
 
