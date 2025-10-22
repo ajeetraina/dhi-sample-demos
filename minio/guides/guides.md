@@ -225,45 +225,6 @@ docker exec minio-server cat /etc/minio/build-info.txt
 # Use credentials: admin / password123
 ```
 
-- Using Docker Compose
-
-Create docker-compose.yml for easier management:
-
-```
-services:
-  minio:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: minio-production:latest
-    container_name: minio-server
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password123
-    volumes:
-      - minio-data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-volumes:
-  minio-data:
-    driver: local
-```
-
-- Deploy with Docker Compose:
-
-```
-# Start MinIO
-docker-compose up -d
-```
-
 
 ## Non-hardened images vs Docker Hardened Images
 
