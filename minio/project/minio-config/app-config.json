@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "environment": "production",
+  "features": {
+    "compression": true,
+    "encryption": true,
+    "versioning": true
+  },
+  "performance": {
+    "cache_size_mb": 512,
+    "max_connections": 1000
+  },
+  "defaults": {
+    "region": "us-east-1",
+    "storage_class": "STANDARD"
+  },
+  "monitoring": {
+    "metrics_enabled": true,
+    "trace_enabled": false
+  }
+}
