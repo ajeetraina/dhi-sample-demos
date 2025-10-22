@@ -38,6 +38,7 @@ git push origin minio-guide --force-with-lease
 
 OR
 
+```
 # Step 1: Export GPG_TTY environment variable
 export GPG_TTY=$(tty)
 
@@ -46,3 +47,4 @@ git commit --amend --no-edit -S
 
 # Step 3: Push
 git push origin minio-guide --force-with-lease
+```
