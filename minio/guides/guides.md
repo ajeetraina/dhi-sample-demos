@@ -228,16 +228,17 @@ docker exec minio-server cat /etc/minio/build-info.txt
 
 ## Non-hardened images vs Docker Hardened Images
 
-| Feature | Docker Official MinIO | Docker Hardened MinIO |
-|---------|----------------------|----------------------|
-| Security | Standard base with common utilities | Hardened base with reduced utilities |
-| Shell access | Direct shell access (bash/sh) | Ony -dev variant has sh shell |
-| Package manager | Full package managers (apt/apk) | System package managers removed |
-| User | Runs as root by default | Only dev variant has root |
-| Attack surface | Full system utilities available | Significantly reduced (tested utilities removed) |
-| System utilities | Full system toolchain (ls, cat, id, ps, find, rm all present) | Extremely minimal (ls, cat, id, ps, find, rm all removed) |
-| Variants | Single variant for all use cases | Two variants - dev and runtime |
-| Default credentials | minioadmin / minioadmin | minioadmin / minioadmin (should be changed) |
+Feature | Docker Official MinIO | Docker Hardened MinIO
+--------|----------------------|----------------------
+Security | Standard base with common utilities | Hardened base with reduced utilities
+Shell access | sh only (no bash) | Production: None; Dev: sh only
+Package manager | apt-get present | System package managers removed
+User | Runs as root | Production: nonroot; Dev: root
+Attack surface | 146 binaries | Production: Minimal (no shell); Dev: 120 binaries (-18%)
+System utilities | Partial (ls, cat, id, ps present; find, rm absent) | Production: None; Dev: Partial (ls, cat, id, ps present; find, rm absent)
+Variants | Single variant | Two variants: Production (60.63 MB) and Dev (71.48 MB)
+Default credentials | minioadmin / minioadmin | minioadmin / minioadmin (must be changed)
+
 
 ## Image Variant
 
