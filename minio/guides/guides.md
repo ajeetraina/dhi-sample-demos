@@ -231,12 +231,12 @@ docker exec minio-server cat /etc/minio/build-info.txt
 | Feature | Docker Official MinIO | Docker Hardened MinIO |
 |---------|----------------------|----------------------|
 | Security | Standard base with common utilities | Hardened base with reduced utilities |
-| Shell access | Direct shell access (bash/sh) | Basic shell access (sh) |
+| Shell access | Direct shell access (bash/sh) | Ony -dev variant has sh shell |
 | Package manager | Full package managers (apt/apk) | System package managers removed |
-| User | Runs as root by default | Runs as nonroot user |
+| User | Runs as root by default | Only dev variant has root |
 | Attack surface | Full system utilities available | Significantly reduced (tested utilities removed) |
 | System utilities | Full system toolchain (ls, cat, id, ps, find, rm all present) | Extremely minimal (ls, cat, id, ps, find, rm all removed) |
-| Variants | Single variant for all use cases | Runtime-only (no dev variants) |
+| Variants | Single variant for all use cases | Two variants - dev and runtime |
 | Default credentials | minioadmin / minioadmin | minioadmin / minioadmin (should be changed) |
 
 ## Image Variant
