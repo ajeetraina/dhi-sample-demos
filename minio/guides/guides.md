@@ -118,26 +118,70 @@ Here's a complete example for integration testing:
 
 ```
 # syntax=docker/dockerfile:1
-# Development stage - Use standard MinIO for testing setup
-FROM minio/minio AS test-setup
+# Simplified Multi-Stage Dockerfile using Node DHI dev for setup
+
+# ============================================================================
+# STAGE 1: Setup Stage using Node DHI dev
+# ============================================================================
+FROM <your_namespace>/dhi-node:<tag>-dev AS test-setup
 
 WORKDIR /app
 
-# Install testing tools and dependencies (standard image has package managers)
-RUN apt-get update && apt-get install -y curl jq awscli
+# Install essential tools only
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy test scripts and configuration
+# Copy project files
 COPY test-scripts/ ./test-scripts/
 COPY minio-config/ ./config/
 
-# Runtime stage - MinIO DHI for production deployment
-FROM <your-namespace>/dhi-minio:<tag> AS runtime
+# Add build info
+RUN echo "Built at: $(date)" > ./config/build-info.txt && \
+    echo "Architecture: $(uname -m)" >> ./config/build-info.txt && \
+    echo "Node version: $(node --version)" >> ./config/build-info.txt
+
+# Validate JSON files
+RUN for file in ./config/*.json; do \
+        if [ -f "$file" ]; then \
+            jq empty "$file" && echo "✓ $file is valid JSON"; \
+        fi \
+    done
+
+# Verify tools
+RUN echo "=== Setup Stage Tools ===" && \
+    echo "Node: $(node --version)" && \
+    echo "npm: $(npm --version)" && \
+    echo "curl: $(curl --version | head -1)" && \
+    echo "jq: $(jq --version)"
+
+# ============================================================================
+# STAGE 2: Runtime Stage using MinIO DHI
+# ============================================================================
+FROM <your_namespace>/dhi-minio:<tag> AS runtime
 
 WORKDIR /app
-COPY --from=test-setup /app/config/ /etc/minio/
 
+# Copy from setup stage
+COPY --from=test-setup /app/config/ /etc/minio/
+COPY --from=test-setup /app/test-scripts/ /app/scripts/
+
+# Environment variables
+ENV MINIO_ROOT_USER=admin \
+    MINIO_ROOT_PASSWORD=password123
+
+# Metadata
+LABEL maintainer="devrel@docker.com" \
+      description="MinIO DHI with Node DHI setup stage" \
+      setup.image="dockerdevrel/dhi-node:22-dev" \
+      runtime.image="dockerdevrel/dhi-minio:0.20251015.172955-debian13"
+
+# Ports
 EXPOSE 9000 9001
-# Use default MinIO entrypoint
+
+# Command
+CMD ["server", "/data", "--console-address", ":9001"]
 ```
 
 ## Non-hardened images vs Docker Hardened Images
@@ -153,30 +197,40 @@ EXPOSE 9000 9001
 | Variants | Single variant for all use cases | Runtime-only (no dev variants) |
 | Default credentials | minioadmin / minioadmin | minioadmin / minioadmin (should be changed) |
 
-## Image variants
+## Image Variant
 
-Docker Hardened MinIO images are runtime-only variants. Unlike other DHI products (such as Maven), MinIO DHI does not provide separate dev variants with additional development tools.
+Docker Hardened MinIO provides two image variants to support different use cases:
 
-Runtime variants are designed to run MinIO in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
+### Runtime variant (production-ready)
+
+Tags without the -dev suffix are optimized for production deployments. These images:
+
+- Are minimal in size: 60.63 MB (amd64) / 56.95 MB (arm64)
+- Run as the nonroot user
+- Include a basic shell with system package managers removed
+- Contain only the minimal set of libraries needed to run MinIO
+- Are designed to be used directly or as the FROM image in the final stage of a multi-stage build
+
+### Development variant (-dev tags)
+
+Tags with the -dev suffix include additional debugging and development tools while maintaining the same security posture. These images:
+
+- Are larger: 71.48 MB (amd64) / 67.69 MB (arm64)
+- Include debugging tools for troubleshooting and development
+- Run as the nonroot user
+- Maintain the same security hardening as runtime variants
+
+### Common characteristics
+
+Both variants:
 
 - Run as the nonroot user
-- Include basic shell with system package managers removed
-- Contain only the minimal set of libraries needed to run MinIO
-- Support both regular and `-dev` tags (dev tags include debugging tools but maintain the same security posture)
-- Use default credentials `minioadmin` / `minioadmin` (must be changed for production)
+- Include a basic shell with system package managers removed
+- Use default credentials minioadmin / minioadmin (must be changed for production use)
+- Support both linux/amd64 and linux/arm64 architectures
 
+Note: The -debian13 notation in tag names indicates the base OS but does not create separate image variants—tags with and without this notation reference the same image digests.
 
-## Image variants
-
-Docker Hardened MinIO images are runtime-only variants. Unlike other DHI products (such as Maven), MinIO DHI does not provide separate dev variants with additional development tools.
-
-Runtime variants are designed to run MinIO in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
-
-- Run as the nonroot user
-- Include basic shell with system package managers removed
-- Contain only the minimal set of libraries needed to run MinIO
-- Support both regular and `-dev` tags (dev tags include debugging tools but maintain the same security posture)
-- Use default credentials `minioadmin` / `minioadmin` (must be changed for production)
 
 ## Migrate to a Docker Hardened Image
 
