@@ -228,16 +228,16 @@ docker exec minio-server cat /etc/minio/build-info.txt
 
 ## Non-hardened images vs Docker Hardened Images
 
-Feature | Docker Official MinIO | Docker Hardened MinIO
---------|----------------------|----------------------
-Security | Standard base with common utilities | Hardened base with reduced utilities
-Shell access | sh only (no bash) | Production: None; Dev: sh only
-Package manager | apt-get present | System package managers removed
-User | Runs as root | Production: nonroot; Dev: root
-Attack surface | 146 binaries | Production: Minimal (no shell); Dev: 120 binaries (-18%)
-System utilities | Partial (ls, cat, id, ps present; find, rm absent) | Production: None; Dev: Partial (ls, cat, id, ps present; find, rm absent)
-Variants | Single variant | Two variants: Production (60.63 MB) and Dev (71.48 MB)
-Default credentials | minioadmin / minioadmin | minioadmin / minioadmin (must be changed)
+| Feature | Docker Official MinIO | Docker Hardened MinIO |
+|---------|----------------------|----------------------|
+| Security | Standard base with common utilities | Hardened base with reduced utilities |
+| Shell access | sh only (no bash) | Production: None; Dev: sh only |
+| Package manager | apt-get present | System package managers removed |
+| User | Runs as root | Production: nonroot; Dev: root |
+| Attack surface | 146 binaries in /usr/bin | Production: Minimal (no shell); Dev: 120 binaries (-18%) |
+| System utilities | Partial toolchain (ls, cat, id, ps present; find, rm absent) | Production: None accessible; Dev: Partial (ls, cat, id, ps present; find, rm absent) |
+| Variants | Single variant | Two variants: Production (60.63 MB) and Dev (71.48 MB) |
+| Default credentials | minioadmin / minioadmin | minioadmin / minioadmin (must be changed) |
 
 
 ## Image Variant
@@ -256,7 +256,7 @@ Tags without the `-dev` suffix are optimized for production deployments. These i
 
 ### Development variant (-dev tags)
 
-Tags with the `-dev` suffix include debugging and development tools while maintaining the same security posture. These images:
+Tags with the `-dev` suffix include debugging and development tools. These images:
 
 - Are larger: 71.48 MB (amd64) / 67.69 MB (arm64)
 - Include a basic shell (sh) and limited debugging tools for troubleshooting
@@ -269,7 +269,6 @@ Tags with the `-dev` suffix include debugging and development tools while mainta
 Both variants:
 
 * Have system package managers removed (no apt-get, apk)
-* Include only partial system utilities (ls, cat, id, ps present; find, rm, curl, wget absent)
 * Use default credentials `minioadmin` / `minioadmin` (must be changed for production use)
 * Support both `linux/amd64` and `linux/arm64` architectures
 * Are significantly smaller than official MinIO images (~76% size reduction)
