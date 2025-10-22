@@ -118,7 +118,6 @@ Here's a complete example for integration testing:
 
 ```
 # syntax=docker/dockerfile:1
-# Simplified Multi-Stage Dockerfile using Node DHI dev for setup
 
 # ============================================================================
 # STAGE 1: Setup Stage using Node DHI dev
