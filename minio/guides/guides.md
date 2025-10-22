@@ -171,7 +171,7 @@ ENV MINIO_ROOT_USER=admin \
     MINIO_ROOT_PASSWORD=password123
 
 # Metadata
-LABEL maintainer="devrel@docker.com" \
+LABEL maintainer="moby@docker.com" \
       description="MinIO DHI with Node DHI setup stage" \
       setup.image="dockerdevrel/dhi-node:22-dev" \
       runtime.image="dockerdevrel/dhi-minio:0.20251015.172955-debian13"
