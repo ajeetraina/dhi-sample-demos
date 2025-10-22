@@ -202,7 +202,7 @@ Docker Hardened MinIO provides two image variants to support different use cases
 
 ### Runtime variant (production-ready)
 
-Tags without the -dev suffix are optimized for production deployments. These images:
+Tags without the `-dev` suffix are optimized for production deployments. These images:
 
 - Are minimal in size: 60.63 MB (amd64) / 56.95 MB (arm64)
 - Run as the nonroot user
@@ -212,7 +212,7 @@ Tags without the -dev suffix are optimized for production deployments. These ima
 
 ### Development variant (-dev tags)
 
-Tags with the -dev suffix include additional debugging and development tools while maintaining the same security posture. These images:
+Tags with the `-dev` suffix include additional debugging and development tools while maintaining the same security posture. These images:
 
 - Are larger: 71.48 MB (amd64) / 67.69 MB (arm64)
 - Include debugging tools for troubleshooting and development
