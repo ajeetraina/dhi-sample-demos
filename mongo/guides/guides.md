@@ -17,14 +17,21 @@ docker run -d \
   dockerdevrel/dhi-mongodb:8.0.15
 ```
 
-For example, using the runtime variant:
+Important: Runtime variants (without `-dev` in the tag) do not include shell access. If you try to exec into container shell, it will fail with "executable file not found". This is an intentional security feature. Use `-dev` variants when you need shell access for administrative tasks, or use Docker Debug for troubleshooting running containers.
+
+### MongoDB instance with dev variant (includes shell access)
+
+If you need shell access for administrative tasks, use the dev variant:
 
 ```bash
 docker run -d \
   --name mongodb \
   -p 27017:27017 \
-  dockerdevrel/dhi-mongodb:8.0.15
+  dockerdevrel/dhi-mongodb:8.0.15-dev
 ```
+
+With the `dev` variant, you can exec into the container.
+
 
 ### MongoDB with authentication
 
