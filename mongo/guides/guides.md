@@ -35,6 +35,9 @@ docker run -d \
 
 ### MongoDB with persistent data
 
+Use volumes to preserve your data across container restarts and upgrades.
+
+
 ```bash
 docker run -d \
   --name mongodb \
@@ -45,161 +48,66 @@ docker run -d \
 
 ## Common MongoDB use cases
 
-### Use case 1: Development Setup
+### Authentication Setup
 
-Simple setup for local development:
+MongoDB DHI requires manual authentication setup through a three-step process: create users, configure security, and restart with auth enabled.
+
+### Complete Setup Script
 
 ```bash
-# Start MongoDB (no auth for development)
-docker run -d \
-  --name mongodb-dev \
-  -p 27017:27017 \
+# 1. Start MongoDB
+docker run -d --name mongodb -v mongodb_data:/data/db \
   dockerdevrel/dhi-mongodb:8.0.15-dev
 
-# Initialize with sample data
-docker exec mongodb-dev mongosh --eval "
-  db = db.getSiblingDB('devdb');
-  db.items.insertMany([
-    {name: 'Item 1', value: 100},
-    {name: 'Item 2', value: 200}
-  ]);
-  print('Sample data created');
+sleep 7
+
+# 2. Create admin user
+docker exec mongodb mongosh --eval "
+  db.getSiblingDB('admin').createUser({
+    user: 'admin',
+    pwd: 'secure_password',
+    roles: [{role: 'root', db: 'admin'}]
+  })
 "
-```
 
+# 3. Enable authentication
+docker stop mongodb && docker rm mongodb
 
-### Use case 2: Custom Configuration
-
-Advanced configuration for production:
-
-```bash
-# Create config
 docker volume create mongodb_config
-
-docker run --rm -v mongodb_config:/config alpine sh -c 'cat > /config/mongod.conf << "EOF"
+docker run --rm -v mongodb_config:/c alpine sh -c 'cat > /c/mongod.conf << "EOF"
 net:
   bindIp: 0.0.0.0
-  port: 27017
 storage:
   dbPath: /data/db
-  wiredTiger:
-    engineConfig:
-      cacheSizeGB: 2
-    collectionConfig:
-      blockCompressor: snappy
-systemLog:
-  destination: file
-  path: /var/log/mongodb/mongod.log
-  logAppend: true
-  logRotate: reopen
-operationProfiling:
-  mode: slowOp
-  slowOpThresholdMs: 100
 security:
   authorization: enabled
 EOF'
 
-# Use the config
-docker run -d \
-  --name mongodb \
-  -p 27017:27017 \
+docker run -d --name mongodb -p 27017:27017 \
   -v mongodb_data:/data/db \
   -v mongodb_config:/etc/mongo:ro \
-  -v mongodb_logs:/var/log/mongodb \
   dockerdevrel/dhi-mongodb:8.0.15-dev \
   --config /etc/mongo/mongod.conf
+
+sleep 7
+
+# 4. Verify
+docker exec mongodb mongosh -u admin -p secure_password \
+  --authenticationDatabase admin \
+  --eval "print('✓ Authenticated: ' + db.version())"
 ```
 
+### Connect to MongoDB
 
-### Application integration with MongoDB
+Access MongoDB using mongosh either from inside the container or from your host machine.
 
-Build a multi-stage application that uses MongoDB as its database backend.
+```bash
+# From container
+docker exec -it mongodb mongosh -u admin -p secure_password --authenticationDatabase admin
 
-```dockerfile
-# Dockerfile
-################################################################################
-# Create a stage for building the application
-FROM /dhi-node:22-debian13-dev AS build
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production
-
-################################################################################
-# Create runtime stage
-FROM /dhi-node:22-debian13
-WORKDIR /app
-
-# Copy dependencies from build stage
-COPY --from=build /app/node_modules ./node_modules
-
-# Copy application code
-COPY . .
-
-# Expose application port
-EXPOSE 3000
-
-# Start the application
-CMD ["node", "server.js"]
+# From host
+mongosh "mongodb://admin:secure_password@localhost:27017/admin"
 ```
-
-Sample application code:
-
-```javascript
-// server.js
-const express = require('express');
-const { MongoClient } = require('mongodb');
-
-const app = express();
-const port = 3000;
-
-const mongoUrl = process.env.MONGO_URL || 'mongodb://admin:secure_password@mongodb:27017';
-const client = new MongoClient(mongoUrl);
-
-app.use(express.json());
-
-// Connect to MongoDB
-async function connectDB() {
-  try {
-    await client.connect();
-    console.log('Connected to MongoDB');
-  } catch (err) {
-    console.error('MongoDB connection error:', err);
-  }
-}
-
-app.get('/users', async (req, res) => {
-  try {
-    const db = client.db('myapp');
-    const users = await db.collection('users').find({}).toArray();
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/users', async (req, res) => {
-  try {
-    const db = client.db('myapp');
-    const result = await db.collection('users').insertOne({
-      ...req.body,
-      created: new Date()
-    });
-    res.json({ id: result.insertedId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.listen(port, async () => {
-  await connectDB();
-  console.log(`Server running on port ${port}`);
-});
-```
-
 
 ## Non-hardened images vs Docker Hardened Images
 
