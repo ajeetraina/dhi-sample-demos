@@ -17,7 +17,9 @@ docker run -d \
   dockerdevrel/dhi-mongodb:8.0.15
 ```
 
-Important: Runtime variants (without `-dev` in the tag) do not include shell access. If you try to exec into container shell, it will fail with "executable file not found". This is an intentional security feature. Use `-dev` variants when you need shell access for administrative tasks, or use Docker Debug for troubleshooting running containers.
+This starts MongoDB without authentication.
+
+Important: Runtime variants (without `-dev` in the tag) do not include shell access. Use `-dev` variants when you need shell access for administrative tasks, or use Docker Debug for troubleshooting running containers.
 
 ### MongoDB instance with dev variant (includes shell access)
 
@@ -30,19 +32,6 @@ docker run -d \
   dockerdevrel/dhi-mongodb:8.0.15-dev
 ```
 
-With the `dev` variant, you can exec into the container.
-
-
-### MongoDB with authentication
-
-```bash
-docker run -d \
-  --name mongodb \
-  -p 27017:27017 \
-  -e MONGO_INITDB_ROOT_USERNAME=admin \
-  -e MONGO_INITDB_ROOT_PASSWORD=secure_password \
-  dockerdevrel/dhi-mongodb:8.0.15
-```
 
 ### MongoDB with persistent data
 
@@ -51,85 +40,78 @@ docker run -d \
   --name mongodb \
   -p 27017:27017 \
   -v mongodb_data:/data/db \
-  -e MONGO_INITDB_ROOT_USERNAME=admin \
-  -e MONGO_INITDB_ROOT_PASSWORD=secure_password \
   dockerdevrel/dhi-mongodb:8.0.15
 ```
 
 ## Common MongoDB use cases
 
-### Use case 1: Run MongoDB with custom configuration
+### Use case 1: Development Setup
 
-You can provide a custom MongoDB configuration file to customize the database behavior.
+Simple setup for local development:
 
 ```bash
-# Create a custom configuration file
-cat > mongod.conf << EOF
+# Start MongoDB (no auth for development)
+docker run -d \
+  --name mongodb-dev \
+  -p 27017:27017 \
+  dockerdevrel/dhi-mongodb:8.0.15-dev
+
+# Initialize with sample data
+docker exec mongodb-dev mongosh --eval "
+  db = db.getSiblingDB('devdb');
+  db.items.insertMany([
+    {name: 'Item 1', value: 100},
+    {name: 'Item 2', value: 200}
+  ]);
+  print('Sample data created');
+"
+```
+
+
+### Use case 2: Custom Configuration
+
+Advanced configuration for production:
+
+```bash
+# Create config
+docker volume create mongodb_config
+
+docker run --rm -v mongodb_config:/config alpine sh -c 'cat > /config/mongod.conf << "EOF"
 net:
-  port: 27017
   bindIp: 0.0.0.0
+  port: 27017
 storage:
   dbPath: /data/db
+  wiredTiger:
+    engineConfig:
+      cacheSizeGB: 2
+    collectionConfig:
+      blockCompressor: snappy
 systemLog:
   destination: file
   path: /var/log/mongodb/mongod.log
   logAppend: true
+  logRotate: reopen
+operationProfiling:
+  mode: slowOp
+  slowOpThresholdMs: 100
 security:
   authorization: enabled
-EOF
+EOF'
 
-# Run MongoDB with custom configuration
+# Use the config
 docker run -d \
   --name mongodb \
   -p 27017:27017 \
-  -v $(pwd)/mongod.conf:/etc/mongod.conf:ro \
   -v mongodb_data:/data/db \
+  -v mongodb_config:/etc/mongo:ro \
   -v mongodb_logs:/var/log/mongodb \
-  dockerdevrel/dhi-mongodb:8.0.15 \
-  --config /etc/mongod.conf
-```
-
-### Use case 2: Initialize MongoDB with custom scripts
-
-Create initialization scripts that run when the database starts for the first time.
-
-```bash
-# Create an initialization script
-mkdir -p mongo-init
-cat > mongo-init/init-db.js << 'EOF'
-db = db.getSiblingDB('myapp');
-db.createUser({
-  user: 'appuser',
-  pwd: 'apppassword',
-  roles: [
-    {
-      role: 'readWrite',
-      db: 'myapp'
-    }
-  ]
-});
-
-db.createCollection('users');
-db.users.insertOne({
-  name: 'John Doe',
-  email: 'john@example.com',
-  created: new Date()
-});
-EOF
-
-# Run MongoDB with initialization script
-docker run -d \
-  --name mongodb \
-  -p 27017:27017 \
-  -v $(pwd)/mongo-init:/docker-entrypoint-initdb.d:ro \
-  -v mongodb_data:/data/db \
-  -e MONGO_INITDB_ROOT_USERNAME=admin \
-  -e MONGO_INITDB_ROOT_PASSWORD=secure_password \
-  dockerdevrel/dhi-mongodb:8.0.15
+  dockerdevrel/dhi-mongodb:8.0.15-dev \
+  --config /etc/mongo/mongod.conf
 ```
 
 
-### Use case 4: Application integration with MongoDB
+### Application integration with MongoDB
 
 Build a multi-stage application that uses MongoDB as its database backend.
 
