@@ -14,7 +14,7 @@ Run the following command and replace `<your-namespace>` with your organization'
 docker run -d \
   --name mongodb \
   -p 27017:27017 \
-  dockerdevrel/dhi-mongodb:8.0.15
+  <your_namespace>/dhi-mongodb:<tag>
 ```
 
 This starts MongoDB without authentication.
@@ -29,7 +29,7 @@ If you need shell access for administrative tasks, use the dev variant:
 docker run -d \
   --name mongodb \
   -p 27017:27017 \
-  dockerdevrel/dhi-mongodb:8.0.15-dev
+  <your_namespace>/dhi-mongodb:<tag>-dev
 ```
 
 
@@ -43,7 +43,7 @@ docker run -d \
   --name mongodb \
   -p 27017:27017 \
   -v mongodb_data:/data/db \
-  dockerdevrel/dhi-mongodb:8.0.15
+   <your_namespace>/dhi-mongodb:<tag>
 ```
 
 ## Common MongoDB use cases
@@ -57,7 +57,7 @@ MongoDB DHI requires manual authentication setup through a three-step process: c
 ```bash
 # 1. Start MongoDB
 docker run -d --name mongodb -v mongodb_data:/data/db \
-  dockerdevrel/dhi-mongodb:8.0.15-dev
+  <your_namespace>/dhi-mongodb:<tag>-dev
 
 sleep 7
 
@@ -74,7 +74,7 @@ docker exec mongodb mongosh --eval "
 docker stop mongodb && docker rm mongodb
 
 docker volume create mongodb_config
-docker run --rm -v mongodb_config:/c alpine sh -c 'cat > /c/mongod.conf << "EOF"
+docker run --rm -v mongodb_config:/c <your_namespace>/dhi-alpine-base:<tag> sh -c 'cat > /c/mongod.conf << "EOF"
 net:
   bindIp: 0.0.0.0
 storage:
@@ -86,7 +86,7 @@ EOF'
 docker run -d --name mongodb -p 27017:27017 \
   -v mongodb_data:/data/db \
   -v mongodb_config:/etc/mongo:ro \
-  dockerdevrel/dhi-mongodb:8.0.15-dev \
+  <your_namespace>/dhi-mongodb:<tag>-dev \
   --config /etc/mongo/mongod.conf
 
 sleep 7
@@ -149,7 +149,7 @@ or mount debugging tools with the Image Mount feature:
 ```bash
 docker run --rm -it --pid container:mongodb \
   --mount=type=image,source=/dhi-busybox,destination=/dbg,ro \
-  /dhi-mongodb: /dbg/bin/sh
+  <your_namespace>/dhi-mongodb:<tag> /dbg/bin/sh
 ```
 
 ## Image variants
