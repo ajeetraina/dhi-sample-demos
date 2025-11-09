@@ -9,13 +9,14 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
-```bash
+```
 docker run -d \
   --name mongodb-exporter \
   -p 9216:9216 \
   <your-namespace>/dhi-mongodb-exporter:<tag> \
   --mongodb.uri=mongodb://localhost:27017
 ```
+
 
 **Note:** This assumes MongoDB is running on `localhost`. If your MongoDB instance is on a different host, replace `localhost` with the appropriate hostname or IP address.
 
@@ -44,9 +45,12 @@ docker run -d \
 ```
 
 Available environment variables:
-- `MONGODB_URI`: MongoDB connection URI (e.g., `mongodb://user:pass@host:27017/admin`)
-- `MONGODB_USER`: MongoDB username (alternative to including in URI)
-- `MONGODB_PASSWORD`: MongoDB password (alternative to including in URI)
+- MONGODB_URI: MongoDB connection URI (e.g., mongodb://user:pass@host:27017/admin)
+- MONGODB_USER: MongoDB username (alternative to including in URI)
+- MONGODB_PASSWORD: MongoDB password (alternative to including in URI)
+- WEB_LISTEN_ADDRESS: Address to listen on (default: :9216)
+- WEB_TELEMETRY_PATH: Path for metrics (default: /metrics)
+
 
 ## Common MongoDB Exporter use cases
 
@@ -55,18 +59,27 @@ Available environment variables:
 This example shows how to set up MongoDB with authentication and MongoDB Exporter for monitoring:
 
 ```bash
-# 1. Start MongoDB with authentication
+# 1. Create network and volume
 docker network create mongo-monitoring
+docker volume create mongodb_data
 
+# 2. Start MongoDB without authentication
 docker run -d \
   --name mongodb \
+  --platform linux/amd64 \
   --network mongo-monitoring \
   -v mongodb_data:/data/db \
-  <your-namespace>/dhi-mongodb:<tag>-dev
+  <your-namespace>/dhi-mongodb:8-debian13-dev \
+  --bind_ip_all
 
-sleep 7
+# Wait for MongoDB to be ready
+echo "Waiting for MongoDB to start..."
+sleep 15
 
-# 2. Create admin user
+# Verify MongoDB is running
+docker exec mongodb mongosh --eval "db.version()"
+
+# 3. Create admin user
 docker exec mongodb mongosh --eval "
   db.getSiblingDB('admin').createUser({
     user: 'admin',
@@ -75,31 +88,28 @@ docker exec mongodb mongosh --eval "
   })
 "
 
-# 3. Enable authentication
+# 4. Enable authentication - Restart MongoDB
 docker stop mongodb && docker rm mongodb
-
-docker volume create mongodb_config
-docker run --rm -v mongodb_config:/c <your-namespace>/dhi-alpine-base:<tag> sh -c 'cat > /c/mongod.conf << "EOF"
-net:
-  bindIp: 0.0.0.0
-storage:
-  dbPath: /data/db
-security:
-  authorization: enabled
-EOF'
 
 docker run -d \
   --name mongodb \
+  --platform linux/amd64 \
   --network mongo-monitoring \
   -p 27017:27017 \
   -v mongodb_data:/data/db \
-  -v mongodb_config:/etc/mongo:ro \
-  <your-namespace>/dhi-mongodb:<tag>-dev \
-  --config /etc/mongo/mongod.conf
+  <your-namespace>/dhi-mongodb:8-debian13-dev \
+  --bind_ip_all \
+  --auth
 
-sleep 7
+# Wait for MongoDB with authentication
+echo "Waiting for MongoDB with authentication..."
+sleep 15
 
-# 4. Start MongoDB Exporter
+# Verify authentication works
+docker exec mongodb mongosh -u admin -p secure_password \
+  --authenticationDatabase admin --eval "db.version()"
+
+# 5. Start MongoDB Exporter
 docker run -d \
   --name mongodb-exporter \
   --network mongo-monitoring \
@@ -109,9 +119,19 @@ docker run -d \
   --collector.dbstats \
   --collector.collstats
 
-# 5. Verify metrics are being exported
-curl http://localhost:9216/metrics
+# Wait for exporter to connect
+sleep 5
+
+# 6. Verify metrics are being exported
+curl -s http://localhost:9216/metrics | grep mongodb_up
+# Should return: mongodb_up{cluster_role="mongod"} 1
 ```
+
+### Important Notes:
+
+- Platform Requirement: MongoDB DHI currently only supports linux/amd64. On Apple Silicon Macs, always use --platform linux/amd64
+- Network Binding: The --bind_ip_all flag is required for MongoDB to accept connections from other containers. Without it, MongoDB only binds to 127.0.0.1
+- Wait Times: Allow sufficient time for MongoDB to start (15 seconds recommended) before attempting connections
 
 ### Advanced configuration options
 
@@ -145,11 +165,12 @@ docker run -d \
 Complete monitoring stack with MongoDB, MongoDB Exporter, and Prometheus:
 
 ```yaml
-
 services:
   mongodb:
-    image: <your-namespace>/dhi-mongodb:<tag>-dev
+    image: <your-namespace>/dhi-mongodb:8-debian13-dev
+    platform: linux/amd64
     container_name: mongodb
+    command: --bind_ip_all --auth
     ports:
       - "27017:27017"
     environment:
@@ -159,6 +180,12 @@ services:
       - mongodb_data:/data/db
     networks:
       - monitoring
+    healthcheck:
+      test: ["CMD", "mongosh", "-u", "admin", "-p", "password", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   mongodb-exporter:
     image: <your-namespace>/dhi-mongodb-exporter:<tag>
@@ -171,9 +198,15 @@ services:
       - --collector.collstats
       - --collector.topmetrics
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9216/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   prometheus:
     image: prom/prometheus:latest
@@ -181,10 +214,14 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
     depends_on:
-      - mongodb-exporter
+      mongodb-exporter:
+        condition: service_healthy
     networks:
       - monitoring
 
@@ -202,11 +239,13 @@ networks:
 ```yaml
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
 
 scrape_configs:
   - job_name: 'mongodb-exporter'
     static_configs:
       - targets: ['mongodb-exporter:9216']
+    scrape_interval: 30s
 ```
 
 ### Accessing metrics
@@ -217,11 +256,15 @@ Once the MongoDB Exporter is running, you can access the metrics:
 # View all metrics
 curl http://localhost:9216/metrics
 
-# Filter specific metrics
-curl http://localhost:9216/metrics | grep mongodb_up
+# Check MongoDB connectivity
+curl -s http://localhost:9216/metrics | grep mongodb_up
+# Should return: mongodb_up{cluster_role="mongod"} 1
 
 # Check exporter health
 curl http://localhost:9216/metrics | grep mongodb_exporter_build_info
+
+# View database statistics
+curl -s http://localhost:9216/metrics | grep mongodb_db
 ```
 
 ## Non-hardened images vs Docker Hardened Images
