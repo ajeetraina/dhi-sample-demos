@@ -414,47 +414,6 @@ The hardened images intended for runtime don't contain a shell nor any tools for
 docker debug mongodb-exporter
 ```
 
-### Common issues
-
-#### Connection failures
-
-If the exporter can't connect to MongoDB:
-
-1. Verify the MongoDB URI is correct
-2. Ensure MongoDB is accessible from the exporter container
-3. Check authentication credentials
-4. Verify network connectivity
-
-```bash
-# Check exporter logs
-docker logs mongodb-exporter
-
-# Test network connectivity
-docker exec mongodb-exporter ping mongodb  # Note: ping may not work in hardened images
-
-# Verify MongoDB is accessible
-docker exec mongodb mongosh --eval "db.version()"
-```
-
-#### No metrics appearing
-
-If metrics aren't being exported:
-
-1. Check if the exporter is running
-2. Verify the web endpoint is accessible
-3. Check for authentication errors
-
-```bash
-# Check if container is running
-docker ps | grep mongodb-exporter
-
-# Test metrics endpoint
-curl http://localhost:9216/metrics
-
-# Check specific MongoDB connectivity metric
-curl http://localhost:9216/metrics | grep mongodb_up
-```
-
 #### Permissions
 
 By default image variants intended for runtime, run as the nonroot user. This typically doesn't cause issues for MongoDB Exporter as it only needs network access and doesn't require file system writes.
