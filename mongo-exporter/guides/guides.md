@@ -171,9 +171,6 @@ docker run -d \
   -p 9216:9216 \
   <your-namespace>/dhi-mongodb-exporter:<tag> \
   --mongodb.uri=mongodb://admin:secure_password@mongodb:27017/admin \
-  --web.listen-address=:9216 \
-  --web.telemetry-path=/metrics \
-  --mongodb.connect-timeout-ms=5000 \
   --collector.dbstats \
   --collector.collstats \
   --collector.topmetrics \
@@ -196,7 +193,6 @@ Complete monitoring stack with MongoDB, MongoDB Exporter, and Prometheus:
 services:
   mongodb:
     image: <your-namespace>/dhi-mongodb:8-debian13-dev
-    platform: linux/amd64
     container_name: mongodb
     command: --bind_ip_all --auth
     ports:
@@ -303,7 +299,7 @@ curl -s http://localhost:9216/metrics | grep mongodb_db
 |---------|---------------------------|----------------------------------|
 | Security | Standard base with common utilities | Minimal, hardened base with security patches |
 | Shell access | Full shell (bash/sh) available | No shell in runtime variants |
-| Package manager | apt available | No package manager in runtime variants |
+| Package manager | package manager available | No package manager in runtime variants |
 | User | Runs as specific user | Runs as nonroot user |
 | Attack surface | Larger due to additional utilities | Minimal, only essential components |
 | Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
