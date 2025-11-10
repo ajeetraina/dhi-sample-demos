@@ -7,18 +7,45 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 ### Basic MongoDB Exporter instance
 
-Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
+Before you run a MongoDB Exporter instance, ensure that you have MongoDB database instance up and running on your system. Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
 ```
+# 1. Create network
+docker network create mongo-monitoring
+
+# 2. Start MongoDB DHI
+docker run -d \
+  --name mongodb \
+  --platform linux/amd64 \
+  --network mongo-monitoring \
+  <your-namespace>/dhi-mongodb:8-debian13-dev \
+  --bind_ip_all
+
+# Wait for MongoDB to be ready
+echo "Waiting for MongoDB to start..."
+sleep 15
+
+# Verify MongoDB is running
+docker exec mongodb mongosh --eval "db.version()"
+
+# 3. Start MongoDB Exporter DHI
 docker run -d \
   --name mongodb-exporter \
+  --network mongo-monitoring \
   -p 9216:9216 \
-  <your-namespace>/dhi-mongodb-exporter:<tag> \
-  --mongodb.uri=mongodb://localhost:27017
+  <your-namespace>/dhi-mongodb-exporter:0.47.1-debian13 \
+  --mongodb.uri=mongodb://mongodb:27017
+
+# Wait for exporter to connect
+sleep 5
+
+# 4. Verify it's working
+curl -s http://localhost:9216/metrics | grep mongodb_up
+# Expected output: mongodb_up{cluster_role="mongod"} 1
 ```
 
 
-**Note:** This assumes MongoDB is running on `localhost`. If your MongoDB instance is on a different host, replace `localhost` with the appropriate hostname or IP address.
+**Note:** This assumes that you have already mirrored the MongoDB DHI image repository from the catalog to your organization. MongoDB DHI requires the `--bind_ip_all` flag to accept connections from other containers. The `--bind_ip_all` flag makes MongoDB DHI container listen on 0.0.0.0 (all network interfaces).
 
 ### MongoDB Exporter with authentication
 
@@ -52,7 +79,7 @@ Available environment variables:
 - WEB_TELEMETRY_PATH: Path for metrics (default: /metrics)
 
 
-## Common MongoDB Exporter use cases
+## Common Use Cases
 
 ### Complete monitoring setup with MongoDB
 
@@ -124,14 +151,15 @@ sleep 5
 
 # 6. Verify metrics are being exported
 curl -s http://localhost:9216/metrics | grep mongodb_up
-# Should return: mongodb_up{cluster_role="mongod"} 1
+# Expected output: mongodb_up{cluster_role="mongod"} 1
 ```
 
 ### Important Notes:
 
-- Platform Requirement: MongoDB DHI currently only supports linux/amd64. On Apple Silicon Macs, always use --platform linux/amd64
-- Network Binding: The --bind_ip_all flag is required for MongoDB to accept connections from other containers. Without it, MongoDB only binds to 127.0.0.1
+- Platform Requirement: MongoDB DHI currently only supports linux/amd64. On Apple Silicon Macs, always use `--platform linux/amd64`
+- Network Binding: The `--bind_ip_all` flag is required for MongoDB to accept connections from other containers. Without it, MongoDB only binds to 127.0.0.1
 - Wait Times: Allow sufficient time for MongoDB to start (15 seconds recommended) before attempting connections
+- Authentication: Use `--auth` flag for simple auth setup, or config files for advanced scenarios
 
 ### Advanced configuration options
 
