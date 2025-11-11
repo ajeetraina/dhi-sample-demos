@@ -1,13 +1,50 @@
 ## How to use this image
 
+Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository** > **Mirror to repository**, and then follow the on-screen instructions.
+
 ### Start a Kibana instance
 
-To start a Kibana instance, run the following command. Replace `<your-namespace>` with your organization's namespace and
-`<tag>` with the image variant you want to run.
+Kibana requires a running Elasticsearch cluster to function. Run the following command to start Elasticsearch instance:
+
+```bash
+# Step 1: Create network
+docker network create elastic-network
+
+# Step 2: Start Elasticsearch DHI
+docker run -d --name elasticsearch \
+  --net elastic-network \
+  -p 9200:9200 -p 9300:9300 \
+  -e "discovery.type=single-node" \
+  <your-namespace>/dhi-elasticsearch:<tag>
+
+# Step 3: Reset Elasticsearch password and note it
+docker exec -it elasticsearch \
+  /opt/elasticsearch/elasticsearch-8.19.3/bin/elasticsearch-reset-password -u elastic -b
+# Output: Password for the [elastic] user successfully reset.
+#         New value: <YOUR-ELASTIC-PASSWORD>
+
+# Step 4: Now start Kibana with the password
+docker run -d --name kibana \
+  --net elastic-network \
+  -p 5601:5601 \
+  -e ELASTICSEARCH_HOSTS=https://elasticsearch:9200 \
+  -e ELASTICSEARCH_USERNAME=elastic \
+  -e ELASTICSEARCH_PASSWORD=<YOUR-ELASTIC-PASSWORD> \
+  -e ELASTICSEARCH_SSL_VERIFICATIONMODE=none \
+  <your-namespace>/dhi-kibana:<tag>
+
+# Step 5: Verify Kibana is running
+curl http://localhost:5601/api/status
+```
+
+You can access Kibana via http://localhost:5601. You'll need to configure Elastic before you start with Kibana. In order to configure Kibana, you'll require enrollment token. The enrollment token is automatically generated when you start Elasticsearch for the first time. You might need to scroll back a bit in the terminal to view it.
+
+To generate a new enrollment token, run the following command from the Elasticsearch installation directory:
 
 ```
-$ docker run -p 5601:5601 <yournamespace>/dhi-kibana:<tag>
+bin/elasticsearch-create-enrollment-token --scope kibana
 ```
+
 
 ## Image variants
 
