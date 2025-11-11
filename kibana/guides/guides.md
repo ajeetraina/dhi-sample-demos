@@ -4,24 +4,30 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 ### Start a Kibana instance
 
-Kibana requires a running Elasticsearch cluster to function. Kibana 9.2.0+ requires a **service account token** for authentication instead of username/password.
+Kibana requires a running Elasticsearch cluster to function. Kibana 9.2.0+ requires a **service account token** for authentication.
 
 Run the following commands to start Elasticsearch and Kibana:
 ```bash
 # Step 1: Create network
 docker network create elastic-network
 
-# Step 2: Start Elasticsearch DHI
+# Step 2: Create Elasticsearch configuration file
+cat > elasticsearch.yml <<EOF
+cluster.name: docker-cluster
+discovery.type: single-node
+EOF
+
+# Step 3: Start Elasticsearch DHI with mounted config
 docker run -d --name elasticsearch \
   --net elastic-network \
   -p 9200:9200 -p 9300:9300 \
-  -e "discovery.type=single-node" \
-  <your-namespace>/dhi-elasticsearch:9.2.0
+  -v $(pwd)/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro \
+  /dhi-elasticsearch:9.2.0
 
-# Step 3: Wait for Elasticsearch to be ready (30-60 seconds)
+# Step 4: Wait for Elasticsearch to be ready (30-60 seconds)
 sleep 30
 
-# Step 4: Create Kibana service account token
+# Step 5: Create Kibana service account token
 docker exec elasticsearch \
   /usr/share/elasticsearch/bin/elasticsearch-service-tokens create elastic/kibana kibana-token
 
@@ -29,22 +35,25 @@ docker exec elasticsearch \
 # SERVICE_TOKEN elastic/kibana/kibana-token = AAEAAWVsYXN0aWMva2liYW5hL2tpYmFuYS10b2tlbjp...
 # Copy the token value after the "=" sign
 
-# Step 5: Start Kibana with the service account token
+# Step 6: Start Kibana with the service account token
 docker run -d --name kibana \
   --net elastic-network \
   -p 5601:5601 \
   -e ELASTICSEARCH_HOSTS=https://elasticsearch:9200 \
-  -e ELASTICSEARCH_SERVICE_ACCOUNT_TOKEN=<YOUR-SERVICE-TOKEN> \
+  -e ELASTICSEARCH_SERVICE_ACCOUNT_TOKEN= \
   -e ELASTICSEARCH_SSL_VERIFICATIONMODE=none \
-  <your-namespace>/dhi-kibana:9.2.0
+  /dhi-kibana:9.2.0
 
-# Step 6: Verify Kibana is running
+# Step 7: Verify Kibana is running
 curl http://localhost:5601/api/status
 ```
 
 You can access Kibana via `http://localhost:5601`. 
 
-**Important:** Kibana 9.2.0+ no longer accepts the `elastic` superuser account. You must use service account tokens as shown above.
+**Important Notes:**
+- Kibana 9.2.0+ no longer accepts the `elastic` superuser account
+- You must use service account tokens as shown above
+- Elasticsearch configuration requires a mounted config file (env vars don't work)
 
 ### Configure Kibana with Enrollment Token
 
@@ -101,37 +110,56 @@ curl -k -H "Authorization: Bearer $SERVICE_TOKEN" \
 
 ### Kibana with custom configuration
 
-Use a custom configuration file for advanced Kibana settings:
+Use custom configuration files for advanced settings:
 ```bash
-# Create kibana.yml with service account token
-cat > kibana.yml <<EOF
+# Create Elasticsearch configuration
+cat > elasticsearch.yml < kibana.yml <<EOF
 server.host: "0.0.0.0"
 server.port: 5601
 elasticsearch.hosts: ["https://elasticsearch:9200"]
-elasticsearch.serviceAccountToken: "<YOUR-SERVICE-TOKEN>"
+elasticsearch.serviceAccountToken: ""
 elasticsearch.ssl.verificationMode: "none"
 monitoring.ui.container.elasticsearch.enabled: true
 EOF
 
-# Start Kibana with custom config
+# Start Elasticsearch with custom config
+docker run -d --name elasticsearch \
+  --net elastic-network \
+  -p 9200:9200 -p 9300:9300 \
+  -v $(pwd)/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro \
+  /dhi-elasticsearch:9.2.0
+
+# Wait and create service token
+sleep 30
+docker exec elasticsearch \
+  /usr/share/elasticsearch/bin/elasticsearch-service-tokens create elastic/kibana kibana-token
+
+# Update kibana.yml with the token, then start Kibana
 docker run -d --name kibana \
   --net elastic-network \
   -p 5601:5601 \
   -v $(pwd)/kibana.yml:/usr/share/kibana/config/kibana.yml:ro \
-  <your-namespace>/dhi-kibana:9.2.0
+  /dhi-kibana:9.2.0
 ```
 
 ### Docker Compose example
 
-To use Kibana with Elasticsearch DHI in a multi-service environment, create the following `docker-compose.yml`:
+To use Kibana with Elasticsearch DHI in a multi-service environment, create the following files:
+
+**elasticsearch.yml:**
+```yaml
+cluster.name: docker-cluster
+discovery.type: single-node
+```
+
+**docker-compose.yml:**
 ```yaml
 version: '3'
 services:
   elasticsearch:
-    image: <your-namespace>/dhi-elasticsearch:9.2.0
-    environment:
-      - node.name=es01
-      - discovery.type=single-node
+    image: /dhi-elasticsearch:9.2.0
+    volumes:
+      - ./elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     ports:
       - "9200:9200"
       - "9300:9300"
@@ -139,12 +167,12 @@ services:
       - elastic
 
   kibana:
-    image: <your-namespace>/dhi-kibana:9.2.0
+    image: /dhi-kibana:9.2.0
     ports:
       - "5601:5601"
     environment:
       - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
-      - ELASTICSEARCH_SERVICE_ACCOUNT_TOKEN=<YOUR-SERVICE-TOKEN>
+      - ELASTICSEARCH_SERVICE_ACCOUNT_TOKEN=
       - ELASTICSEARCH_SSL_VERIFICATIONMODE=none
     depends_on:
       - elasticsearch
@@ -158,21 +186,15 @@ networks:
 
 **Setup steps:**
 ```bash
-# Start Elasticsearch first
-docker compose up -d elasticsearch
-
-# Wait for Elasticsearch to be ready
-sleep 30
-
-# Create service account token
-docker exec <project>-elasticsearch-1 \
+# Create elasticsearch.yml in the same directory as docker-compose.yml
+cat > elasticsearch.yml <-elasticsearch-1 \
   /usr/share/elasticsearch/bin/elasticsearch-service-tokens create elastic/kibana kibana-token
 
 # Copy the token output (after "=")
-# Update docker-compose.yml with <YOUR-SERVICE-TOKEN>
+# Update docker-compose.yml with 
 
 # (Optional) Generate enrollment token for browser setup
-docker exec <project>-elasticsearch-1 \
+docker exec -elasticsearch-1 \
   /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
 
 # Start Kibana
@@ -189,15 +211,24 @@ Deploy a production-ready Elastic Stack with resource limits:
 # Create network
 docker network create observability
 
+# Create Elasticsearch configuration
+cat > elasticsearch.yml <<EOF
+cluster.name: observability-cluster
+discovery.type: single-node
+
+# JVM heap size will be set via ES_JAVA_OPTS environment variable
+# Resource limits set at container level
+EOF
+
 # Start Elasticsearch with resource limits
 docker run -d --name elasticsearch \
   --network observability \
   --memory="4g" \
   --cpus="2.0" \
   -p 9200:9200 -p 9300:9300 \
-  -e "discovery.type=single-node" \
   -e "ES_JAVA_OPTS=-Xms2g -Xmx2g" \
-  <your-namespace>/dhi-elasticsearch:9.2.0
+  -v $(pwd)/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro \
+  /dhi-elasticsearch:9.2.0
 
 # Wait for Elasticsearch to start
 sleep 30
@@ -219,11 +250,13 @@ docker run -d --name kibana \
   -e ELASTICSEARCH_SERVICE_ACCOUNT_TOKEN="$SERVICE_TOKEN" \
   -e ELASTICSEARCH_SSL_VERIFICATIONMODE=none \
   -e MONITORING_UI_CONTAINER_ELASTICSEARCH_ENABLED=true \
-  <your-namespace>/dhi-kibana:9.2.0
+  /dhi-kibana:9.2.0
 
 # Check status
 curl http://localhost:5601/api/status | grep -i overall
 ```
+
+**Note:** The `ES_JAVA_OPTS` environment variable works because it's processed by the JVM, not by Elasticsearch's configuration system.
 
 ## Multi-stage Dockerfile integration
 
@@ -241,29 +274,49 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create custom Kibana configuration
+# Create custom Elasticsearch configuration
 RUN mkdir -p /app/config && \
-    echo 'server.host: "0.0.0.0"' > /app/config/kibana.yml && \
+    echo 'cluster.name: "custom-cluster"' > /app/config/elasticsearch.yml && \
+    echo 'discovery.type: single-node' >> /app/config/elasticsearch.yml && \
+    chown -R 1000:1000 /app
+
+# Create custom Kibana configuration
+RUN echo 'server.host: "0.0.0.0"' > /app/config/kibana.yml && \
     echo 'elasticsearch.hosts: ["https://elasticsearch:9200"]' >> /app/config/kibana.yml && \
     echo 'elasticsearch.ssl.verificationMode: "none"' >> /app/config/kibana.yml && \
-    chown -R 65532:65532 /app
+    chown -R 65532:65532 /app/config/kibana.yml
 
-# Runtime stage - Use Docker Hardened Kibana
-FROM <your-namespace>/dhi-kibana:9.2.0 AS runtime
+# Runtime stage - Use Docker Hardened Images
+FROM /dhi-elasticsearch:9.2.0 AS elasticsearch-runtime
+COPY --from=builder --chown=elasticsearch:elasticsearch /app/config/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
 
-# Copy configuration from builder
+FROM /dhi-kibana:9.2.0 AS kibana-runtime
 COPY --from=builder --chown=nonroot:nonroot /app/config/kibana.yml /usr/share/kibana/config/kibana.yml
 ```
 
 Build and run:
 ```bash
-docker build -t my-kibana-app .
+# Build images
+docker build --target elasticsearch-runtime -t my-elasticsearch-app .
+docker build --target kibana-runtime -t my-kibana-app .
 
-# You'll need to pass the service token at runtime
+# Run Elasticsearch
+docker run -d --name my-elasticsearch \
+  --net elastic-network \
+  -p 9200:9200 -p 9300:9300 \
+  my-elasticsearch-app
+
+# Wait and create service token
+sleep 30
+SERVICE_TOKEN=$(docker exec my-elasticsearch \
+  /usr/share/elasticsearch/bin/elasticsearch-service-tokens create elastic/kibana kibana-token | \
+  grep "SERVICE_TOKEN" | awk '{print $NF}')
+
+# Run Kibana with service token
 docker run -d --name my-kibana \
   --net elastic-network \
   -p 5601:5601 \
-  -e ELASTICSEARCH_SERVICE_ACCOUNT_TOKEN=<YOUR-SERVICE-TOKEN> \
+  -e ELASTICSEARCH_SERVICE_ACCOUNT_TOKEN="$SERVICE_TOKEN" \
   my-kibana-app
 ```
 
