@@ -4,7 +4,7 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 ### Start a Kibana instance
 
-Kibana requires a running Elasticsearch cluster to function. Run the following command to start Elasticsearch instance:
+Kibana requires a running Elasticsearch cluster to function. Run the following command to start Elasticsearch and Kibana instance subsequently :
 
 ```bash
 # Step 1: Create network
@@ -37,80 +37,278 @@ docker run -d --name kibana \
 curl http://localhost:5601/api/status
 ```
 
-You can access Kibana via http://localhost:5601. You'll need to configure Elastic before you start with Kibana. In order to configure Kibana, you'll require enrollment token. The enrollment token is automatically generated when you start Elasticsearch for the first time. You might need to scroll back a bit in the terminal to view it.
+You can access Kibana via `http://localhost:5601`. 
 
-To generate a new enrollment token, run the following command from the Elasticsearch installation directory:
+### Configure Kibana with Enrollment Token
+
+When you start Elasticsearch for the first time, an enrollment token is automatically generated. You'll need this token to configure Kibana.
+
+To retrieve the enrollment token, run:
 
 ```
-bin/elasticsearch-create-enrollment-token --scope kibana
+# Generate Kibana enrollment token from Elasticsearch
+docker exec -it elasticsearch \
+  /opt/elasticsearch/elasticsearch-8.19.3/bin/elasticsearch-create-enrollment-token -s kibana
 ```
 
+This token can be used during Kibana's initial setup when you first access `http://localhost:5601` in your browser. Alternatively, you can configure Kibana using environment variables as shown in the examples above.
+
+## Common Kibana use cases
+
+### Index sample data and visualize in Kibana
+
+Once Kibana is running, you can index data in Elasticsearch and visualize it:
+
+```
+# Index a sample document
+curl -u elastic:<YOUR-ELASTIC-PASSWORD> -k \
+  -X POST "https://localhost:9200/sample-data/_doc/1?pretty" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Docker Hardened Images",
+    "category": "security",
+    "timestamp": "2025-01-15T10:00:00"
+  }'
+
+# Index more sample documents
+curl -u elastic:<YOUR-ELASTIC-PASSWORD> -k \
+  -X POST "https://localhost:9200/sample-data/_doc/2?pretty" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Kibana Visualization",
+    "category": "analytics",
+    "timestamp": "2025-01-16T14:30:00"
+  }'
+
+# Search the data
+curl -u elastic:<YOUR-ELASTIC-PASSWORD> -k \
+  -X GET "https://localhost:9200/sample-data/_search?pretty"
+
+# Now open Kibana at http://localhost:5601
+# Go to "Discover" to see your data
+# Go to "Dashboard" to create visualizations
+```
+
+### Kibana with custom configuration
+
+Use a custom configuration file for advanced Kibana settings:
+
+```
+# Create kibana.yml
+cat > kibana.yml <<EOF
+server.host: "0.0.0.0"
+server.port: 5601
+elasticsearch.hosts: ["https://elasticsearch:9200"]
+elasticsearch.username: "elastic"
+elasticsearch.ssl.verificationMode: "none"
+monitoring.ui.container.elasticsearch.enabled: true
+EOF
+
+# Start Kibana with custom config
+docker run -d --name kibana \
+  --net elastic-network \
+  -p 5601:5601 \
+  -e ELASTICSEARCH_PASSWORD=<YOUR-ELASTIC-PASSWORD> \
+  -v $(pwd)/kibana.yml:/usr/share/kibana/config/kibana.yml:ro \
+  <your-namespace>/dhi-kibana:9.2.0
+```
+
+## Docker Compose example
+
+To use Kibana with Elasticsearch DHI in a multi-service environment, create the following docker-compose.yml:
+
+```
+services:
+  elasticsearch:
+    image: <your-namespace>/dhi-elasticsearch:9.2.0
+    environment:
+      - node.name=es01
+      - discovery.type=single-node
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elastic
+
+  kibana:
+    image: <your-namespace>/dhi-kibana:9.2.0
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=<YOUR-ELASTIC-PASSWORD>
+      - ELASTICSEARCH_SSL_VERIFICATIONMODE=none
+    depends_on:
+      - elasticsearch
+    networks:
+      - elastic
+
+networks:
+  elastic:
+    driver: bridge
+```
+
+### Setup steps:
+
+```
+# Start Elasticsearch first
+docker compose up -d elasticsearch
+
+# Wait for Elasticsearch to be ready
+sleep 30
+
+# Reset password
+docker exec -it <project>-elasticsearch-1 \
+  /opt/elasticsearch/elasticsearch-8.19.3/bin/elasticsearch-reset-password -u elastic -b
+
+# (Optional) Generate enrollment token for Kibana
+docker exec -it <project>-elasticsearch-1 \
+  /opt/elasticsearch/elasticsearch-8.19.3/bin/elasticsearch-create-enrollment-token -s kibana
+
+# Update docker-compose.yml with <YOUR-ELASTIC-PASSWORD>
+# Then start Kibana
+docker compose up -d kibana
+
+# Verify
+curl http://localhost:5601/api/status
+```
+
+## Multi-stage Dockerfile integration
+
+Kibana DHI images do NOT provide dev variants. For build stages that require shell access and package managers, use standard Docker Official Kibana images or Debian base images.
+
+```
+# syntax=docker/dockerfile:1
+# Build stage - Use standard base image (has shell and package managers)
+FROM debian:bookworm-slim AS builder
+
+USER root
+
+# Install configuration tools
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl jq && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create custom Kibana configuration
+RUN mkdir -p /app/config && \
+    echo 'server.host: "0.0.0.0"' > /app/config/kibana.yml && \
+    echo 'elasticsearch.hosts: ["https://elasticsearch:9200"]' >> /app/config/kibana.yml && \
+    echo 'elasticsearch.username: "elastic"' >> /app/config/kibana.yml && \
+    echo 'elasticsearch.ssl.verificationMode: "none"' >> /app/config/kibana.yml && \
+    chown -R 1000:1000 /app
+
+# Runtime stage - Use Docker Hardened Kibana
+FROM <your-namespace>/dhi-kibana:9.2.0 AS runtime
+
+# Copy configuration from builder
+COPY --from=builder --chown=kibana:kibana /app/config/kibana.yml /usr/share/kibana/config/kibana.yml
+```
+
+### Build and run:
+
+```
+docker build -t my-kibana-app .
+
+docker run -d --name my-kibana \
+  --net elastic-network \
+  -p 5601:5601 \
+  -e ELASTICSEARCH_PASSWORD=<YOUR-ELASTIC-PASSWORD> \
+  my-kibana-app
+```
+
+## Non-hardened images vs Docker Hardened Images
+
+### Key differences
+
+
+| Feature | Docker Official Kibana | Docker Hardened Kibana |
+|---------|------------------------|------------------------|
+| Security | Standard base with common utilities | Minimal, hardened base with security patches |
+| Shell access | Full shell (bash/sh) available | No shell in runtime variants |
+| Package manager | apt/yum available | No package manager in runtime variants |
+| User | Runs as kibana user | Runs as nonroot user (UID 1000) |
+| Attack surface | Larger due to additional utilities | Minimal, only essential components |
+| Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
+| Vulnerabilities | May contain CVEs in bundled utilities | Zero critical/high vulnerabilities |
+
+### Why no shell or package manager?
+
+Docker Hardened Images prioritize security through minimalism:
+
+- **Reduced attack surface**: Fewer binaries mean fewer potential vulnerabilities
+- **Immutable infrastructure**: Runtime containers shouldn't be modified after deployment
+- **Compliance ready**: Meets strict security requirements for regulated environments
+
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
+
+- **Docker Debug** to attach to containers
+- **Docker's Image Mount** feature to mount debugging tools
+- **Ecosystem-specific debugging approaches**
+
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+
+For example, you can use Docker Debug:
+```bash
+docker debug 
+```
+
+or mount debugging tools with the Image Mount feature:
+```bash
+docker run --rm -it --pid container:my-kibana \
+  --mount=type=image,source=/dhi-busybox,destination=/dbg,ro \
+  /dhi-kibana:9.2.0 /dbg/bin/sh
+```
 
 ## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use.
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either
-  directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+**Runtime variants** are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
 
-  - Run as the nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+- Run as the nonroot user
+- Do not include a shell or a package manager
+- Contain only the minimal set of libraries needed to run the app
 
-- Build-time variants typically include `dev` in the variant name and are intended for use in the first stage of a
-  multi-stage Dockerfile. These images typically:
-
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
+**Note**: Kibana DHI does NOT provide dev variants. For build stages requiring shell access or package managers, use standard Docker Official Kibana images or Debian base images.
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the
-base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the
-following table of migration notes.
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes.
 
-| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
-| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
-| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                                                                                                   |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+| Item | Migration note |
+|:-----|:--------------|
+| Base image | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag. |
+| Non-root user | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. |
+| Multi-stage build | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime. |
+| TLS certificates | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
+| Ports | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
+| Entry point | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| No shell | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage. |
 
 The following steps outline the general migration process.
 
-1. Find hardened images for your app.
+1. **Find hardened images for your app.**
 
    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-1. Update the base image in your Dockerfile.
+2. **Update the base image in your Dockerfile.**
 
-   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For
-   framework images, this is typically going to be an image tagged as `dev` because it has the tools needed to install
-   packages and dependencies.
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For framework images, this is typically going to be an image tagged as `dev` because it has the tools needed to install packages and dependencies.
 
-1. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
+3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
 
-   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your
-   Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as `dev`, your
-   final runtime stage should use a non-dev image variant.
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as `dev`, your final runtime stage should use a non-dev image variant.
 
-1. Install additional packages
+4. **Install additional packages**
 
-   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to
-   install additional packages in your Dockerfile. Inspect the image variants to identify which packages are already
-   installed.
+   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to install additional packages in your Dockerfile. Inspect the image variants to identify which packages are already installed.
 
-   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the
-   packages. Install the packages in the build stage that uses a `dev` image. Then, if needed, copy any necessary
-   artifacts to the runtime stage that uses a non-dev image.
+   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a `dev` image. Then, if needed, copy any necessary artifacts to the runtime stage that uses a non-dev image.
 
-   For Alpine-based images, you can use `apk` to install packages. For Debian-based images, you can use `apt-get` to
-   install packages.
+   For Alpine-based images, you can use `apk` to install packages. For Debian-based images, you can use `apt-get` to install packages.
 
 ## Troubleshooting migration
 
@@ -118,33 +316,22 @@ The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for
-debugging applications built with Docker Hardened Images is to use
-[Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides
-a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists
-during the debugging session.
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are
-accessible to the nonroot user. You may need to copy files to different directories or change permissions so your
-application running as the nonroot user can access them.
+By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to
-privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues,
-configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on
-the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and
-`docker run -p 80:81 my-image` won't work because the port inside the container is 81.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and `docker run -p 80:81 my-image` won't work because the port inside the container is 81.
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell
-commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers
-with no shell.
+By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
-to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+
+
