@@ -228,7 +228,7 @@ docker run -d --name my-kibana \
 | Security | Standard base with common utilities | Minimal, hardened base with security patches |
 | Shell access | Full shell (bash/sh) available | No shell in runtime variants |
 | Package manager | apt/yum available | No package manager in runtime variants |
-| User | Runs as kibana user | Runs as nonroot user (UID 1000) |
+| User | Runs as kibana user | Runs as nonroot user (UID 65532) |
 | Attack surface | Larger due to additional utilities | Minimal, only essential components |
 | Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
 | Vulnerabilities | May contain CVEs in bundled utilities | Zero critical/high vulnerabilities |
