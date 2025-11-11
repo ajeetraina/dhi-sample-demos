@@ -22,7 +22,7 @@ docker run -d --name elasticsearch \
   --net elastic-network \
   -p 9200:9200 -p 9300:9300 \
   -v $(pwd)/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro \
-  /dhi-elasticsearch:9.2.0
+  dockerdevrel/dhi-elasticsearch:9.2.0
 
 # Step 4: Wait for Elasticsearch to be ready (30-60 seconds)
 sleep 30
