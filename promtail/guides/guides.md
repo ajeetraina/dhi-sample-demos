@@ -80,30 +80,30 @@ set -e  # Exit on error
 echo "=== Starting Verification Process ==="
 echo ""
 
-# Wait for services to start - Allows containers to fully initialize before running checks
+# Wait for services to start
 echo "Waiting for services to initialize..."
 sleep 15
 
-# Check containers are running - Confirms both Promtail and Loki containers are up and running
+# Check containers are running
 echo "Checking if containers are running..."
 docker ps | grep -E "promtail|loki"
 echo ""
 
-# Check Promtail logs - Reviews recent Promtail activity to ensure proper operation
+# Check Promtail logs
 echo "Checking Promtail logs (last 10 lines)..."
 docker logs promtail | tail -n 10
 echo ""
 
-# Check Promtail metrics and log collection - Verifies active targets and total log entries sent to Loki
+# Check Promtail metrics and log collection
 echo "Checking Promtail metrics..."
-echo "Active targets (should be > 0):"
+echo "Active targets:"
 curl -s http://localhost:9080/metrics | grep promtail_targets_active_total
 echo ""
-echo "Total log entries sent to Loki:"
+echo "Sent entries:"
 curl -s http://localhost:9080/metrics | grep promtail_sent_entries_total
 echo ""
 
-# Wait for Loki to be fully ready - Ensures Loki API is ready to accept queries before proceeding
+# Wait for Loki to be fully ready
 echo "Waiting for Loki to be ready..."
 for i in {1..30}; do
   if curl -s http://localhost:3100/ready 2>/dev/null | grep -q "ready"; then
@@ -115,39 +115,27 @@ for i in {1..30}; do
 done
 echo ""
 
-# Check available labels - Lists all labels that can be used for querying logs (job, filename, etc.)
+# Check available labels
 echo "Checking available labels in Loki..."
-echo "Expected labels: job, filename, service_name"
 curl -s http://localhost:3100/loki/api/v1/labels | jq
 echo ""
 
-# Query logs from Loki - Fetches sample log entries to verify the complete log pipeline is working
+# Query logs from Loki
 echo "Querying logs from Loki..."
-echo "Fetching last 5 log entries with job='varlogs':"
 curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
   --data-urlencode 'query={job="varlogs"}' \
   --data-urlencode 'limit=5' | jq '.data.result[0].values'
 
 echo ""
-echo "=== Setup Complete ✅ ==="
+echo "=== Setup Complete ==="
 echo ""
-echo "📊 Access Points:"
-echo "  ┌─────────────────────────────────────────────────────────────"
-echo "  │ Promtail Targets UI: http://localhost:9080/targets"
-echo "  │   → View monitored log files, status, and positions"
-echo "  │"
-echo "  │ Promtail Metrics:    http://localhost:9080/metrics"
-echo "  │   → Prometheus metrics endpoint"
-echo "  │"
-echo "  │ Loki API:            http://localhost:3100"
-echo "  │   → Query logs, labels, and health status"
-echo "  └─────────────────────────────────────────────────────────────"
+echo "Access Points:"
+echo "  Promtail Targets UI: http://localhost:9080/targets"
+echo "  Promtail Metrics:    http://localhost:9080/metrics"
+echo "  Loki API:            http://localhost:3100"
 echo ""
-echo "⚠️  Note: Loki has no web UI - accessing http://localhost:3100 directly shows '404 page not found'"
-echo "   This is normal. Use Promtail Targets UI or Grafana to visualize logs."
-echo ""
-echo "🎉 Logs are being collected and sent to Loki successfully!"
-echo "   Open http://localhost:9080/targets in your browser to see all monitored files."
+echo "Note: Loki has no web UI. Accessing http://localhost:3100 directly shows '404 page not found'."
+echo "This is normal behavior. Use Promtail Targets UI or Grafana to visualize logs."
 echo ""
 EOF
 
