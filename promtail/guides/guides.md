@@ -249,7 +249,7 @@ Since Promtail DHI images do NOT provide dev variants with shell or package mana
 cat > Dockerfile <<'EOF'
 # syntax=docker/dockerfile:1
 # Build stage - Use a DHI base image for configuration preparation
-FROM dockerdevrel/dhi-busybox:1.37.0 AS builder
+FROM dockerdevrel/dhi-busybox:1-alpine3.22-dev AS builder
 
 # Copy configuration files
 COPY config/promtail.yml /app/config/promtail.yml
