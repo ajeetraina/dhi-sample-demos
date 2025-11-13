@@ -244,6 +244,28 @@ curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
 
 Since Promtail DHI images do NOT provide dev variants with shell or package managers, multi-stage builds with DHI images are limited to copying static files and configurations.
 
+First, create `promtail/config/promtail.yml` file with the following content in order to monitor `/var/log/*log`:
+
+```
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          __path__: /var/log/*.log
+```
 
 ```
 cat > Dockerfile <<'EOF'
@@ -252,7 +274,7 @@ cat > Dockerfile <<'EOF'
 FROM dockerdevrel/dhi-busybox:1-alpine3.22-dev AS builder
 
 # Copy configuration files
-COPY config/promtail.yml /app/config/promtail.yml
+COPY promtail/config/promtail.yml /app/config/promtail.yml
 
 # Ensure proper ownership (busybox has basic commands)
 RUN chown -R 65532:65532 /app/config
@@ -269,17 +291,8 @@ EXPOSE 9080
 ENTRYPOINT ["/usr/bin/promtail"]
 CMD ["-config.file=/etc/promtail/config.yml"]
 EOF
-
-# Build
-docker build -t ajeetraina/promtail .
 ```
 
-Important: Docker Hardened Images run as a nonroot user (UID 65532) for security. This user cannot access the Docker daemon socket (/var/run/docker.sock) without additional permissions, which would compromise the security model.
-For collecting Docker container logs with Promtail DHI, consider these alternatives:
-
-- File-based collection: Mount container log directories and collect from files
-- Centralized logging driver: Use Docker's logging drivers to write to files that Promtail can read
-- Sidecar pattern: Run Promtail as a sidecar container with shared log volumes
 
 ## Non-hardened images vs Docker Hardened Images
 
@@ -312,6 +325,8 @@ Docker Hardened Images come in different variants depending on their intended us
   - Run as the root user
   - Include a shell and package manager
   - Are used to build or compile applications
+ 
+Promtail DHI images are only available as runtime-variant.
 
 ## Migrate to a Docker Hardened Image
 
