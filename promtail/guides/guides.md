@@ -7,7 +7,7 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 To start an Promtail instance, run the following command. Replace `<your-namespace>` with your organization's namespace
 and `<tag>` with the image variant you want to run.
 
-Promtail requires configuration to function. Create a configuration file to specify log sources and the Loki endpoint:
+Promtail is an agent which ships the contents of local logs to a Grafana Loki instance. Promtail requires configuration to function. The following command creates a configuration file that tells Promtail to collect all .log files from `/var/log`, track their read positions, and push them to Loki at `http://loki:3100` with the label `job="varlogs".
 
 ```
 # Create directory structure
@@ -36,7 +36,10 @@ scrape_configs:
 EOF
 ```
 
-Run Promtail with the configuration:
+
+#### Run Promtail with the configuration
+
+The following commands creates a Docker network named `logging-net`, then starts Loki (port `3100`) and Promtail (port `9080`) containers on that network, with Promtail configured to read `/var/log` files and send them to Loki.
 
 ```
 # Create logging network (ignore if exists)
@@ -60,7 +63,7 @@ docker run -d --name promtail \
 ```
 
 
-### Verify the setup
+#### Verify the setup
 
 By now, Promtail should be accessible via `http://localhost:9080/targets`. 
 This page shows all the log files being monitored and their current status.
@@ -146,7 +149,12 @@ Note on ports: This example uses non-privileged port 9080 which works reliably w
 
 ### Multiple log sources with labels
 
-Configure Promtail to collect logs from multiple sources with custom labels for better organization.
+Configure Promtail to collect logs from multiple sources with custom labels for better organization. The following commands demonstrates multi-source logs collections where:
+
+- 3 different apps (webapp, api, worker) write logs to separate directories
+- Promtail collects all using a single configuration with multiple scrape_configs
+- Each source gets unique labels (job="webapp", job="api", job="worker")
+- You can filter logs by label in Loki queries
 
 ```
 # Step 1: Clean up
@@ -236,14 +244,15 @@ curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
 
 Since Promtail DHI images do NOT provide dev variants with shell or package managers, multi-stage builds with DHI images are limited to copying static files and configurations.
 
+
 ```
+cat > Dockerfile <<'EOF'
 # syntax=docker/dockerfile:1
 # Build stage - Use a DHI base image for configuration preparation
 FROM dockerdevrel/dhi-busybox:1.37.0 AS builder
 
 # Copy configuration files
-COPY promtail.yml /app/config/promtail.yml
-COPY additional-config/ /app/config/dynamic/
+COPY config/promtail.yml /app/config/promtail.yml
 
 # Ensure proper ownership (busybox has basic commands)
 RUN chown -R 65532:65532 /app/config
@@ -252,14 +261,17 @@ RUN chown -R 65532:65532 /app/config
 FROM dockerdevrel/dhi-promtail:3.5.8 AS runtime
 
 # Copy configuration from builder
-COPY --from=builder --chown=promtail:promtail /app/config/promtail.yml /etc/promtail/config.yml
-COPY --from=builder --chown=promtail:promtail /app/config/dynamic /etc/promtail/dynamic
+COPY --from=builder --chown=65532:65532 /app/config/promtail.yml /etc/promtail/config.yml
 
 EXPOSE 9080
 
 # Override entrypoint to use custom config location
 ENTRYPOINT ["/usr/bin/promtail"]
 CMD ["-config.file=/etc/promtail/config.yml"]
+EOF
+
+# Build
+docker build -t ajeetraina/promtail .
 ```
 
 Important: Docker Hardened Images run as a nonroot user (UID 65532) for security. This user cannot access the Docker daemon socket (/var/run/docker.sock) without additional permissions, which would compromise the security model.
