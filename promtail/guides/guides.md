@@ -326,7 +326,9 @@ Docker Hardened Images come in different variants depending on their intended us
   - Include a shell and package manager
   - Are used to build or compile applications
  
-Promtail DHI images are only available as runtime-variant.
+**Promtail Docker Hardened Images are only available as runtime variants.** There are no `dev` variants for Promtail since it's a pre-compiled binary application that doesn't require build-time dependencies. For configuration management in multi-stage builds, use a generic DHI dev image like `dockerdevrel/dhi-busybox:1-alpine3.22-dev` in the build stage, as shown in the [Multi-stage Dockerfile integration](#multi-stage-dockerfile-integration) example.
+
+
 
 ## Migrate to a Docker Hardened Image
 
