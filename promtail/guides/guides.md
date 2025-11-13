@@ -4,12 +4,11 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 ### Start a Promtail instance
 
-To start an Promtail instance, run the following command. Replace `<your-namespace>` with your organization's namespace
-and `<tag>` with the image variant you want to run.
+To start a Promtail instance, run the following command. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
-Promtail is an agent which ships the contents of local logs to a Grafana Loki instance. Promtail requires configuration to function. The following command creates a configuration file that tells Promtail to collect all .log files from `/var/log`, track their read positions, and push them to Loki at `http://loki:3100` with the label `job="varlogs".
+Promtail is an agent which ships the contents of local logs to a Grafana Loki instance. Promtail requires configuration to function. The following command creates a configuration file that tells Promtail to collect all `.log` files from `/var/log`, track their read positions, and push them to Loki at `http://loki:3100` with the label `job="varlogs"`.
 
-```
+```bash
 # Create directory structure
 mkdir -p promtail/config
 
@@ -39,9 +38,9 @@ EOF
 
 #### Run Promtail with the configuration
 
-The following commands creates a Docker network named `logging-net`, then starts Loki (port `3100`) and Promtail (port `9080`) containers on that network, with Promtail configured to read `/var/log` files and send them to Loki.
+The following commands create a Docker network named `logging-net`, then start Loki (port `3100`) and Promtail (port `9080`) containers on that network, with Promtail configured to read `/var/log` files and send them to Loki.
 
-```
+```bash
 # Create logging network (ignore if exists)
 docker network create logging-net 2>/dev/null || true
 
@@ -49,7 +48,7 @@ docker network create logging-net 2>/dev/null || true
 docker run -d --name loki \
   --network logging-net \
   -p 3100:3100 \
-  dockerdevrel/dhi-loki:3 \
+  <your-namespace>/dhi-loki:<tag> \
   -config.file=/etc/loki/local-config.yaml
 
 # Start Promtail
@@ -58,20 +57,18 @@ docker run -d --name promtail \
   -p 9080:9080 \
   -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
   -v /var/log:/var/log:ro \
-  dockerdevrel/dhi-promtail:3.5.8 \
+  <your-namespace>/dhi-promtail:<tag> \
   -config.file=/etc/promtail/config.yml
 ```
 
 
 #### Verify the setup
 
-By now, Promtail should be accessible via `http://localhost:9080/targets`. 
-This page shows all the log files being monitored and their current status.
+By now, Promtail should be accessible via `http://localhost:9080/targets`. This page shows all the log files being monitored and their current status.
 
-Let's verify they are up and healthy:
+Let's verify the complete setup is working correctly:
 
-
-```
+```bash
 cat > verify-promtail-loki.sh << 'EOF'
 #!/bin/bash
 
@@ -83,30 +80,30 @@ set -e  # Exit on error
 echo "=== Starting Verification Process ==="
 echo ""
 
-# Wait for services to start
+# Wait for services to start - Allows containers to fully initialize before running checks
 echo "Waiting for services to initialize..."
 sleep 15
 
-# Check containers are running
+# Check containers are running - Confirms both Promtail and Loki containers are up and running
 echo "Checking if containers are running..."
 docker ps | grep -E "promtail|loki"
 echo ""
 
-# Check Promtail logs
+# Check Promtail logs - Reviews recent Promtail activity to ensure proper operation
 echo "Checking Promtail logs (last 10 lines)..."
 docker logs promtail | tail -n 10
 echo ""
 
-# Check Promtail metrics and log collection
+# Check Promtail metrics and log collection - Verifies active targets and total log entries sent to Loki
 echo "Checking Promtail metrics..."
-echo "Active targets:"
+echo "Active targets (should be > 0):"
 curl -s http://localhost:9080/metrics | grep promtail_targets_active_total
 echo ""
-echo "Sent entries:"
+echo "Total log entries sent to Loki:"
 curl -s http://localhost:9080/metrics | grep promtail_sent_entries_total
 echo ""
 
-# Wait for Loki to be fully ready
+# Wait for Loki to be fully ready - Ensures Loki API is ready to accept queries before proceeding
 echo "Waiting for Loki to be ready..."
 for i in {1..30}; do
   if curl -s http://localhost:3100/ready 2>/dev/null | grep -q "ready"; then
@@ -118,21 +115,39 @@ for i in {1..30}; do
 done
 echo ""
 
-# Check available labels
+# Check available labels - Lists all labels that can be used for querying logs (job, filename, etc.)
 echo "Checking available labels in Loki..."
+echo "Expected labels: job, filename, service_name"
 curl -s http://localhost:3100/loki/api/v1/labels | jq
 echo ""
 
-# Query logs from Loki
+# Query logs from Loki - Fetches sample log entries to verify the complete log pipeline is working
 echo "Querying logs from Loki..."
+echo "Fetching last 5 log entries with job='varlogs':"
 curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
   --data-urlencode 'query={job="varlogs"}' \
   --data-urlencode 'limit=5' | jq '.data.result[0].values'
 
 echo ""
-echo "=== Setup Complete ==="
-echo "Promtail metrics: http://localhost:9080/metrics"
-echo "Loki API: http://localhost:3100"
+echo "=== Setup Complete ✅ ==="
+echo ""
+echo "📊 Access Points:"
+echo "  ┌─────────────────────────────────────────────────────────────"
+echo "  │ Promtail Targets UI: http://localhost:9080/targets"
+echo "  │   → View monitored log files, status, and positions"
+echo "  │"
+echo "  │ Promtail Metrics:    http://localhost:9080/metrics"
+echo "  │   → Prometheus metrics endpoint"
+echo "  │"
+echo "  │ Loki API:            http://localhost:3100"
+echo "  │   → Query logs, labels, and health status"
+echo "  └─────────────────────────────────────────────────────────────"
+echo ""
+echo "⚠️  Note: Loki has no web UI - accessing http://localhost:3100 directly shows '404 page not found'"
+echo "   This is normal. Use Promtail Targets UI or Grafana to visualize logs."
+echo ""
+echo "🎉 Logs are being collected and sent to Loki successfully!"
+echo "   Open http://localhost:9080/targets in your browser to see all monitored files."
 echo ""
 EOF
 
@@ -143,20 +158,23 @@ chmod +x verify-promtail-loki.sh
 ./verify-promtail-loki.sh
 ```
 
+
+**Important:** Loki does not have a web UI. Accessing `http://localhost:3100` directly will show "404 page not found" - this is expected behavior. Loki is an API-only service. Use `http://localhost:9080/targets` to view the Promtail monitoring interface, or integrate with Grafana for full log visualization.
+
 Note on ports: This example uses non-privileged port 9080 which works reliably with the nonroot user (UID 65532) across all environments.
 
 ## Common Promtail use cases
 
 ### Multiple log sources with labels
 
-Configure Promtail to collect logs from multiple sources with custom labels for better organization. The following commands demonstrates multi-source logs collections where:
+Configure Promtail to collect logs from multiple sources with custom labels for better organization. The following commands demonstrate multi-source log collection where:
 
 - 3 different apps (webapp, api, worker) write logs to separate directories
-- Promtail collects all using a single configuration with multiple scrape_configs
-- Each source gets unique labels (job="webapp", job="api", job="worker")
+- Promtail collects all using a single configuration with multiple `scrape_configs`
+- Each source gets unique labels (`job="webapp"`, `job="api"`, `job="worker"`)
 - You can filter logs by label in Loki queries
 
-```
+```bash
 # Step 1: Clean up
 docker rm -f promtail loki 2>/dev/null || true
 
@@ -210,7 +228,7 @@ EOF
 docker run -d --name loki \
   --network logging-net \
   -p 3100:3100 \
-  dockerdevrel/dhi-loki:3 \
+  <your-namespace>/dhi-loki:<tag> \
   -config.file=/etc/loki/local-config.yaml
 
 # Step 5: Start Promtail with multiple log directories
@@ -219,7 +237,7 @@ docker run -d --name promtail \
   -p 9080:9080 \
   -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
   -v $PWD/app-logs:/logs:ro \
-  dockerdevrel/dhi-promtail:3.5.8 \
+  <your-namespace>/dhi-promtail:<tag> \
   -config.file=/etc/promtail/config.yml
 
 # Step 6: Generate test logs
@@ -244,9 +262,9 @@ curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
 
 Since Promtail DHI images do NOT provide dev variants with shell or package managers, multi-stage builds with DHI images are limited to copying static files and configurations.
 
-First, create `promtail/config/promtail.yml` file with the following content in order to monitor `/var/log/*log`:
+First, create `promtail/config/promtail.yml` file with the following content in order to monitor `/var/log/*.log`:
 
-```
+```yaml
 server:
   http_listen_port: 9080
   grpc_listen_port: 0
@@ -267,11 +285,13 @@ scrape_configs:
           __path__: /var/log/*.log
 ```
 
-```
+Then create the Dockerfile:
+
+```dockerfile
 cat > Dockerfile <<'EOF'
 # syntax=docker/dockerfile:1
 # Build stage - Use a DHI base image for configuration preparation
-FROM dockerdevrel/dhi-busybox:1-alpine3.22-dev AS builder
+FROM <your-namespace>/dhi-busybox:<dev-tag> AS builder
 
 # Copy configuration files
 COPY promtail/config/promtail.yml /app/config/promtail.yml
@@ -280,7 +300,7 @@ COPY promtail/config/promtail.yml /app/config/promtail.yml
 RUN chown -R 65532:65532 /app/config
 
 # Runtime stage - Use Docker Hardened Promtail
-FROM dockerdevrel/dhi-promtail:3.5.8 AS runtime
+FROM <your-namespace>/dhi-promtail:<tag> AS runtime
 
 # Copy configuration from builder
 COPY --from=builder --chown=65532:65532 /app/config/promtail.yml /etc/promtail/config.yml
@@ -310,31 +330,46 @@ EOF
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use.
+Docker Hardened Images are available in two variants, each optimized for different stages of the container lifecycle:
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either
-  directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+### Runtime variants (production-ready)
 
-  - Run as the nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+Runtime variants are **production-ready images** designed for deployment. Use these as your final container image or as the base in the last stage of a multi-stage build.
 
-- Build-time variants typically include `dev` in the variant name and are intended for use in the first stage of a
-  multi-stage Dockerfile. These images typically:
+**Key characteristics:**
+- **Security-first**: Runs as nonroot user (UID 65532)
+- **Minimal attack surface**: No shell or package manager included
+- **Optimized**: Contains only essential libraries required to run the application
+- **Best for**: Production deployments, final stage of multi-stage builds
 
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
- 
-**Promtail Docker Hardened Images are only available as runtime variants.** There are no `dev` variants for Promtail since it's a pre-compiled binary application that doesn't require build-time dependencies. For configuration management in multi-stage builds, use a generic DHI dev image like `dockerdevrel/dhi-busybox:1-alpine3.22-dev` in the build stage, as shown in the [Multi-stage Dockerfile integration](#multi-stage-dockerfile-integration) example.
+**Example tags:** `3.5.8`, `3`, `latest`
 
+---
+
+### Build-time variants (development)
+
+Build-time variants include `dev` in the tag name and are intended for the **build stage** of multi-stage Dockerfiles.
+
+**Key characteristics:**
+- **Full tooling**: Includes shell (`sh`/`bash`) and package manager (`apk`)
+- **Root access**: Runs as root user for installing dependencies
+- **Build tools**: Contains compilers and build utilities
+- **Best for**: First stage of multi-stage builds, compiling code, installing packages
+
+**Example tags:** `3.5.8-dev`, `3-alpine3.22-dev`
+
+---
+
+### ⚠️ Promtail-specific note
+
+**Promtail Docker Hardened Images are only available as runtime variants.** There are no `dev` variants for Promtail since it's a pre-compiled binary application that doesn't require build-time dependencies. 
+
+For configuration management in multi-stage builds, use a generic DHI dev image like `<your-namespace>/dhi-busybox:<dev-tag>` in the build stage, as shown in the [Multi-stage Dockerfile integration](#multi-stage-dockerfile-integration) example.
 
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the
-base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the
-following table of migration notes.
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes.
 
 | Item               | Migration note                                                                                                                                                                                                                                                                                                               |
 | :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -343,7 +378,7 @@ following table of migration notes.
 | Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                                                                                                   |
 | Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
 | TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
+| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
 | Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
 | No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
 
@@ -353,30 +388,21 @@ The following steps outline the general migration process.
 
    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-1. Update the base image in your Dockerfile.
+2. Update the base image in your Dockerfile.
 
-   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For
-   framework images, this is typically going to be an image tagged as `dev` because it has the tools needed to install
-   packages and dependencies.
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For framework images, this is typically going to be an image tagged as `dev` because it has the tools needed to install packages and dependencies.
 
-1. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
+3. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
 
-   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your
-   Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as `dev`, your
-   final runtime stage should use a non-dev image variant.
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as `dev`, your final runtime stage should use a non-dev image variant.
 
-1. Install additional packages
+4. Install additional packages
 
-   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to
-   install additional packages in your Dockerfile. Inspect the image variants to identify which packages are already
-   installed.
+   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to install additional packages in your Dockerfile. Inspect the image variants to identify which packages are already installed.
 
-   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the
-   packages. Install the packages in the build stage that uses a `dev` image. Then, if needed, copy any necessary
-   artifacts to the runtime stage that uses a non-dev image.
+   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a `dev` image. Then, if needed, copy any necessary artifacts to the runtime stage that uses a non-dev image.
 
-   For Alpine-based images, you can use `apk` to install packages. For Debian-based images, you can use `apt-get` to
-   install packages.
+   For Alpine-based images, you can use `apk` to install packages. For Debian-based images, you can use `apt-get` to install packages.
 
 ## Troubleshooting migration
 
@@ -384,33 +410,20 @@ The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for
-debugging applications built with Docker Hardened Images is to use
-[Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides
-a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists
-during the debugging session.
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are
-accessible to the nonroot user. You may need to copy files to different directories or change permissions so your
-application running as the nonroot user can access them.
+By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to
-privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues,
-configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on
-the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and
-`docker run -p 80:81 my-image` won't work because the port inside the container is 81.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and `docker run -p 80:81 my-image` won't work because the port inside the container is 81.
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell
-commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers
-with no shell.
+By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
-to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
