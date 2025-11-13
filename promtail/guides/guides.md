@@ -1,11 +1,335 @@
 ## How to use this image
 
-### Run a Promtail container
+Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository** > **Mirror to repository**, and then follow the on-screen instructions.
+
+### Start a Promtail instance
 
 To start an Promtail instance, run the following command. Replace `<your-namespace>` with your organization's namespace
 and `<tag>` with the image variant you want to run.
 
-`docker run -p 3000:3000 <your-namespace>/dhi-promtail:<tag>`
+Promtail requires configuration to function. Create a configuration file to specify log sources and the Loki endpoint:
+
+```
+# Create directory structure
+mkdir -p promtail/config
+
+# Create basic Promtail configuration
+cat > promtail/config/promtail.yml <<'EOF'
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          __path__: /var/log/*.log
+EOF
+```
+
+Run Promtail with the configuration:
+
+```
+# Create logging network (ignore if exists)
+docker network create logging-net 2>/dev/null || true
+
+# Start Loki (DHI)
+docker run -d --name loki \
+  --network logging-net \
+  -p 3100:3100 \
+  dockerdevrel/dhi-loki:3 \
+  -config.file=/etc/loki/local-config.yaml
+
+# Start Promtail
+docker run -d --name promtail \
+  --network logging-net \
+  -p 9080:9080 \
+  -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
+  -v /var/log:/var/log:ro \
+  dockerdevrel/dhi-promtail:3.5.8 \
+  -config.file=/etc/promtail/config.yml
+```
+Verify the setup
+
+```
+# Wait for services to start
+sleep 15
+
+# Check containers are running
+docker ps | grep -E "promtail|loki"
+
+# Check Promtail logs
+docker logs promtail | tail -n 10
+
+# Check Promtail metrics and log collection
+curl -s http://localhost:9080/metrics | grep promtail_targets_active_total
+curl -s http://localhost:9080/metrics | grep promtail_sent_entries_total
+
+# Wait for Loki to be fully ready
+echo "Waiting for Loki to be ready..."
+for i in {1..30}; do
+  if curl -s http://localhost:3100/ready 2>/dev/null | grep -q "ready"; then
+    echo "Loki is ready!"
+    break
+  fi
+  echo "Waiting... ($i/30)"
+  sleep 2
+done
+
+# Check available labels
+curl -s http://localhost:3100/loki/api/v1/labels | jq
+
+# Query logs from Loki
+curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
+  --data-urlencode 'query={job="varlogs"}' \
+  --data-urlencode 'limit=5' | jq '.data.result[0].values'
+
+echo ""
+echo "=== Setup Complete ==="
+echo "Promtail metrics: http://localhost:9080/metrics"
+echo "Loki API: http://localhost:3100"
+```
+
+Note on ports: This example uses non-privileged port 9080 which works reliably with the nonroot user (UID 65532) across all environments.
+
+## Common Promtail use cases
+
+### Multiple log sources with labels
+
+Configure Promtail to collect logs from multiple sources with custom labels for better organization.
+
+```
+# Step 1: Clean up
+docker rm -f promtail loki 2>/dev/null || true
+
+# Step 2: Create application directories
+mkdir -p app-logs/webapp
+mkdir -p app-logs/api
+mkdir -p app-logs/worker
+
+# Step 3: Create configuration for multiple sources
+cat > promtail/config/promtail.yml <<'EOF'
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: webapp
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: webapp
+          env: production
+          __path__: /logs/webapp/*.log
+
+  - job_name: api
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: api
+          env: production
+          __path__: /logs/api/*.log
+
+  - job_name: worker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: worker
+          env: production
+          __path__: /logs/worker/*.log
+EOF
+
+# Step 4: Start Loki (DHI)
+docker run -d --name loki \
+  --network logging-net \
+  -p 3100:3100 \
+  dockerdevrel/dhi-loki:3 \
+  -config.file=/etc/loki/local-config.yaml
+
+# Step 5: Start Promtail with multiple log directories
+docker run -d --name promtail \
+  --network logging-net \
+  -p 9080:9080 \
+  -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
+  -v $PWD/app-logs:/logs:ro \
+  dockerdevrel/dhi-promtail:3.5.8 \
+  -config.file=/etc/promtail/config.yml
+
+# Step 6: Generate test logs
+echo "$(date) - User login successful" >> app-logs/webapp/access.log
+echo "$(date) - API request processed" >> app-logs/api/requests.log
+echo "$(date) - Background job completed" >> app-logs/worker/jobs.log
+
+# Step 7: Wait and verify
+sleep 20
+echo "=== Available jobs in Loki ==="
+curl -s http://localhost:3100/loki/api/v1/label/job/values | jq
+
+echo ""
+echo "=== Query logs by job ==="
+curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
+  --data-urlencode 'query={job="webapp"}' \
+  --data-urlencode 'limit=5' | jq '.data.result[0].values'
+```
+
+## Advanced filtering and relabeling
+
+### Configure Promtail with pipeline stages for log parsing and filtering.
+
+```
+# Step 1: Clean up
+docker rm -f promtail loki 2>/dev/null || true
+rm -rf app-logs/
+
+# Step 2: Create configuration with pipeline stages
+cat > promtail/config/promtail.yml <<'EOF'
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          __path__: /logs/*.log
+    
+    pipeline_stages:
+      # Parse nginx access logs
+      - regex:
+          expression: '^(?P<remote_addr>\S+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) (?P<protocol>\S+)" (?P<status>\d+) (?P<body_bytes_sent>\d+)'
+      
+      # Extract labels from parsed fields
+      - labels:
+          method:
+          status:
+          path:
+      
+      # Drop success logs (200 status)
+      - drop:
+          source: "status"
+          expression: "^200$"
+          drop_counter_reason: "success_logs"
+      
+      # Add timestamp
+      - timestamp:
+          source: time_local
+          format: "02/Jan/2006:15:04:05 -0700"
+EOF
+
+# Step 3: Start services
+docker run -d --name loki \
+  --network logging-net \
+  -p 3100:3100 \
+  dockerdevrel/dhi-loki:3 \
+  -config.file=/etc/loki/local-config.yaml
+
+mkdir -p app-logs
+docker run -d --name promtail \
+  --network logging-net \
+  -p 9080:9080 \
+  -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
+  -v $PWD/app-logs:/logs:ro \
+  dockerdevrel/dhi-promtail:3.5.8 \
+  -config.file=/etc/promtail/config.yml
+
+# Step 4: Generate sample nginx logs
+cat > app-logs/access.log <<'EOF'
+192.168.1.1 - - [12/Nov/2025:10:00:00 +0000] "GET /api/health HTTP/1.1" 200 1234
+192.168.1.2 - - [12/Nov/2025:10:00:01 +0000] "POST /api/login HTTP/1.1" 401 567
+192.168.1.3 - - [12/Nov/2025:10:00:02 +0000] "GET /api/users HTTP/1.1" 500 89
+192.168.1.4 - - [12/Nov/2025:10:00:03 +0000] "DELETE /api/user/123 HTTP/1.1" 403 45
+EOF
+
+sleep 20
+
+# Step 5: Verify filtered logs (only 401, 403, and 500 errors; 200s are dropped)
+echo "=== Querying filtered logs (errors only) ==="
+curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
+  --data-urlencode 'query={job="nginx"}' | jq '.data.result[] | {stream: .stream, count: (.values | length)}'
+
+echo ""
+echo "=== Query by status code (401 errors) ==="
+curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
+  --data-urlencode 'query={job="nginx",status="401"}' | jq '.data.result[0].values'
+```
+
+## Multi-stage Dockerfile integration
+
+Since Promtail DHI images do NOT provide dev variants with shell or package managers, multi-stage builds with DHI images are limited to copying static files and configurations.
+
+```
+# syntax=docker/dockerfile:1
+# Build stage - Use a DHI base image for configuration preparation
+FROM dockerdevrel/dhi-busybox:1.37.0 AS builder
+
+# Copy configuration files
+COPY promtail.yml /app/config/promtail.yml
+COPY additional-config/ /app/config/dynamic/
+
+# Ensure proper ownership (busybox has basic commands)
+RUN chown -R 65532:65532 /app/config
+
+# Runtime stage - Use Docker Hardened Promtail
+FROM dockerdevrel/dhi-promtail:3.5.8 AS runtime
+
+# Copy configuration from builder
+COPY --from=builder --chown=promtail:promtail /app/config/promtail.yml /etc/promtail/config.yml
+COPY --from=builder --chown=promtail:promtail /app/config/dynamic /etc/promtail/dynamic
+
+EXPOSE 9080
+
+# Override entrypoint to use custom config location
+ENTRYPOINT ["/usr/bin/promtail"]
+CMD ["-config.file=/etc/promtail/config.yml"]
+```
+
+Important: Docker Hardened Images run as a nonroot user (UID 65532) for security. This user cannot access the Docker daemon socket (/var/run/docker.sock) without additional permissions, which would compromise the security model.
+For collecting Docker container logs with Promtail DHI, consider these alternatives:
+
+- File-based collection: Mount container log directories and collect from files
+- Centralized logging driver: Use Docker's logging drivers to write to files that Promtail can read
+- Sidecar pattern: Run Promtail as a sidecar container with shared log volumes
+
+## Non-hardened images vs Docker Hardened Images
+
+### Key differences
+
+| Feature | Grafana Promtail | Docker Hardened Promtail |
+|---------|------------------|--------------------------|
+| Security | Standard base with common utilities | Minimal, hardened base with security patches |
+| Shell access | Full shell (bash/sh) available | No shell in runtime variants |
+| Package manager | apk available | No package manager in runtime variants |
+| User | Runs as root by default | Runs as nonroot user (UID 65532) |
+| Attack surface | Larger due to additional utilities | Minimal, only essential components |
+| Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
+
 
 ## Image variants
 
