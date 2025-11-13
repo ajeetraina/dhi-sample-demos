@@ -61,18 +61,39 @@ docker run -d --name promtail \
 Verify the setup
 
 ```
+cat > verify-promtail-loki.sh << 'EOF'
+#!/bin/bash
+
+# Promtail and Loki Setup Verification Script
+# This script verifies that Promtail and Loki are running correctly
+
+set -e  # Exit on error
+
+echo "=== Starting Verification Process ==="
+echo ""
+
 # Wait for services to start
+echo "Waiting for services to initialize..."
 sleep 15
 
 # Check containers are running
+echo "Checking if containers are running..."
 docker ps | grep -E "promtail|loki"
+echo ""
 
 # Check Promtail logs
+echo "Checking Promtail logs (last 10 lines)..."
 docker logs promtail | tail -n 10
+echo ""
 
 # Check Promtail metrics and log collection
+echo "Checking Promtail metrics..."
+echo "Active targets:"
 curl -s http://localhost:9080/metrics | grep promtail_targets_active_total
+echo ""
+echo "Sent entries:"
 curl -s http://localhost:9080/metrics | grep promtail_sent_entries_total
+echo ""
 
 # Wait for Loki to be fully ready
 echo "Waiting for Loki to be ready..."
@@ -84,11 +105,15 @@ for i in {1..30}; do
   echo "Waiting... ($i/30)"
   sleep 2
 done
+echo ""
 
 # Check available labels
+echo "Checking available labels in Loki..."
 curl -s http://localhost:3100/loki/api/v1/labels | jq
+echo ""
 
 # Query logs from Loki
+echo "Querying logs from Loki..."
 curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
   --data-urlencode 'query={job="varlogs"}' \
   --data-urlencode 'limit=5' | jq '.data.result[0].values'
@@ -97,6 +122,14 @@ echo ""
 echo "=== Setup Complete ==="
 echo "Promtail metrics: http://localhost:9080/metrics"
 echo "Loki API: http://localhost:3100"
+echo ""
+EOF
+
+# Make the script executable
+chmod +x verify-promtail-loki.sh
+
+# Run the verification
+./verify-promtail-loki.sh
 ```
 
 Note on ports: This example uses non-privileged port 9080 which works reliably with the nonroot user (UID 65532) across all environments.
