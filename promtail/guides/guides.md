@@ -58,7 +58,15 @@ docker run -d --name promtail \
   dockerdevrel/dhi-promtail:3.5.8 \
   -config.file=/etc/promtail/config.yml
 ```
-Verify the setup
+
+
+### Verify the setup
+
+By now, Promtail should be accessible via `http://localhost:9080/targets`. 
+This page shows all the log files being monitored and their current status.
+
+Let's verify they are up and healthy:
+
 
 ```
 cat > verify-promtail-loki.sh << 'EOF'
