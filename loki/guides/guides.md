@@ -177,7 +177,6 @@ docker logs loki 2>&1 | head -20
 Query logs directly using Loki's HTTP API:
 
 ```bash
-# Push a test log entry
 curl -H "Content-Type: application/json" \
   -X POST "http://localhost:3100/loki/api/v1/push" \
   --data-raw '{
@@ -187,15 +186,14 @@ curl -H "Content-Type: application/json" \
     }]
   }'
 
-# Query logs with label filter
+sleep 3
+
 curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
   --data-urlencode 'query={job="test"}' \
   --data-urlencode 'limit=10' | jq
 
-# Get all labels
 curl -s "http://localhost:3100/loki/api/v1/labels" | jq
 
-# Get values for a specific label
 curl -s "http://localhost:3100/loki/api/v1/label/job/values" | jq
 ```
 
