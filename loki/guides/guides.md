@@ -54,7 +54,7 @@ docker network create logging-net 2>/dev/null || true
 docker run -d --name loki \
   --network logging-net \
   -p 3100:3100 \
-  dockerdevrel/dhi-loki:3.4
+  <namespace>/dhi-loki:<tag>
 
 docker run -d --name promtail \
   --network logging-net \
@@ -91,14 +91,14 @@ docker run -d \
   --name loki \
   --network logging-net \
   -p 3100:3100 \
-  dockerdevrel/dhi-loki:3.4
+  <your_namespace>/dhi-loki:<tag>
 
 docker run -d \
   --name grafana \
   --network logging-net \
   -p 3000:3000 \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
-  dockerdevrel/dhi-grafana:11-debian13
+  <your_namespace>/dhi-grafana:<tag>
 
 sleep 10
 
