@@ -114,13 +114,13 @@ docker run -d \
   -p 3100:3100 \
   <your-namespace>/dhi-loki:3.4
 
-# Start Grafana
+# Start Grafana (DHI)
 docker run -d \
   --name grafana \
   --network logging-net \
   -p 3000:3000 \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
-  grafana/grafana:11.3.0
+  <your-namespace>/dhi-grafana:11-debian13
 
 # Wait for Grafana to start
 sleep 10
@@ -485,40 +485,13 @@ Non-dev hardened images run as a nonroot user by default. As a result, applicati
 
 If you need to expose Loki on port 80 or 443, use port mapping:
 
-```bash
-# Map container port 3100 to host port 80
-docker run -d \
-  --name loki \
-  -p 80:3100 \
-  <your-namespace>/dhi-loki:3.4
-```
 
 ### No shell
 
 By default, image variants intended for runtime don't contain a shell. Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
-```bash
-# Instead of exec with shell:
-docker exec loki sh  # ❌ Won't work - no shell
-
-# Use Docker Debug:
-docker debug loki    # ✅ Provides debug shell
-```
 
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
 
-```bash
-# Inspect the entry point
-docker inspect <your-namespace>/dhi-loki:3.4 \
-  --format='{{json .Config.Entrypoint}}' | jq
-
-# Inspect the command
-docker inspect <your-namespace>/dhi-loki:3.4 \
-  --format='{{json .Config.Cmd}}' | jq
-
-# See both together
-docker inspect <your-namespace>/dhi-loki:3.4 \
-  --format='Entrypoint: {{.Config.Entrypoint}} | Cmd: {{.Config.Cmd}}'
-```
