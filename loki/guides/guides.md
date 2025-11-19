@@ -16,6 +16,18 @@ For example, to run Loki 3.5.8:
 docker run -d -p 3100:3100 <your-namespace>/dhi-loki:3.5.8
 ```
 
+You can test the API endpoints by running the following command:
+
+```bash
+curl http://localhost:3100/ready
+```
+
+Also, you can check the metrics endpoint through this command:
+
+```bash
+curl http://localhost:3100/metrics
+```
+
 ## Common Loki use cases
 
 ### Log aggregation with Promtail
