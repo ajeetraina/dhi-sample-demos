@@ -61,7 +61,7 @@ docker run -d --name promtail \
   -p 9080:9080 \
   -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
   -v /var/log:/var/log:ro \
-  dockerdevrel/dhi-promtail:3.5.8 \
+  <your_namespace>/dhi-promtail:<tag> \
   -config.file=/etc/promtail/config.yml
 
 echo "Waiting for services to start..."
@@ -275,8 +275,8 @@ docker run --rm -it \
   --pid container:loki \
   --network container:loki \
   --cap-add SYS_PTRACE \
-  --mount=type=image,source=dockerdevrel/dhi-busybox,destination=/dbg,ro \
-  dockerdevrel/dhi-loki:3.4 /dbg/bin/sh
+  --mount=type=image,source=<your_namespace>/dhi-busybox,destination=/dbg,ro \
+  <your_namespace>/dhi-loki:<tag>/dbg/bin/sh
 ```
 
 ## Image variants
