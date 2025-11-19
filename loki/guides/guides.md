@@ -233,7 +233,7 @@ Key metrics include:
 ### Key differences
 
 | Feature | Docker Official Loki | Docker Hardened Loki | 
-|---------|---------------------|---------------------|------------|
+|---------|---------------------|---------------------|
 | Security | Standard base with common utilities | Minimal, hardened base with security patches | 
 | Shell access | Full shell (bash/sh) available | No shell in runtime variants | 
 | Package manager | apt/apk available | No package manager in runtime variants | 
