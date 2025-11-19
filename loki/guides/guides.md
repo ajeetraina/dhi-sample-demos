@@ -159,7 +159,7 @@ docker run -d --name loki \
   -p 3100:3100 \
   -v $(pwd)/config/loki-config.yaml:/etc/loki/config.yaml:ro \
   -v loki-data:/loki \
-  dockerdevrel/dhi-loki:3.4 \
+  <your_namespace>/dhi-loki:<tag> \
   -config.file=/etc/loki/config.yaml
 
 sleep 10
