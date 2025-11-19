@@ -7,13 +7,11 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 ## Start a Loki instance
 
 Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
-
 ```bash
 docker run -d --name loki -p 3100:3100 <your-namespace>/dhi-loki:<tag>
 ```
 
 Verify that Loki is running:
-
 ```bash
 # Check readiness (may take ~15 seconds)
 curl http://localhost:3100/ready
@@ -27,7 +25,6 @@ curl http://localhost:3100/metrics
 ### Log aggregation with Promtail
 
 Loki works seamlessly with Promtail for collecting and shipping logs. Here's how to set up a basic log collection pipeline using Docker Hardened Images:
-
 ```bash
 mkdir -p promtail/config
 
@@ -87,7 +84,6 @@ curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
 ### Integration with Grafana
 
 Loki integrates with Grafana for log visualization and querying:
-
 ```bash
 docker network create logging-net 2>/dev/null || true
 
@@ -120,7 +116,6 @@ Then configure Loki as a data source in Grafana:
 ### Custom configuration
 
 Run Loki with a custom configuration file:
-
 ```bash
 mkdir -p config
 
@@ -175,7 +170,6 @@ docker logs loki 2>&1 | head -20
 ### Query logs via API
 
 Query logs directly using Loki's HTTP API:
-
 ```bash
 curl -H "Content-Type: application/json" \
   -X POST "http://localhost:3100/loki/api/v1/push" \
@@ -200,7 +194,6 @@ curl -s "http://localhost:3100/loki/api/v1/label/job/values" | jq
 ### Access Prometheus metrics
 
 Loki exposes Prometheus-style metrics on the `/metrics` endpoint:
-
 ```bash
 # View all metrics
 curl http://localhost:3100/metrics
@@ -261,7 +254,6 @@ The hardened images intended for runtime don't contain a shell nor any tools for
 Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 For example, you can use Docker Debug:
-
 ```bash
 # Debug a running Loki container
 docker debug loki
@@ -274,14 +266,13 @@ docker debug loki
 ```
 
 or mount debugging tools with the Image Mount feature:
-
 ```bash
 docker run --rm -it \
   --pid container:loki \
   --network container:loki \
   --cap-add SYS_PTRACE \
-  --mount=type=image,source=<your-namespace>/dhi-busybox,destination=/dbg,ro \
-  <your-namespace>/dhi-loki:3.4 /dbg/bin/sh
+  --mount=type=image,source=dockerdevrel/dhi-busybox,destination=/dbg,ro \
+  dockerdevrel/dhi-loki:3.4 /dbg/bin/sh
 ```
 
 ## Image variants
@@ -332,12 +323,43 @@ Available FIPS tags for Loki include:
 **Verify FIPS mode:**
 
 Since DHI images don't include a shell, use Docker Debug to verify FIPS mode:
-
 ```bash
-# Start FIPS-enabled Loki container
-docker run -d --name loki-fips <your-namespace>/dhi-loki:3.4-fips
+docker run -d --name loki-fips \
+  -p 3100:3100 \
+  dockerdevrel/dhi-loki:3.4-fips
 
-# Use Docker Debug to check FIPS mode
+sleep 15
+
+curl http://localhost:3100/ready
+
+curl -s http://localhost:3100/metrics | grep loki_build_info
+```
+
+Push a test log to FIPS Loki:
+```bash
+curl -H "Content-Type: application/json" \
+  -X POST "http://localhost:3100/loki/api/v1/push" \
+  --data-raw '{
+    "streams": [{
+      "stream": { "job": "fips-test", "env": "production" },
+      "values": [ [ "'$(date +%s)000000000'", "FIPS-compliant log entry" ] ]
+    }]
+  }'
+
+sleep 3
+
+curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
+  --data-urlencode 'query={job="fips-test"}' \
+  --data-urlencode 'limit=5' | jq
+```
+
+Check FIPS-related logs:
+```bash
+docker logs loki-fips 2>&1 | grep -i fips
+```
+
+Use Docker Debug to verify FIPS mode (if Docker Debug is available):
+```bash
 docker debug loki-fips
 
 # Inside the debug shell:
@@ -350,12 +372,6 @@ openssl version
 
 # Exit debug shell
 exit
-```
-
-Alternatively, check the logs for FIPS-related messages:
-
-```bash
-docker logs loki-fips 2>&1 | grep -i fips
 ```
 
 ## Migrate to a Docker Hardened Image
@@ -382,14 +398,13 @@ The following steps outline the general migration process:
 2. **Update the base image in your Dockerfile.**
     
     Update the base image in your application's Dockerfile to the hardened image you found in the previous step.
-    
-    ```dockerfile
+```dockerfile
     # Before
     FROM grafana/loki:2.9.0
     
     # After
-    FROM <your-namespace>/dhi-loki:2.9.17
-    ```
+    FROM dockerdevrel/dhi-loki:2.9.17
+```
     
 3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
     
@@ -408,7 +423,6 @@ The following steps outline the general migration process:
 ### General debugging
 
 The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
-
 ```bash
 # Debug a running container
 docker debug <container-name>
@@ -426,7 +440,6 @@ By default image variants intended for runtime, run as the nonroot user (UID 655
 **Loki-specific permission considerations:**
 
 Docker Hardened Loki images use UID 65532 (nonroot), while official Grafana Loki images use UID 10001. When migrating from official Loki images to DHI Loki, update file permissions accordingly:
-
 ```bash
 # For Docker Hardened Loki (nonroot user, UID 65532)
 mkdir -p loki-data/{chunks,index,wal,tsdb-index,tsdb-cache,compactor}
@@ -441,7 +454,6 @@ chmod 644 config/loki-config.yaml
 ```
 
 **Common permission errors and fixes:**
-
 ```bash
 # Error: "permission denied" when writing to /loki
 # Solution: Ensure volume has correct ownership
@@ -453,7 +465,7 @@ docker run --rm -v loki-data:/loki alpine chown -R 65532:65532 /loki
 docker run -d \
   --name loki \
   -v loki-data:/loki \
-  <your-namespace>/dhi-loki:3.4
+  dockerdevrel/dhi-loki:3.4
 ```
 
 ### Privileged ports
@@ -461,14 +473,20 @@ docker run -d \
 Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Loki's default port 3100 is above 1024, so this is not typically an issue.
 
 If you need to expose Loki on port 80 or 443, use port mapping:
-
+```bash
+docker run -d \
+  --name loki \
+  -p 80:3100 \
+  dockerdevrel/dhi-loki:3.4
+```
 
 ### No shell
 
 By default, image variants intended for runtime don't contain a shell. Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
-
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
-
+```bash
+docker inspect dockerdevrel/dhi-loki:3.4 --format='{{.Config.Entrypoint}}'
+```
