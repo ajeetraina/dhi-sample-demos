@@ -228,14 +228,18 @@ Key metrics include:
 
 ### Key differences
 
-| Feature | Docker Official Loki | Docker Hardened Loki |
-|---------|------------------------------|------------------------------|
-| Security | Standard base with common utilities | Minimal, hardened base with security patches |
-| Shell access | Full shell (bash/sh) available | No shell in runtime variants |
-| Package manager | apt/apk available | No package manager in runtime variants |
-| User | Runs as user loki (UID 10001) | Runs as nonroot user (UID 65532) |
-| Attack surface | Larger due to additional utilities | Minimal, only essential components |
-| Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
+## Non-hardened images vs Docker Hardened Images
+
+### Key differences
+
+| Feature | Docker Official Loki | Docker Hardened Loki | 
+|---------|---------------------|---------------------|------------|
+| Security | Standard base with common utilities | Minimal, hardened base with security patches | 
+| Shell access | Full shell (bash/sh) available | No shell in runtime variants | 
+| Package manager | apt/apk available | No package manager in runtime variants | 
+| User | Runs as user loki (UID 10001) | Runs as nonroot user (UID 65532) | 
+| Attack surface | Larger due to additional utilities | Minimal, only essential components | 
+| Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting | 
 
 ### Why no shell or package manager?
 
