@@ -54,14 +54,14 @@ docker network create logging-net 2>/dev/null || true
 docker run -d --name loki \
   --network logging-net \
   -p 3100:3100 \
-  <namespace>/dhi-loki:<tag>
+  <your-namespace>/dhi-loki:<tag>
 
 docker run -d --name promtail \
   --network logging-net \
   -p 9080:9080 \
   -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
   -v /var/log:/var/log:ro \
-  <your_namespace>/dhi-promtail:<tag> \
+  <your-namespace>/dhi-promtail:<tag> \
   -config.file=/etc/promtail/config.yml
 
 echo "Waiting for services to start..."
@@ -91,14 +91,14 @@ docker run -d \
   --name loki \
   --network logging-net \
   -p 3100:3100 \
-  <your_namespace>/dhi-loki:<tag>
+  <your-namespace>/dhi-loki:<tag>
 
 docker run -d \
   --name grafana \
   --network logging-net \
   -p 3000:3000 \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
-  <your_namespace>/dhi-grafana:<tag>
+  <your-namespace>/dhi-grafana:<tag>
 
 sleep 10
 
@@ -159,7 +159,7 @@ docker run -d --name loki \
   -p 3100:3100 \
   -v $(pwd)/config/loki-config.yaml:/etc/loki/config.yaml:ro \
   -v loki-data:/loki \
-  <your_namespace>/dhi-loki:<tag> \
+  <your-namespace>/dhi-loki:<tag> \
   -config.file=/etc/loki/config.yaml
 
 sleep 10
@@ -258,25 +258,20 @@ The hardened images intended for runtime don't contain a shell nor any tools for
 Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 For example, you can use Docker Debug:
-```bash
-# Debug a running Loki container
-docker debug loki
 
-# Inside the debug shell, you can run commands like:
-# ps aux
-# netstat -tlnp
-# ls -la /loki/
-# exit
+```
+docker debug <image-name>
 ```
 
 or mount debugging tools with the Image Mount feature:
+
 ```bash
 docker run --rm -it \
   --pid container:loki \
   --network container:loki \
   --cap-add SYS_PTRACE \
   --mount=type=image,source=<your_namespace>/dhi-busybox,destination=/dbg,ro \
-  <your_namespace>/dhi-loki:<tag>/dbg/bin/sh
+  <your-namespace>/dhi-loki:<tag>/dbg/bin/sh
 ```
 
 ## Image variants
@@ -300,11 +295,6 @@ Docker Hardened Images come in different variants depending on their intended us
 
 FIPS variants include `fips` in the variant name and tag. They come in both runtime and build-time variants. These variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure cryptographic operations.
 
-Available FIPS tags for Loki include:
-- `2.9.17-fips`, `2.9.17-debian13-fips`
-- `3.4.6-fips`, `3.4.6-debian13-fips`
-- `3.5.8-fips`, `3.5.8-debian13-fips`
-
 **FIPS Runtime Requirements:**
 - FIPS mode enforces strict cryptographic operations
 - MD5 and other non-compliant algorithms will fail
@@ -314,6 +304,7 @@ Available FIPS tags for Loki include:
 **Verify FIPS mode:**
 
 Since DHI images don't include a shell, use Docker Debug to verify FIPS mode:
+
 ```bash
 docker run -d --name loki-fips \
   -p 3100:3100 \
