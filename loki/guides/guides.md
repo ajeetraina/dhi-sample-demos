@@ -1,5 +1,3 @@
-# Docker Hardened Loki
-
 ## Prerequisites
 
 Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository > Mirror to repository**, and then follow the on-screen instructions.
