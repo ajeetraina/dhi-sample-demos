@@ -89,25 +89,21 @@ curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
 Loki integrates with Grafana for log visualization and querying:
 
 ```bash
-# Create network if it doesn't exist
 docker network create logging-net 2>/dev/null || true
 
-# Start Loki (DHI)
 docker run -d \
   --name loki \
   --network logging-net \
   -p 3100:3100 \
-  <your-namespace>/dhi-loki:3.4
+  dockerdevrel/dhi-loki:3.4
 
-# Start Grafana (DHI)
 docker run -d \
   --name grafana \
   --network logging-net \
   -p 3000:3000 \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
-  <your-namespace>/dhi-grafana:11-debian13
+  dockerdevrel/dhi-grafana:11-debian13
 
-# Wait for Grafana to start
 sleep 10
 
 echo "Grafana is ready at http://localhost:3000"
