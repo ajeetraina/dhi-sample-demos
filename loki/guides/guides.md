@@ -122,10 +122,8 @@ Then configure Loki as a data source in Grafana:
 Run Loki with a custom configuration file:
 
 ```bash
-# Create Loki configuration directory
 mkdir -p config
 
-# Create Loki configuration
 cat > config/loki-config.yaml <<'EOF'
 auth_enabled: false
 
@@ -162,15 +160,15 @@ storage_config:
     directory: /loki/chunks
 EOF
 
-# Run Loki with custom configuration
 docker run -d --name loki \
   -p 3100:3100 \
   -v $(pwd)/config/loki-config.yaml:/etc/loki/config.yaml:ro \
   -v loki-data:/loki \
-  <your-namespace>/dhi-loki:3.4 \
+  dockerdevrel/dhi-loki:3.4 \
   -config.file=/etc/loki/config.yaml
 
-# Verify configuration loaded successfully
+sleep 10
+
 docker logs loki 2>&1 | head -20
 ```
 
