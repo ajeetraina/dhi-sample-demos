@@ -12,12 +12,6 @@ Run the following command and replace `<your-namespace>` with your organization'
 docker run -d --name loki -p 3100:3100 <your-namespace>/dhi-loki:<tag>
 ```
 
-For example, to run Loki 3.4:
-
-```bash
-docker run -d --name loki -p 3100:3100 <your-namespace>/dhi-loki:3.4
-```
-
 Verify that Loki is running:
 
 ```bash
