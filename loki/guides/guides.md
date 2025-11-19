@@ -29,10 +29,8 @@ curl http://localhost:3100/metrics
 Loki works seamlessly with Promtail for collecting and shipping logs. Here's how to set up a basic log collection pipeline using Docker Hardened Images:
 
 ```bash
-# Step 1: Create directory structure
 mkdir -p promtail/config
 
-# Step 2: Create Promtail configuration
 cat > promtail/config/promtail.yml <<'EOF'
 server:
   http_listen_port: 9080
@@ -54,35 +52,28 @@ scrape_configs:
           __path__: /var/log/*.log
 EOF
 
-# Step 3: Create logging network
 docker network create logging-net 2>/dev/null || true
 
-# Step 4: Start Loki (DHI)
 docker run -d --name loki \
   --network logging-net \
   -p 3100:3100 \
-  <your-namespace>/dhi-loki:3.4
+  dockerdevrel/dhi-loki:3.4
 
-# Step 5: Start Promtail (DHI)
 docker run -d --name promtail \
   --network logging-net \
   -p 9080:9080 \
   -v $PWD/promtail/config/promtail.yml:/etc/promtail/config.yml:ro \
   -v /var/log:/var/log:ro \
-  <your-namespace>/dhi-promtail:3.5.8 \
+  dockerdevrel/dhi-promtail:3.5.8 \
   -config.file=/etc/promtail/config.yml
 
-# Step 6: Verify the setup
 echo "Waiting for services to start..."
 sleep 15
 
-# Check Promtail is collecting logs
 curl -s http://localhost:9080/metrics | grep promtail_targets_active_total
 
-# Check logs are being sent to Loki
 curl -s http://localhost:3100/loki/api/v1/labels | jq
 
-# Query logs from Loki
 curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
   --data-urlencode 'query={job="varlogs"}' \
   --data-urlencode 'limit=5' | jq
