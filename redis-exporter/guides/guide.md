@@ -148,7 +148,7 @@ version: '3.8'
 
 services:
   redis:
-    image: <your-namespace>/dhi-redis:<tag>
+    image: <your-namespace>/dhi-redis:<tag>  # Use :8 for Redis
     container_name: redis-server
     ports:
       - "6379:6379"
@@ -157,7 +157,7 @@ services:
     restart: unless-stopped
 
   redis-exporter:
-    image: <your-namespace>/dhi-redis-exporter:<tag>
+    image: <your-namespace>/dhi-redis-exporter:<tag>  # Use :1.80.1 for exporter
     container_name: redis-exporter
     ports:
       - "9121:9121"
@@ -176,25 +176,29 @@ volumes:
 
 Configure Prometheus to scrape Redis Exporter metrics:
 
-**prometheus.yml**:
+**First, create prometheus.yml in your current directory:**
 ```yaml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
 scrape_configs:
   - job_name: 'redis'
     static_configs:
       - targets: ['redis-exporter:9121']
 ```
 
-**docker-compose.yml**:
+**Then create docker-compose.yml:**
 ```yaml
 version: '3.8'
 
 services:
   redis:
-    image: <your-namespace>/dhi-redis:<tag>
+    image: <your-namespace>/dhi-redis:<tag>  # Use :8 for Redis
     container_name: redis-server
 
   redis-exporter:
-    image: <your-namespace>/dhi-redis-exporter:<tag>
+    image: <your-namespace>/dhi-redis-exporter:<tag>  # Use :1.80.1 for exporter
     container_name: redis-exporter
     command: --redis.addr=redis://redis:6379
     depends_on:
