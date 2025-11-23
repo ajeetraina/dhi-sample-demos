@@ -12,21 +12,21 @@ To run a redis-exporter DHI container:
 
 ```bash
 # Basic usage - single Redis instance (requires Redis to be accessible)
-$ docker run -d \
+docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
   dockerdevrel/dhi-redis-exporter:1.80.1 \
   --redis.addr=redis://redis-server:6379
 
 # Multi-target mode - no specific Redis instance (useful for testing)
-$ docker run -d \
+docker run -d \
   --name redis-exporter-multi \
   -p 9121:9121 \
   dockerdevrel/dhi-redis-exporter:1.80.1 \
   --redis.addr=
 
 # Using FIPS variant for compliance requirements
-$ docker run -d \
+docker run -d \
   --name redis-exporter-fips \
   -p 9121:9121 \
   dockerdevrel/dhi-redis-exporter:1.80.1-fips \
@@ -53,7 +53,7 @@ Redis Exporter can be configured using environment variables as an alternative t
 Example with environment variables:
 
 ```bash
-$ docker run -d \
+docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
   -e REDIS_ADDR=redis://redis-server:6379 \
