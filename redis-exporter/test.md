@@ -220,51 +220,6 @@ services:
       - redis-exporter
 ```
 
-### Monitoring with authentication
-
-Monitor Redis instances with password authentication:
-
-```bash
-# Start Redis with password (requirepass option)
-$ docker run -d \
-  --name redis-server-auth \
-  -p 6382:6379 \
-  dockerdevrel/dhi-redis:8 \
-  redis-server --requirepass your-secure-password
-
-# Start exporter with authentication
-$ docker run -d \
-  --name redis-exporter-auth \
-  -p 9124:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
-  --redis.addr=redis://redis-server-auth:6379 \
-  --redis.password=your-secure-password
-
-# Access metrics
-$ curl http://localhost:9124/metrics
-
-# Clean up after testing
-$ docker rm -f redis-server-auth redis-exporter-auth
-```
-
-### Redis Cluster monitoring
-
-Monitor a Redis Cluster:
-
-```bash
-$ docker run -d \
-  --name redis-exporter-cluster \
-  -p 9121:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
-  --redis.addr=redis://redis-cluster:6379 \
-  --redis.password=your-secure-password \
-  --is-cluster \
-  --check-keys=* \
-  --check-single-keys=db0=user:*,db0=session:*
-```
-
-**Note**: This example assumes you have a Redis Cluster already configured and running. Setting up a Redis Cluster is beyond the scope of this guide.
-
 ## Non-hardened images vs Docker Hardened Images
 
 ### Key differences
