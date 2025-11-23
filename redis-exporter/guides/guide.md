@@ -6,18 +6,6 @@ Redis Exporter is a Prometheus exporter for Redis metrics. It exposes metrics fr
 
 **Note**: All examples in this guide use Docker Hardened Images for both Redis (`dockerdevrel/dhi-redis:8`) and Redis Exporter, demonstrating how DHI images work together in a secure, hardened environment.
 
-### Available tags
-
-The `dockerdevrel/dhi-redis-exporter` image provides Debian-based variants only:
-
-- **Standard Debian-based**: `1.80.1-debian13`, `1.80-debian13`, `1-debian13`, `1.80.1`, `1.80`, `1`
-  - **Uncompressed**: ~24MB, **Compressed**: ~7.37MB
-  
-- **FIPS Debian-based**: `1.80.1-debian13-fips`, `1.80-debian13-fips`, `1-debian13-fips`, `1.80.1-fips`, `1.80-fips`, `1-fips`
-  - **Uncompressed**: ~60MB, **Compressed**: ~19.16MB
-
-All variants support both `linux/amd64` and `linux/arm64` architectures.
-
 ### Start a redis-exporter DHI container
 
 To run a redis-exporter DHI container:
