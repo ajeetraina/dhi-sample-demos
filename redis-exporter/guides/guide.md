@@ -4,6 +4,19 @@
 
 Redis Exporter is a Prometheus exporter for Redis metrics. It exposes metrics from Redis instances via HTTP endpoints that can be scraped by Prometheus or other monitoring systems.
 
+**Note**: All examples in this guide use Docker Hardened Images for both Redis (`dockerdevrel/dhi-redis:8`) and Redis Exporter, demonstrating how DHI images work together in a secure, hardened environment.
+
+### Available tags
+
+The `dockerdevrel/dhi-redis-exporter` image provides Debian-based variants only:
+
+- **Standard Debian-based**: `1.80.1-debian13`, `1.80-debian13`, `1-debian13`, `1.80.1`, `1.80`, `1`
+  - **Uncompressed**: ~24MB, **Compressed**: ~7.37MB
+  
+- **FIPS Debian-based**: `1.80.1-debian13-fips`, `1.80-debian13-fips`, `1-debian13-fips`, `1.80.1-fips`, `1.80-fips`, `1-fips`
+  - **Uncompressed**: ~60MB, **Compressed**: ~19.16MB
+
+All variants support both `linux/amd64` and `linux/arm64` architectures.
 
 ### Start a redis-exporter DHI container
 
@@ -80,14 +93,14 @@ $ docker inspect dockerdevrel/dhi-redis-exporter:1.80.1 --format='{{.Config.Labe
 
 ### Quick test with Redis
 
-To test with an actual Redis instance, use Docker Compose:
+To test with an actual Redis instance, use Docker Compose with DHI Redis:
 
 ```yaml
 # quick-test-compose.yml
 version: '3.8'
 services:
   redis:
-    image: redis:7-alpine
+    image: dockerdevrel/dhi-redis:8
     ports:
       - "6379:6379"
   
@@ -183,20 +196,20 @@ $ docker run -d \
 
 ### Docker Compose deployment
 
-Complete monitoring stack with Redis and Redis Exporter:
+Complete monitoring stack with DHI Redis and Redis Exporter:
 
 ```yaml
 version: '3.8'
 
 services:
   redis:
-    image: redis:7-alpine
+    image: dockerdevrel/dhi-redis:8
     container_name: redis-server
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
+    restart: unless-stopped
 
   redis-exporter:
     image: dockerdevrel/dhi-redis-exporter:1.80.1
@@ -221,6 +234,9 @@ $ docker-compose up -d
 
 # Verify metrics are being collected
 $ curl http://localhost:9121/metrics | grep redis_
+
+# View Redis-specific metrics
+$ curl http://localhost:9121/metrics | grep -E "redis_connected_clients|redis_uptime_in_seconds"
 ```
 
 ### FIPS-compliant monitoring
@@ -239,7 +255,7 @@ $ docker run -d \
 
 ### Integration with Prometheus
 
-Configure Prometheus to scrape Redis Exporter metrics:
+Configure Prometheus to scrape Redis Exporter metrics with DHI images:
 
 **prometheus.yml**:
 ```yaml
@@ -255,7 +271,7 @@ version: '3.8'
 
 services:
   redis:
-    image: redis:7-alpine
+    image: dockerdevrel/dhi-redis:8
     container_name: redis-server
 
   redis-exporter:
@@ -276,6 +292,18 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
     depends_on:
       - redis-exporter
+```
+
+Start and verify:
+
+```bash
+$ docker-compose up -d
+
+# Verify Prometheus can scrape metrics
+$ curl http://localhost:9090/api/v1/targets
+
+# Query Redis metrics from Prometheus
+$ curl 'http://localhost:9090/api/v1/query?query=redis_up'
 ```
 
 ### Multi-stage Dockerfile integration
@@ -343,6 +371,71 @@ $ docker run -d \
   --is-cluster \
   --check-keys=* \
   --check-single-keys=db0=user:*,db0=session:*
+```
+
+### Using DHI Redis with DHI Redis Exporter
+
+For a fully hardened monitoring solution, use DHI Redis together with DHI Redis Exporter:
+
+```yaml
+version: '3.8'
+
+services:
+  # Hardened Redis instance
+  redis:
+    image: dockerdevrel/dhi-redis:8
+    container_name: redis-hardened
+    command:
+      - --maxmemory 256mb
+      - --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - redis-net
+    restart: unless-stopped
+
+  # Hardened Redis Exporter
+  redis-exporter:
+    image: dockerdevrel/dhi-redis-exporter:1.80.1
+    container_name: redis-exporter-hardened
+    command:
+      - --redis.addr=redis://redis:6379
+      - --include-system-metrics
+      - --check-keys=*
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+    networks:
+      - redis-net
+    restart: unless-stopped
+
+networks:
+  redis-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+```
+
+**Benefits of using DHI Redis + DHI Redis Exporter:**
+- **Consistent security posture**: Both images follow the same hardening standards
+- **Reduced attack surface**: Minimal utilities in both containers
+- **Compliance ready**: Both run as nonroot users with no shell access
+- **Simplified auditing**: All components from trusted DHI catalog
+- **Production hardened**: Designed for secure, production deployments
+
+Start the fully hardened stack:
+
+```bash
+$ docker-compose up -d
+
+# Verify both containers are running as nonroot
+$ docker exec redis-hardened id
+$ docker exec redis-exporter-hardened id
+
+# Check metrics
+$ curl http://localhost:9121/metrics | grep redis_up
 ```
 
 ### Choosing between variants
