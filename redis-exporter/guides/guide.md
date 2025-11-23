@@ -9,6 +9,13 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
 ```bash
+# First, start a Redis instance
+$ docker run -d \
+  --name redis-server \
+  -p 6379:6379 \
+  <your-namespace>/dhi-redis:<tag>
+
+# Then start the redis-exporter
 $ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
@@ -23,6 +30,13 @@ $ docker run -d \
 Monitor a single Redis instance with default settings:
 
 ```bash
+# First, start a Redis instance
+$ docker run -d \
+  --name redis-server \
+  -p 6379:6379 \
+  <your-namespace>/dhi-redis:<tag>
+
+# Then start the exporter to monitor it
 $ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
@@ -57,20 +71,36 @@ $ curl http://localhost:9121/scrape?target=redis://redis-server-2:6380
 Configure using environment variables instead of command flags:
 
 ```bash
+# Start Redis instance (if not already running from previous example)
 $ docker run -d \
-  --name redis-exporter \
-  -p 9121:9121 \
+  --name redis-server \
+  -p 6379:6379 \
+  <your-namespace>/dhi-redis:<tag>
+
+# Start exporter with environment variables
+$ docker run -d \
+  --name redis-exporter-env \
+  -p 9122:9121 \
   -e REDIS_ADDR=redis://redis-server:6379 \
   -e REDIS_EXPORTER_WEB_LISTEN_ADDRESS=0.0.0.0:9121 \
   -e REDIS_EXPORTER_WEB_TELEMETRY_PATH=/metrics \
   <your-namespace>/dhi-redis-exporter:<tag>
 ```
 
+**Note**: Uses port 9122 on host to avoid conflict with previous example.
+
 ### Custom metrics configuration
 
 Expose metrics on custom port/path and monitor specific keys:
 
 ```bash
+# Start Redis instance (if not already running)
+$ docker run -d \
+  --name redis-server \
+  -p 6379:6379 \
+  <your-namespace>/dhi-redis:<tag>
+
+# Start exporter with custom configuration
 $ docker run -d \
   --name redis-exporter-custom \
   -p 8080:8080 \
@@ -162,13 +192,23 @@ services:
 Monitor Redis instances with password authentication:
 
 ```bash
+# Start Redis with password (requirepass option)
 $ docker run -d \
-  --name redis-exporter \
-  -p 9121:9121 \
+  --name redis-server-auth \
+  -p 6380:6379 \
+  <your-namespace>/dhi-redis:<tag> \
+  redis-server --requirepass your-secure-password
+
+# Start exporter with authentication
+$ docker run -d \
+  --name redis-exporter-auth \
+  -p 9123:9121 \
   <your-namespace>/dhi-redis-exporter:<tag> \
-  --redis.addr=redis://redis-server:6379 \
+  --redis.addr=redis://redis-server-auth:6379 \
   --redis.password=your-secure-password
 ```
+
+**Note**: Uses different container names and ports to avoid conflicts with previous examples.
 
 ### Redis Cluster monitoring
 
@@ -185,6 +225,8 @@ $ docker run -d \
   --check-keys=* \
   --check-single-keys=db0=user:*,db0=session:*
 ```
+
+**Note**: This example assumes you have a Redis Cluster already configured and running. Setting up a Redis Cluster is beyond the scope of this guide.
 
 ## Non-hardened images vs Docker Hardened Images
 
