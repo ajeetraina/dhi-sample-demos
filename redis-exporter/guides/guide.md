@@ -1,210 +1,36 @@
-# Redis Exporter Docker Hardened Image (DHI) Guide
+# Redis Exporter Docker Hardened Image Guide
 
-## How to use this image
+## Prerequisites
 
-Redis Exporter is a Prometheus exporter for Redis metrics. It exposes metrics from Redis instances via HTTP endpoints that can be scraped by Prometheus or other monitoring systems.
+Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository > Mirror to repository**, and then follow the on-screen instructions.
 
-**Note**: All examples in this guide use Docker Hardened Images for both Redis (`dockerdevrel/dhi-redis:8`) and Redis Exporter, demonstrating how DHI images work together in a secure, hardened environment.
+## Start a redis-exporter instance
 
-### Start a redis-exporter DHI container
-
-To run a redis-exporter DHI container, choose one of the following approaches:
+Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
 ```bash
-# First, start a DHI Redis instance (if not already running)
-$ docker run -d \
-  --name redis-server \
-  -p 6379:6379 \
-  dockerdevrel/dhi-redis:8
-
-# Option 1: Basic usage - monitor the Redis instance
 $ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
-  --redis.addr=redis://redis-server:6379
-
-# Option 2: Multi-target mode - no specific Redis instance (useful for testing)
-$ docker run -d \
-  --name redis-exporter-multi \
-  -p 9122:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
-  --redis.addr=
-
-# Option 3: Using FIPS variant for compliance requirements
-$ docker run -d \
-  --name redis-exporter-fips \
-  -p 9123:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1-fips \
+  <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=redis://redis-server:6379
 ```
 
-**Note**: The examples above use different host ports (9121, 9122, 9123) so you can run multiple exporters simultaneously for testing. In production, you would typically run only one exporter per host using port 9121.
-
-**Connection behavior**: If Redis is not accessible at the specified address, the exporter will still start and expose metrics, but `redis_up` will be 0 and connection errors will be visible in the metrics output. The exporter will continue attempting to connect.
-
-### Environment variables
-
-Redis Exporter can be configured using environment variables as an alternative to command-line flags:
-
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `REDIS_ADDR` | Redis instance address | localhost:6379 | redis://redis:6379 |
-| `REDIS_USER` | Redis ACL username | - | myuser |
-| `REDIS_PASSWORD` | Redis password | - | secret123 |
-| `REDIS_EXPORTER_WEB_LISTEN_ADDRESS` | Address to listen on for web interface and telemetry | 0.0.0.0:9121 | 0.0.0.0:8080 |
-| `REDIS_EXPORTER_WEB_TELEMETRY_PATH` | Path under which to expose metrics | /metrics | /custom-metrics |
-| `REDIS_EXPORTER_NAMESPACE` | Namespace for metrics | redis | custom_redis |
-| `REDIS_EXPORTER_LOG_FORMAT` | Log format (txt or json) | txt | json |
-| `REDIS_EXPORTER_DEBUG` | Enable debug output | false | true |
-
-Example with environment variables:
-
-```bash
-# Start DHI Redis instance
-$ docker run -d \
-  --name redis-server \
-  -p 6379:6379 \
-  dockerdevrel/dhi-redis:8
-
-# Start exporter with environment variables
-$ docker run -d \
-  --name redis-exporter \
-  -p 9121:9121 \
-  -e REDIS_ADDR=redis://redis-server:6379 \
-  -e REDIS_PASSWORD=mypassword \
-  -e REDIS_EXPORTER_LOG_FORMAT=json \
-  dockerdevrel/dhi-redis-exporter:1.80.1
-```
-
-### Test the redis-exporter DHI instance
-
-Verify redis-exporter is working correctly:
-
-```bash
-# Check health endpoint (standard exporter on port 9121)
-$ curl http://localhost:9121/health
-
-# Check multi-target exporter on port 9122
-$ curl http://localhost:9122/health
-
-# Check FIPS exporter on port 9123
-$ curl http://localhost:9123/health
-
-# View metrics from standard exporter
-$ curl http://localhost:9121/metrics
-
-# Verify version and DHI metadata
-$ docker inspect dockerdevrel/dhi-redis-exporter:1.80.1 --format='{{.Config.Labels.com.docker.dhi.version}}'
-```
-
-**Note**: If you start the exporter without an actual Redis instance available, you'll see `redis_up 0` and a connection error in the metrics. This is expected behavior - the exporter itself is working correctly and will connect once Redis is available.
-
-### Quick test with Redis
-
-The easiest way to test with a working Redis connection is using Docker Compose:
-
-```yaml
-# quick-test-compose.yml
-version: '3.8'
-services:
-  redis:
-    image: dockerdevrel/dhi-redis:8
-    ports:
-      - "6379:6379"
-  
-  redis-exporter:
-    image: dockerdevrel/dhi-redis-exporter:1.80.1
-    ports:
-      - "9121:9121"
-    command: --redis.addr=redis://redis:6379
-    depends_on:
-      - redis
-```
-
-```bash
-# Start the test stack
-$ docker-compose -f quick-test-compose.yml up -d
-
-# Verify Redis connection is successful (redis_up should be 1)
-$ curl http://localhost:9121/metrics | grep "redis_up 1"
-
-# View all Redis metrics
-$ curl http://localhost:9121/metrics | grep redis_
-
-# Clean up
-$ docker-compose -f quick-test-compose.yml down
-```
-
-**Alternative: Using docker network for standalone containers**
-
-If you prefer `docker run` commands over Docker Compose:
-
-```bash
-# Create a network
-$ docker network create redis-net
-
-# Start DHI Redis
-$ docker run -d \
-  --name redis-server \
-  --network redis-net \
-  dockerdevrel/dhi-redis:8
-
-# Start exporter
-$ docker run -d \
-  --name redis-exporter \
-  --network redis-net \
-  -p 9121:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
-  --redis.addr=redis://redis-server:6379
-
-# Test the connection
-$ curl http://localhost:9121/metrics | grep "redis_up 1"
-
-# Clean up
-$ docker rm -f redis-server redis-exporter
-$ docker network rm redis-net
-```
-
-## Common redis-exporter DHI use cases
+## Common redis-exporter use cases
 
 ### Single Redis instance monitoring
 
 Monitor a single Redis instance with default settings:
 
 ```bash
-# First, start a DHI Redis instance
-$ docker run -d \
-  --name redis-server \
-  -p 6379:6379 \
-  dockerdevrel/dhi-redis:8
-
-# Then start the exporter to monitor it
 $ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
+  <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=redis://redis-server:6379
 ```
 
 Access metrics at `http://localhost:9121/metrics` for Prometheus scraping.
-
-### Environment variable configuration
-
-Configure using environment variables instead of command flags (assuming DHI Redis from previous example is running):
-
-```bash
-$ docker run -d \
-  --name redis-exporter-env \
-  -p 9122:9121 \
-  -e REDIS_ADDR=redis://redis-server:6379 \
-  -e REDIS_EXPORTER_WEB_LISTEN_ADDRESS=0.0.0.0:9121 \
-  -e REDIS_EXPORTER_WEB_TELEMETRY_PATH=/metrics \
-  dockerdevrel/dhi-redis-exporter:1.80.1
-
-# Access metrics on the mapped port
-$ curl http://localhost:9122/metrics
-```
 
 ### Multi-target monitoring
 
@@ -215,18 +41,29 @@ Run in multi-target mode to scrape multiple Redis instances via the `/scrape` en
 $ docker run -d \
   --name redis-exporter-multi \
   -p 9121:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
+  <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=
 ```
 
 Then scrape different Redis instances dynamically:
 
 ```bash
-# Scrape Redis instance 1
 $ curl http://localhost:9121/scrape?target=redis://redis-server-1:6379
-
-# Scrape Redis instance 2
 $ curl http://localhost:9121/scrape?target=redis://redis-server-2:6380
+```
+
+### Environment variable configuration
+
+Configure using environment variables instead of command flags:
+
+```bash
+$ docker run -d \
+  --name redis-exporter \
+  -p 9121:9121 \
+  -e REDIS_ADDR=redis://redis-server:6379 \
+  -e REDIS_EXPORTER_WEB_LISTEN_ADDRESS=0.0.0.0:9121 \
+  -e REDIS_EXPORTER_WEB_TELEMETRY_PATH=/metrics \
+  <your-namespace>/dhi-redis-exporter:<tag>
 ```
 
 ### Custom metrics configuration
@@ -234,38 +71,28 @@ $ curl http://localhost:9121/scrape?target=redis://redis-server-2:6380
 Expose metrics on custom port/path and monitor specific keys:
 
 ```bash
-# Start DHI Redis instance
-$ docker run -d \
-  --name redis-server \
-  -p 6379:6379 \
-  dockerdevrel/dhi-redis:8
-
-# Start exporter with custom configuration
 $ docker run -d \
   --name redis-exporter-custom \
   -p 8080:8080 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
+  <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=redis://redis-server:6379 \
   --web.listen-address=0.0.0.0:8080 \
   --web.telemetry-path=/custom-metrics \
   --namespace=custom_redis \
   --include-system-metrics \
   --check-single-keys=db0=user:count,db0=queue:tasks
-
-# Access custom metrics endpoint
-$ curl http://localhost:8080/custom-metrics
 ```
 
 ### Docker Compose deployment
 
-Complete monitoring stack with DHI Redis and Redis Exporter:
+Complete monitoring stack with Redis and Redis Exporter:
 
 ```yaml
 version: '3.8'
 
 services:
   redis:
-    image: dockerdevrel/dhi-redis:8
+    image: <your-namespace>/dhi-redis:<tag>
     container_name: redis-server
     ports:
       - "6379:6379"
@@ -274,7 +101,7 @@ services:
     restart: unless-stopped
 
   redis-exporter:
-    image: dockerdevrel/dhi-redis-exporter:1.80.1
+    image: <your-namespace>/dhi-redis-exporter:<tag>
     container_name: redis-exporter
     ports:
       - "9121:9121"
@@ -289,35 +116,9 @@ volumes:
   redis-data:
 ```
 
-Start the stack:
-
-```bash
-$ docker-compose up -d
-
-# Verify metrics are being collected
-$ curl http://localhost:9121/metrics | grep redis_
-
-# View Redis-specific metrics
-$ curl http://localhost:9121/metrics | grep -E "redis_connected_clients|redis_uptime_in_seconds"
-```
-
-### FIPS-compliant monitoring
-
-For environments requiring FIPS 140 validated cryptography:
-
-```bash
-$ docker run -d \
-  --name redis-exporter-fips \
-  -p 9121:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1-fips \
-  --redis.addr=redis://redis-server:6379
-```
-
-**Note**: FIPS variants disable non-compliant cryptographic operations like MD5.
-
 ### Integration with Prometheus
 
-Configure Prometheus to scrape Redis Exporter metrics with DHI images:
+Configure Prometheus to scrape Redis Exporter metrics:
 
 **prometheus.yml**:
 ```yaml
@@ -333,11 +134,11 @@ version: '3.8'
 
 services:
   redis:
-    image: dockerdevrel/dhi-redis:8
+    image: <your-namespace>/dhi-redis:<tag>
     container_name: redis-server
 
   redis-exporter:
-    image: dockerdevrel/dhi-redis-exporter:1.80.1
+    image: <your-namespace>/dhi-redis-exporter:<tag>
     container_name: redis-exporter
     command: --redis.addr=redis://redis:6379
     depends_on:
@@ -356,78 +157,28 @@ services:
       - redis-exporter
 ```
 
-Start and verify:
+### Monitoring with authentication
+
+Monitor Redis instances with password authentication:
 
 ```bash
-$ docker-compose up -d
-
-# Verify Prometheus can scrape metrics
-$ curl http://localhost:9090/api/v1/targets
-
-# Query Redis metrics from Prometheus
-$ curl 'http://localhost:9090/api/v1/query?query=redis_up'
-```
-
-### Multi-stage Dockerfile integration
-
-Build a custom monitoring solution with Redis Exporter:
-
-```dockerfile
-# syntax=docker/dockerfile:1
-# Configuration stage
-FROM alpine:latest AS config-builder
-
-WORKDIR /config
-
-# Create custom exporter configuration
-RUN echo '#!/bin/sh' > start-exporter.sh && \
-    echo 'exec /redis_exporter "$@"' >> start-exporter.sh && \
-    chmod +x start-exporter.sh
-
-# Create Prometheus scrape configuration
-RUN cat > redis-targets.yml <<EOF
-- targets:
-  - redis://redis-primary:6379
-  - redis://redis-replica-1:6379
-  - redis://redis-replica-2:6379
-  labels:
-    env: production
-EOF
-
-# Runtime stage - DHI for production
-FROM dockerdevrel/dhi-redis-exporter:1.80.1
-
-WORKDIR /app
-
-# Copy configuration from builder stage
-COPY --from=config-builder /config/redis-targets.yml /app/redis-targets.yml
-
-# Default command with custom settings
-CMD ["--redis.addr=redis://redis:6379", "--include-system-metrics", "--namespace=production"]
-```
-
-Build and run:
-
-```bash
-# Build the image
-$ docker build -t my-redis-exporter .
-
-# Run with custom configuration
 $ docker run -d \
-  --name my-redis-exporter \
+  --name redis-exporter \
   -p 9121:9121 \
-  my-redis-exporter
+  <your-namespace>/dhi-redis-exporter:<tag> \
+  --redis.addr=redis://redis-server:6379 \
+  --redis.password=your-secure-password
 ```
 
-### Monitoring Redis Cluster
+### Redis Cluster monitoring
 
-Monitor a Redis Cluster with authentication (this example assumes you have a Redis Cluster already configured):
+Monitor a Redis Cluster:
 
 ```bash
 $ docker run -d \
   --name redis-exporter-cluster \
   -p 9121:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
+  <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=redis://redis-cluster:6379 \
   --redis.password=your-secure-password \
   --is-cluster \
@@ -435,207 +186,125 @@ $ docker run -d \
   --check-single-keys=db0=user:*,db0=session:*
 ```
 
-**Note**: For production deployments, use `dockerdevrel/dhi-redis:8` for all Redis cluster nodes to maintain consistent security hardening across your cluster.
-
-### Using DHI Redis with DHI Redis Exporter
-
-For a fully hardened monitoring solution, use DHI Redis together with DHI Redis Exporter:
-
-```yaml
-version: '3.8'
-
-services:
-  # Hardened Redis instance
-  redis:
-    image: dockerdevrel/dhi-redis:8
-    container_name: redis-hardened
-    command:
-      - --maxmemory 256mb
-      - --maxmemory-policy allkeys-lru
-    volumes:
-      - redis-data:/data
-    networks:
-      - redis-net
-    restart: unless-stopped
-
-  # Hardened Redis Exporter
-  redis-exporter:
-    image: dockerdevrel/dhi-redis-exporter:1.80.1
-    container_name: redis-exporter-hardened
-    command:
-      - --redis.addr=redis://redis:6379
-      - --include-system-metrics
-      - --check-keys=*
-    ports:
-      - "9121:9121"
-    depends_on:
-      - redis
-    networks:
-      - redis-net
-    restart: unless-stopped
-
-networks:
-  redis-net:
-    driver: bridge
-
-volumes:
-  redis-data:
-```
-
-**Benefits of using DHI Redis + DHI Redis Exporter:**
-- **Consistent security posture**: Both images follow the same hardening standards
-- **Reduced attack surface**: Minimal utilities in both containers
-- **Compliance ready**: Both run as nonroot users with no shell access
-- **Simplified auditing**: All components from trusted DHI catalog
-- **Production hardened**: Designed for secure, production deployments
-
-Start the fully hardened stack:
-
-```bash
-$ docker-compose up -d
-
-# Verify both containers are running as nonroot
-$ docker exec redis-hardened id
-$ docker exec redis-exporter-hardened id
-
-# Check metrics
-$ curl http://localhost:9121/metrics | grep redis_up
-```
-
-### Choosing between variants
-
-**Standard Debian variants** (`1.80.1-debian13`):
-- **Pros**: Smaller size (7.37MB compressed), standard cryptography, sufficient for most use cases
-- **Cons**: Not FIPS-compliant
-- **Use when**: Standard monitoring needs, no regulatory requirements for FIPS
-
-**FIPS Debian variants** (`1.80.1-debian13-fips`):
-- **Pros**: FIPS 140 validated cryptography, regulatory compliance
-- **Cons**: Larger size (19.16MB compressed), restricts some cryptographic operations
-- **Use when**: Government/regulated environments, compliance requirements mandate FIPS
-
-**Both variants**: Hardened with no shell access - use `docker debug` if debugging is needed.
-
 ## Non-hardened images vs Docker Hardened Images
 
-| Feature | Standard Redis Exporter Images | Docker Hardened Redis Exporter |
+### Key differences
+
+| Feature | Docker Official redis-exporter | Docker Hardened redis-exporter |
 |---------|-------------------------------|--------------------------------|
-| **Security** | Standard base image | Hardened base with reduced attack surface |
-| **Shell access** | Shell available | No shell access (exporter-only) |
-| **Package manager** | Package managers available | Package managers removed |
-| **User** | May run as root | Runs as nonroot user |
-| **System utilities** | Full system utilities | Minimal utilities (no debugging tools) |
-| **FIPS compliance** | Not available | FIPS variants available |
-| **Image size** | Varies | Optimized and minimal |
-| **Debugging** | Standard tools available | Requires `docker debug` |
+| Security | Standard base with common utilities | Minimal, hardened base with security patches |
+| Shell access | Full shell (bash/sh) available | No shell in runtime variants |
+| Package manager | apt/apk available | No package manager in runtime variants |
+| User | Runs as root by default | Runs as nonroot user |
+| Attack surface | Larger due to additional utilities | Minimal, only essential components |
+| Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
+
+### Why no shell or package manager?
+
+Docker Hardened Images prioritize security through minimalism:
+
+- Reduced attack surface: Fewer binaries mean fewer potential vulnerabilities
+- Immutable infrastructure: Runtime containers shouldn't be modified after deployment
+- Compliance ready: Meets strict security requirements for regulated environments
+
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
+
+- [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers
+- Docker's Image Mount feature to mount debugging tools
+- Ecosystem-specific debugging approaches
+
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+
+For example, you can use Docker Debug:
+
+```bash
+$ docker debug <container-name>
+```
+
+or mount debugging tools with the Image Mount feature:
+
+```bash
+$ docker run --rm -it --pid container:my-container \
+  --mount=type=image,source=<your-namespace>/dhi-busybox,destination=/dbg,ro \
+  <your-namespace>/dhi-redis-exporter:<tag> /dbg/bin/sh
+```
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by their tag.
+Docker Hardened Images come in different variants depending on their intended use.
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
 
-  - Run as a nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+- Run as the nonroot user
+- Do not include a shell or a package manager
+- Contain only the minimal set of libraries needed to run the app
 
-- Build-time variants typically include `dev` in the tag name and are intended for use in the first stage of a multi-stage Dockerfile. These images typically:
+Build-time variants typically include `dev` in the variant name and are intended for use in the first stage of a multi-stage Dockerfile. These images typically:
 
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
+- Run as the root user
+- Include a shell and package manager
+- Are used to build or compile applications
 
-- FIPS variants include `fips` in the variant name and tag. They come in both runtime and build-time variants. These variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure cryptographic operations. For example, usage of MD5 fails in FIPS variants.
+### FIPS variants
 
-To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
+FIPS variants include `fips` in the variant name and tag. They come in both runtime and build-time variants. These variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure cryptographic operations.
+
+**Runtime requirements specific to FIPS:**
+- FIPS mode restricts cryptographic operations to FIPS-validated algorithms
+- Usage of non-compliant operations (like MD5) will fail
+- Larger image size due to FIPS-validated cryptographic libraries
+
+**Steps to verify FIPS:**
+```bash
+# Check if FIPS variant is being used
+$ docker inspect <your-namespace>/dhi-redis-exporter:<tag> | grep fips
+
+# Verify FIPS mode in running container
+$ docker logs <container-name>
+```
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes.
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes:
 
-| Item               | Migration note                                                                                                                                                                                                                                                                                                                               |
-| :----------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                                  |
-| Nonroot user       | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                                                                                                            |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                                  |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                                  |
+| Item | Migration note |
+|------|----------------|
+| Base image | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a dev tag. |
+| Non-root user | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. |
+| Multi-stage build | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime. |
+| TLS certificates | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
+| Ports | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Redis Exporter default port 9121 works without issues. |
+| Entry point | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| No shell | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage. |
 
 The following steps outline the general migration process.
 
-1. Find hardened images for your app.
-
+1. **Find hardened images for your app.**
+   
    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-1. Update the base image in your Dockerfile.
+2. **Update the base image in your Dockerfile.**
+   
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For framework images, this is typically going to be an image tagged as dev because it has the tools needed to install packages and dependencies.
 
-   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For framework images, this is typically going to be an image tagged as `dev` because it has the tools needed to install packages and dependencies.
+3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
+   
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as dev, your final runtime stage should use a non-dev image variant.
 
-1. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
-
-   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as `dev`, your final runtime stage should use a non-dev image variant.
-
-1. Install additional packages
-
+4. **Install additional packages**
+   
    Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to install additional packages in your Dockerfile. Inspect the image variants to identify which packages are already installed.
+   
+   Only images tagged as dev typically have package managers. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a dev image. Then, if needed, copy any necessary artifacts to the runtime stage that uses a non-dev image.
+   
+   For Alpine-based images, you can use apk to install packages. For Debian-based images, you can use apt-get to install packages.
 
-   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a `dev` image. Then, if needed, copy any necessary artifacts to the runtime stage that uses a non-dev image.
-
-   For Alpine-based images, you can use `apk` to install packages. For Debian-based images, you can use `apt-get` to install packages.
-
-## Troubleshooting migration
-
-The following are common issues that you may encounter during migration.
-
-### Port already in use
-
-If you see an error like `Bind for 0.0.0.0:9121 failed: port is already allocated`, another container is already using port 9121.
-
-**Solutions:**
-
-```bash
-# Option 1: Stop the existing container
-$ docker ps | grep 9121
-$ docker stop <container-name>
-
-# Option 2: Use a different host port
-$ docker run -d \
-  --name redis-exporter-alt \
-  -p 9124:9121 \
-  dockerdevrel/dhi-redis-exporter:1.80.1 \
-  --redis.addr=redis://redis-server:6379
-
-# Access metrics on the alternate port
-$ curl http://localhost:9124/metrics
-
-# Option 3: Remove conflicting container
-$ docker rm -f redis-exporter-multi redis-exporter-fips
-```
-
-### Container name already in use
-
-If you see `Conflict. The container name "/redis-server" is already in use`, you need to remove or rename the existing container:
-
-```bash
-# Check existing containers
-$ docker ps -a | grep redis-server
-
-# Remove the existing container
-$ docker rm -f redis-server
-
-# Or use a different name
-$ docker run -d \
-  --name redis-server-2 \
-  -p 6380:6379 \
-  dockerdevrel/dhi-redis:8
-```
+## Troubleshoot migration
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
@@ -643,11 +312,11 @@ By default image variants intended for runtime, run as the nonroot user. Ensure 
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and `docker run -p 80:81 my-image` won't work because the port inside the container is 81.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
+By default, image variants intended for runtime don't contain a shell. Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
 ### Entry point
 
