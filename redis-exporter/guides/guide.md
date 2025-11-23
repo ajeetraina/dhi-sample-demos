@@ -8,13 +8,6 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
-**Available tags for `<your-namespace>/dhi-redis-exporter:<tag>`:**
-- Standard Debian variants: `1.80.1-debian13`, `1.80-debian13`, `1-debian13`, `1.80.1`, `1.80`, `1`
-- FIPS Debian variants: `1.80.1-debian13-fips`, `1.80-debian13-fips`, `1-debian13-fips`, `1.80.1-fips`, `1.80-fips`, `1-fips`
-
-**Available tags for `<your-namespace>/dhi-redis:<tag>`:**
-- Standard variants: `8-debian13`, `8-alpine3.22`, `8`
-
 ```bash
 # First, start a Redis instance
 $ docker run -d \
