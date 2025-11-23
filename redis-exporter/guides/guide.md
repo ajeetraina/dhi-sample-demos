@@ -4,17 +4,36 @@
 
 Redis Exporter is a Prometheus exporter for Redis metrics. It exposes metrics from Redis instances via HTTP endpoints that can be scraped by Prometheus or other monitoring systems.
 
+### Available tags
+
+The `dockerdevrel/dhi-redis-exporter` image provides Debian-based variants only:
+
+- **Standard Debian-based**: `1.80.1-debian13`, `1.80-debian13`, `1-debian13`, `1.80.1`, `1.80`, `1`
+  - **Uncompressed**: ~24MB, **Compressed**: ~7.37MB
+  
+- **FIPS Debian-based**: `1.80.1-debian13-fips`, `1.80-debian13-fips`, `1-debian13-fips`, `1.80.1-fips`, `1.80-fips`, `1-fips`
+  - **Uncompressed**: ~60MB, **Compressed**: ~19.16MB
+
+All variants support both `linux/amd64` and `linux/arm64` architectures.
+
 ### Start a redis-exporter DHI container
 
 To run a redis-exporter DHI container:
 
 ```bash
-# Basic usage - single Redis instance
+# Basic usage - single Redis instance (requires Redis to be accessible)
 $ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
   dockerdevrel/dhi-redis-exporter:1.80.1 \
   --redis.addr=redis://redis-server:6379
+
+# Multi-target mode - no specific Redis instance (useful for testing)
+$ docker run -d \
+  --name redis-exporter-multi \
+  -p 9121:9121 \
+  dockerdevrel/dhi-redis-exporter:1.80.1 \
+  --redis.addr=
 
 # Using FIPS variant for compliance requirements
 $ docker run -d \
@@ -24,19 +43,83 @@ $ docker run -d \
   --redis.addr=redis://redis-server:6379
 ```
 
+**Note**: If Redis is not accessible at the specified address, the exporter will still start and expose metrics, but `redis_up` will be 0 and connection errors will be visible in the metrics output. The exporter will continue attempting to connect.
+
+### Environment variables
+
+Redis Exporter can be configured using environment variables as an alternative to command-line flags:
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `REDIS_ADDR` | Redis instance address | localhost:6379 | redis://redis:6379 |
+| `REDIS_USER` | Redis ACL username | - | myuser |
+| `REDIS_PASSWORD` | Redis password | - | secret123 |
+| `REDIS_EXPORTER_WEB_LISTEN_ADDRESS` | Address to listen on for web interface and telemetry | 0.0.0.0:9121 | 0.0.0.0:8080 |
+| `REDIS_EXPORTER_WEB_TELEMETRY_PATH` | Path under which to expose metrics | /metrics | /custom-metrics |
+| `REDIS_EXPORTER_NAMESPACE` | Namespace for metrics | redis | custom_redis |
+| `REDIS_EXPORTER_LOG_FORMAT` | Log format (txt or json) | txt | json |
+| `REDIS_EXPORTER_DEBUG` | Enable debug output | false | true |
+
+Example with environment variables:
+
+```bash
+$ docker run -d \
+  --name redis-exporter \
+  -p 9121:9121 \
+  -e REDIS_ADDR=redis://redis-server:6379 \
+  -e REDIS_PASSWORD=mypassword \
+  -e REDIS_EXPORTER_LOG_FORMAT=json \
+  dockerdevrel/dhi-redis-exporter:1.80.1
+```
+
 ### Test the redis-exporter DHI instance
 
 Verify redis-exporter is working correctly:
 
 ```bash
-# Check health endpoint
+# Check health endpoint (should return "ok")
 $ curl http://localhost:9121/health
 
-# View metrics
+# View metrics (will show exporter metrics even without Redis connection)
 $ curl http://localhost:9121/metrics
 
-# Verify version (requires docker inspect since no shell access)
-$ docker inspect dockerdevrel/dhi-redis-exporter:1.80.1 --format='{{.Config.Labels}}'
+# Verify version and DHI metadata
+$ docker inspect dockerdevrel/dhi-redis-exporter:1.80.1 --format='{{.Config.Labels.com.docker.dhi.version}}'
+```
+
+**Note**: If you start the exporter without an actual Redis instance available, you'll see `redis_up 0` and a connection error in the metrics. This is expected behavior - the exporter itself is working correctly and will connect once Redis is available.
+
+### Quick test with Redis
+
+To test with an actual Redis instance, use Docker Compose:
+
+```yaml
+# quick-test-compose.yml
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  
+  redis-exporter:
+    image: dockerdevrel/dhi-redis-exporter:1.80.1
+    ports:
+      - "9121:9121"
+    command: --redis.addr=redis://redis:6379
+    depends_on:
+      - redis
+```
+
+```bash
+# Start the test stack
+$ docker-compose -f quick-test-compose.yml up -d
+
+# Verify Redis connection is successful (redis_up should be 1)
+$ curl http://localhost:9121/metrics | grep redis_up
+
+# Clean up
+$ docker-compose -f quick-test-compose.yml down
 ```
 
 ## Common redis-exporter DHI use cases
