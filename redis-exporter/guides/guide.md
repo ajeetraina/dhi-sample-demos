@@ -8,6 +8,13 @@ Before you can use any Docker Hardened Image, you must mirror the image reposito
 
 Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
+**Available tags for `<your-namespace>/dhi-redis-exporter:<tag>`:**
+- Standard Debian variants: `1.80.1-debian13`, `1.80-debian13`, `1-debian13`, `1.80.1`, `1.80`, `1`
+- FIPS Debian variants: `1.80.1-debian13-fips`, `1.80-debian13-fips`, `1-debian13-fips`, `1.80.1-fips`, `1.80-fips`, `1-fips`
+
+**Available tags for `<your-namespace>/dhi-redis:<tag>`:**
+- Standard variants: `8-debian13`, `8-alpine3.22`, `8`
+
 ```bash
 # First, start a Redis instance
 $ docker run -d \
@@ -21,6 +28,12 @@ $ docker run -d \
   -p 9121:9121 \
   <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=redis://redis-server:6379
+
+# Verify it's working
+$ curl http://localhost:9121/health
+
+# Clean up after testing
+$ docker rm -f redis-server redis-exporter
 ```
 
 ## Common redis-exporter use cases
@@ -46,6 +59,11 @@ $ docker run -d \
 
 Access metrics at `http://localhost:9121/metrics` for Prometheus scraping.
 
+Clean up after testing:
+```bash
+$ docker rm -f redis-server redis-exporter
+```
+
 ### Multi-target monitoring
 
 Run in multi-target mode to scrape multiple Redis instances via the `/scrape` endpoint:
@@ -54,7 +72,7 @@ Run in multi-target mode to scrape multiple Redis instances via the `/scrape` en
 # Start exporter with empty redis.addr for multi-target mode
 $ docker run -d \
   --name redis-exporter-multi \
-  -p 9121:9121 \
+  -p 9123:9121 \
   <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=
 ```
@@ -62,8 +80,13 @@ $ docker run -d \
 Then scrape different Redis instances dynamically:
 
 ```bash
-$ curl http://localhost:9121/scrape?target=redis://redis-server-1:6379
-$ curl http://localhost:9121/scrape?target=redis://redis-server-2:6380
+$ curl http://localhost:9123/scrape?target=redis://redis-server-1:6379
+$ curl http://localhost:9123/scrape?target=redis://redis-server-2:6380
+```
+
+Clean up after testing:
+```bash
+$ docker rm -f redis-exporter-multi
 ```
 
 ### Environment variable configuration
@@ -71,33 +94,37 @@ $ curl http://localhost:9121/scrape?target=redis://redis-server-2:6380
 Configure using environment variables instead of command flags:
 
 ```bash
-# Start Redis instance (if not already running from previous example)
+# Start Redis instance with unique name and port
 $ docker run -d \
-  --name redis-server \
-  -p 6379:6379 \
+  --name redis-server-env \
+  -p 6380:6379 \
   <your-namespace>/dhi-redis:<tag>
 
 # Start exporter with environment variables
 $ docker run -d \
   --name redis-exporter-env \
   -p 9122:9121 \
-  -e REDIS_ADDR=redis://redis-server:6379 \
+  -e REDIS_ADDR=redis://redis-server-env:6379 \
   -e REDIS_EXPORTER_WEB_LISTEN_ADDRESS=0.0.0.0:9121 \
   -e REDIS_EXPORTER_WEB_TELEMETRY_PATH=/metrics \
   <your-namespace>/dhi-redis-exporter:<tag>
-```
 
-**Note**: Uses port 9122 on host to avoid conflict with previous example.
+# Access metrics
+$ curl http://localhost:9122/metrics
+
+# Clean up after testing
+$ docker rm -f redis-server-env redis-exporter-env
+```
 
 ### Custom metrics configuration
 
 Expose metrics on custom port/path and monitor specific keys:
 
 ```bash
-# Start Redis instance (if not already running)
+# Start Redis instance with unique name and port
 $ docker run -d \
-  --name redis-server \
-  -p 6379:6379 \
+  --name redis-server-custom \
+  -p 6381:6379 \
   <your-namespace>/dhi-redis:<tag>
 
 # Start exporter with custom configuration
@@ -105,12 +132,18 @@ $ docker run -d \
   --name redis-exporter-custom \
   -p 8080:8080 \
   <your-namespace>/dhi-redis-exporter:<tag> \
-  --redis.addr=redis://redis-server:6379 \
+  --redis.addr=redis://redis-server-custom:6379 \
   --web.listen-address=0.0.0.0:8080 \
   --web.telemetry-path=/custom-metrics \
   --namespace=custom_redis \
   --include-system-metrics \
   --check-single-keys=db0=user:count,db0=queue:tasks
+
+# Access custom metrics
+$ curl http://localhost:8080/custom-metrics
+
+# Clean up after testing
+$ docker rm -f redis-server-custom redis-exporter-custom
 ```
 
 ### Docker Compose deployment
@@ -195,20 +228,24 @@ Monitor Redis instances with password authentication:
 # Start Redis with password (requirepass option)
 $ docker run -d \
   --name redis-server-auth \
-  -p 6380:6379 \
+  -p 6382:6379 \
   <your-namespace>/dhi-redis:<tag> \
   redis-server --requirepass your-secure-password
 
 # Start exporter with authentication
 $ docker run -d \
   --name redis-exporter-auth \
-  -p 9123:9121 \
+  -p 9124:9121 \
   <your-namespace>/dhi-redis-exporter:<tag> \
   --redis.addr=redis://redis-server-auth:6379 \
   --redis.password=your-secure-password
-```
 
-**Note**: Uses different container names and ports to avoid conflicts with previous examples.
+# Access metrics
+$ curl http://localhost:9124/metrics
+
+# Clean up after testing
+$ docker rm -f redis-server-auth redis-exporter-auth
+```
 
 ### Redis Cluster monitoring
 
@@ -274,6 +311,20 @@ $ docker run --rm -it --pid container:my-container \
 ## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use.
+
+**Available image tags for redis-exporter:**
+
+| Variant Type | Tag Examples | Description |
+|--------------|-------------|-------------|
+| **Standard (Debian)** | `1.80.1`, `1.80`, `1` | Runtime variants for production use |
+| | `1.80.1-debian13`, `1.80-debian13`, `1-debian13` | Explicit Debian base specification |
+| **FIPS (Debian)** | `1.80.1-fips`, `1.80-fips`, `1-fips` | FIPS-validated cryptographic modules |
+| | `1.80.1-debian13-fips`, `1.80-debian13-fips` | FIPS with explicit Debian base |
+
+**Tag selection guidance:**
+- Use `<your-namespace>/dhi-redis-exporter:1.80.1` for standard production deployments
+- Use `<your-namespace>/dhi-redis-exporter:1.80.1-fips` for FIPS-compliant environments
+- Use major version tags (like `:1`) for automatic minor updates (not recommended for production)
 
 Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
 
