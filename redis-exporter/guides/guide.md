@@ -8,32 +8,40 @@ Redis Exporter is a Prometheus exporter for Redis metrics. It exposes metrics fr
 
 ### Start a redis-exporter DHI container
 
-To run a redis-exporter DHI container:
+To run a redis-exporter DHI container, choose one of the following approaches:
 
 ```bash
-# Basic usage - single Redis instance (requires Redis to be accessible)
-docker run -d \
+# First, start a DHI Redis instance (if not already running)
+$ docker run -d \
+  --name redis-server \
+  -p 6379:6379 \
+  dockerdevrel/dhi-redis:8
+
+# Option 1: Basic usage - monitor the Redis instance
+$ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
   dockerdevrel/dhi-redis-exporter:1.80.1 \
   --redis.addr=redis://redis-server:6379
 
-# Multi-target mode - no specific Redis instance (useful for testing)
-docker run -d \
+# Option 2: Multi-target mode - no specific Redis instance (useful for testing)
+$ docker run -d \
   --name redis-exporter-multi \
-  -p 9121:9121 \
+  -p 9122:9121 \
   dockerdevrel/dhi-redis-exporter:1.80.1 \
   --redis.addr=
 
-# Using FIPS variant for compliance requirements
-docker run -d \
+# Option 3: Using FIPS variant for compliance requirements
+$ docker run -d \
   --name redis-exporter-fips \
-  -p 9121:9121 \
+  -p 9123:9121 \
   dockerdevrel/dhi-redis-exporter:1.80.1-fips \
   --redis.addr=redis://redis-server:6379
 ```
 
-**Note**: If Redis is not accessible at the specified address, the exporter will still start and expose metrics, but `redis_up` will be 0 and connection errors will be visible in the metrics output. The exporter will continue attempting to connect.
+**Note**: The examples above use different host ports (9121, 9122, 9123) so you can run multiple exporters simultaneously for testing. In production, you would typically run only one exporter per host using port 9121.
+
+**Connection behavior**: If Redis is not accessible at the specified address, the exporter will still start and expose metrics, but `redis_up` will be 0 and connection errors will be visible in the metrics output. The exporter will continue attempting to connect.
 
 ### Environment variables
 
@@ -53,7 +61,14 @@ Redis Exporter can be configured using environment variables as an alternative t
 Example with environment variables:
 
 ```bash
-docker run -d \
+# Start DHI Redis instance
+$ docker run -d \
+  --name redis-server \
+  -p 6379:6379 \
+  dockerdevrel/dhi-redis:8
+
+# Start exporter with environment variables
+$ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
   -e REDIS_ADDR=redis://redis-server:6379 \
@@ -67,10 +82,16 @@ docker run -d \
 Verify redis-exporter is working correctly:
 
 ```bash
-# Check health endpoint (should return "ok")
+# Check health endpoint (standard exporter on port 9121)
 $ curl http://localhost:9121/health
 
-# View metrics (will show exporter metrics even without Redis connection)
+# Check multi-target exporter on port 9122
+$ curl http://localhost:9122/health
+
+# Check FIPS exporter on port 9123
+$ curl http://localhost:9123/health
+
+# View metrics from standard exporter
 $ curl http://localhost:9121/metrics
 
 # Verify version and DHI metadata
@@ -81,7 +102,7 @@ $ docker inspect dockerdevrel/dhi-redis-exporter:1.80.1 --format='{{.Config.Labe
 
 ### Quick test with Redis
 
-To test with an actual Redis instance, use Docker Compose with DHI Redis:
+The easiest way to test with a working Redis connection is using Docker Compose:
 
 ```yaml
 # quick-test-compose.yml
@@ -106,10 +127,43 @@ services:
 $ docker-compose -f quick-test-compose.yml up -d
 
 # Verify Redis connection is successful (redis_up should be 1)
-$ curl http://localhost:9121/metrics | grep redis_up
+$ curl http://localhost:9121/metrics | grep "redis_up 1"
+
+# View all Redis metrics
+$ curl http://localhost:9121/metrics | grep redis_
 
 # Clean up
 $ docker-compose -f quick-test-compose.yml down
+```
+
+**Alternative: Using docker network for standalone containers**
+
+If you prefer `docker run` commands over Docker Compose:
+
+```bash
+# Create a network
+$ docker network create redis-net
+
+# Start DHI Redis
+$ docker run -d \
+  --name redis-server \
+  --network redis-net \
+  dockerdevrel/dhi-redis:8
+
+# Start exporter
+$ docker run -d \
+  --name redis-exporter \
+  --network redis-net \
+  -p 9121:9121 \
+  dockerdevrel/dhi-redis-exporter:1.80.1 \
+  --redis.addr=redis://redis-server:6379
+
+# Test the connection
+$ curl http://localhost:9121/metrics | grep "redis_up 1"
+
+# Clean up
+$ docker rm -f redis-server redis-exporter
+$ docker network rm redis-net
 ```
 
 ## Common redis-exporter DHI use cases
@@ -119,6 +173,13 @@ $ docker-compose -f quick-test-compose.yml down
 Monitor a single Redis instance with default settings:
 
 ```bash
+# First, start a DHI Redis instance
+$ docker run -d \
+  --name redis-server \
+  -p 6379:6379 \
+  dockerdevrel/dhi-redis:8
+
+# Then start the exporter to monitor it
 $ docker run -d \
   --name redis-exporter \
   -p 9121:9121 \
@@ -130,16 +191,19 @@ Access metrics at `http://localhost:9121/metrics` for Prometheus scraping.
 
 ### Environment variable configuration
 
-Configure using environment variables instead of command flags:
+Configure using environment variables instead of command flags (assuming DHI Redis from previous example is running):
 
 ```bash
 $ docker run -d \
-  --name redis-exporter \
-  -p 9121:9121 \
+  --name redis-exporter-env \
+  -p 9122:9121 \
   -e REDIS_ADDR=redis://redis-server:6379 \
   -e REDIS_EXPORTER_WEB_LISTEN_ADDRESS=0.0.0.0:9121 \
   -e REDIS_EXPORTER_WEB_TELEMETRY_PATH=/metrics \
   dockerdevrel/dhi-redis-exporter:1.80.1
+
+# Access metrics on the mapped port
+$ curl http://localhost:9122/metrics
 ```
 
 ### Multi-target monitoring
@@ -170,6 +234,13 @@ $ curl http://localhost:9121/scrape?target=redis://redis-server-2:6380
 Expose metrics on custom port/path and monitor specific keys:
 
 ```bash
+# Start DHI Redis instance
+$ docker run -d \
+  --name redis-server \
+  -p 6379:6379 \
+  dockerdevrel/dhi-redis:8
+
+# Start exporter with custom configuration
 $ docker run -d \
   --name redis-exporter-custom \
   -p 8080:8080 \
@@ -180,6 +251,9 @@ $ docker run -d \
   --namespace=custom_redis \
   --include-system-metrics \
   --check-single-keys=db0=user:count,db0=queue:tasks
+
+# Access custom metrics endpoint
+$ curl http://localhost:8080/custom-metrics
 ```
 
 ### Docker Compose deployment
@@ -347,7 +421,7 @@ $ docker run -d \
 
 ### Monitoring Redis Cluster
 
-Monitor a Redis Cluster with authentication:
+Monitor a Redis Cluster with authentication (this example assumes you have a Redis Cluster already configured):
 
 ```bash
 $ docker run -d \
@@ -360,6 +434,8 @@ $ docker run -d \
   --check-keys=* \
   --check-single-keys=db0=user:*,db0=session:*
 ```
+
+**Note**: For production deployments, use `dockerdevrel/dhi-redis:8` for all Redis cluster nodes to maintain consistent security hardening across your cluster.
 
 ### Using DHI Redis with DHI Redis Exporter
 
@@ -513,6 +589,49 @@ The following steps outline the general migration process.
 ## Troubleshooting migration
 
 The following are common issues that you may encounter during migration.
+
+### Port already in use
+
+If you see an error like `Bind for 0.0.0.0:9121 failed: port is already allocated`, another container is already using port 9121.
+
+**Solutions:**
+
+```bash
+# Option 1: Stop the existing container
+$ docker ps | grep 9121
+$ docker stop <container-name>
+
+# Option 2: Use a different host port
+$ docker run -d \
+  --name redis-exporter-alt \
+  -p 9124:9121 \
+  dockerdevrel/dhi-redis-exporter:1.80.1 \
+  --redis.addr=redis://redis-server:6379
+
+# Access metrics on the alternate port
+$ curl http://localhost:9124/metrics
+
+# Option 3: Remove conflicting container
+$ docker rm -f redis-exporter-multi redis-exporter-fips
+```
+
+### Container name already in use
+
+If you see `Conflict. The container name "/redis-server" is already in use`, you need to remove or rename the existing container:
+
+```bash
+# Check existing containers
+$ docker ps -a | grep redis-server
+
+# Remove the existing container
+$ docker rm -f redis-server
+
+# Or use a different name
+$ docker run -d \
+  --name redis-server-2 \
+  -p 6380:6379 \
+  dockerdevrel/dhi-redis:8
+```
 
 ### General debugging
 
