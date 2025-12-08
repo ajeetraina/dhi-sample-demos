@@ -101,7 +101,7 @@ $ docker run -d \
   --name grafana \
   --network pyroscope-demo \
   -p 3000:3000 \
-  grafana/grafana:latest
+  <your-namespace>/dhi-grafana:<tag>
 
 # Access Grafana at http://localhost:3000 (admin/admin)
 # Add Data Source → Grafana Pyroscope → URL: http://pyroscope:4040
@@ -155,7 +155,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
+    image: <your-namespace>/dhi-grafana:<tag>
     container_name: grafana
     ports:
       - "3000:3000"
