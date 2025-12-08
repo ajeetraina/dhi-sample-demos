@@ -28,7 +28,7 @@ $ docker rm -f pyroscope
 $ docker network rm pyroscope-demo
 ```
 
-> **Note:** The Docker Hardened Image for Pyroscope does not include the embedded web UI available in the upstream image. This is intentional to reduce attack surface. Use Grafana with the Pyroscope data source for visualization, or query the API directly.
+> **Note:** The Docker Hardened Image for Pyroscope does not include the embedded web UI available in the upstream Grafana Pyroscope image. This is intentional to reduce attack surface. Use Grafana with the Pyroscope data source for visualization, or query the API directly.
 
 ## Common pyroscope use cases
 
