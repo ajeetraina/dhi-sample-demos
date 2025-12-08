@@ -111,31 +111,6 @@ $ docker rm -f pyroscope grafana
 $ docker network rm pyroscope-demo
 ```
 
-### Expose gRPC for remote agents
-
-Enable gRPC endpoint for applications to send profiling data:
-
-```bash
-# Create network
-$ docker network create pyroscope-demo
-
-# Start Pyroscope with both HTTP and gRPC ports
-$ docker run -d \
-  --name pyroscope \
-  --network pyroscope-demo \
-  -p 4040:4040 \
-  -p 9095:9095 \
-  <your-namespace>/dhi-pyroscope:<tag>
-
-# Applications can now send profiles to:
-# - HTTP: http://localhost:4040
-# - gRPC: localhost:9095
-
-# Clean up
-$ docker rm -f pyroscope
-$ docker network rm pyroscope-demo
-```
-
 ### Docker Compose deployment
 
 Complete monitoring stack with Pyroscope and Grafana:
@@ -190,34 +165,6 @@ $ docker compose up -d
 # Clean up
 $ docker compose down
 # To also remove volumes: docker compose down -v
-```
-
-### Profile a Go application
-
-Example of profiling a Go application with Pyroscope:
-
-```bash
-# Create network
-$ docker network create pyroscope-demo
-
-# Start Pyroscope
-$ docker run -d \
-  --name pyroscope \
-  --network pyroscope-demo \
-  -p 4040:4040 \
-  <your-namespace>/dhi-pyroscope:<tag>
-
-# Run your Go app with Pyroscope agent
-$ docker run -d \
-  --name my-go-app \
-  --network pyroscope-demo \
-  -e PYROSCOPE_SERVER_ADDRESS=http://pyroscope:4040 \
-  -e PYROSCOPE_APPLICATION_NAME=my-go-app \
-  your-go-app-image
-
-# Clean up
-$ docker rm -f pyroscope my-go-app
-$ docker network rm pyroscope-demo
 ```
 
 ## Non-hardened images vs Docker Hardened Images
