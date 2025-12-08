@@ -220,16 +220,6 @@ $ docker rm -f pyroscope my-go-app
 $ docker network rm pyroscope-demo
 ```
 
-## Available endpoints
-
-| Endpoint | Purpose | Available in DHI |
-|----------|---------|------------------|
-| `/ready` | Health check | ✅ Yes |
-| `/metrics` | Prometheus metrics | ✅ Yes |
-| `/api/v1/*` | Query API | ✅ Yes |
-| `:9095` (gRPC) | Profile ingestion | ✅ Yes |
-| `/` (Web UI) | Embedded web interface | ❌ No (use Grafana) |
-
 ## Non-hardened images vs Docker Hardened Images
 
 ### Key differences
