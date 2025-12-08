@@ -227,6 +227,8 @@ Docker Hardened Images come in different variants depending on their intended us
 - Include a shell and package manager
 - Are used to build or compile applications
 
+Pyroscope DHI only provides runtime variants. There are no `dev` or `fips` tagged images available. The runtime image is sufficient for production deployments as Pyroscope is a standalone binary that doesn't require build-time compilation.
+
 ## Migrate to a Docker Hardened Image
 
 To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes:
@@ -288,27 +290,3 @@ By default, image variants intended for runtime don't contain a shell. Use dev i
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
-
-### Web UI not available
-
-The "This route is not available in dev mode" message at `http://localhost:4040` is expected. The DHI image does not include the embedded web UI. Use Grafana with the Pyroscope data source for visualization:
-
-```bash
-# Start Grafana
-$ docker run -d --name grafana --network pyroscope-demo -p 3000:3000 grafana/grafana
-
-# Access http://localhost:3000
-# Add Data Source → Grafana Pyroscope → URL: http://pyroscope:4040
-```
-
-### Network connectivity
-
-If services can't communicate, ensure they're on the same Docker network:
-
-```bash
-# Create network (ignore error if exists)
-$ docker network create pyroscope-demo 2>/dev/null || true
-
-# Verify containers are on the network
-$ docker network inspect pyroscope-demo
-```
