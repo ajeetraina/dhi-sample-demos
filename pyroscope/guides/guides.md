@@ -268,18 +268,6 @@ $ docker run --rm -it --pid container:pyroscope \
 
 Docker Hardened Images come in different variants depending on their intended use.
 
-**Available image tags for pyroscope:**
-
-| Variant Type | Tag Examples | Description |
-|--------------|-------------|-------------|
-| **Standard (Debian)** | `1.15`, `1.15-debian13`, `1` | Runtime variants for production use |
-| **FIPS (Debian)** | `1.15-fips`, `1-fips` | FIPS-validated cryptographic modules |
-
-**Tag selection guidance:**
-- Use `<your-namespace>/dhi-pyroscope:1.15` for standard production deployments
-- Use `<your-namespace>/dhi-pyroscope:1.15-fips` for FIPS-compliant environments
-- Use major version tags (like `:1`) for automatic minor updates (not recommended for production)
-
 **Runtime variants** are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
 
 - Run as the nonroot user
