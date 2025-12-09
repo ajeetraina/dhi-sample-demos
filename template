@@ -9,6 +9,15 @@ on-screen instructions.
 
 ## Start a [image-type] instance
 
+Add the most basic use-case to get the image up and running. In some cases, it
+may be a simple run command like below, in other cases it may be creating
+dependencies like configuration files, or maybe a compose file for depedent
+containers.
+If the environment is too complex to set up, this can be a 
+more high-level, conceptual section. For example, if it's intentended to be
+a drop-in replacement in a complex kubernetes setup, then just show how
+to drop it in (authentication + image name replacement).
+
 Run the following command and replace <your-namespace> with your organization's 
 namespace and <tag> with the image variant you want to run.
 
