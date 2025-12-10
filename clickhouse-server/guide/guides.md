@@ -53,13 +53,38 @@ docker run -d \
   <your-namespace>/dhi-clickhouse-server:<tag>
 ```
 
+### Run ClickHouse with network authentication
+
+The DHI ClickHouse image enforces authentication for network access. When no password is set, network access for the default user is disabled as a security measure. To enable HTTP and remote client access, set the `CLICKHOUSE_PASSWORD` environment variable.
+```
+docker run -d \
+  --name my-clickhouse-server \
+  --ulimit nofile=262144:262144 \
+  -e CLICKHOUSE_PASSWORD=mysecretpassword \
+  -p 8123:8123 \
+  -p 9000:9000 \
+  <your-namespace>/dhi-clickhouse-server:<tag>
+```
+
+Test HTTP interface with authentication:
+```
+curl "http://localhost:8123/?query=SELECT%20version()&user=default&password=mysecretpassword"
+```
+
 ### Connect with ClickHouse client
 
 Use the ClickHouse client to connect to a running server instance.
+
+Without password (local exec only):
+```
+docker exec my-clickhouse-server clickhouse-client --query "SELECT version()"
+```
+
+With password (remote connection):
 ```
 docker run --rm -it --link my-clickhouse-server:clickhouse-server \
   <your-namespace>/dhi-clickhouse-server:<tag> \
-  clickhouse-client --host clickhouse-server
+  clickhouse-client --host clickhouse-server --password mysecretpassword
 ```
 
 ## Non-hardened images vs Docker Hardened Images
@@ -72,6 +97,7 @@ docker run --rm -it --link my-clickhouse-server:clickhouse-server \
 | Shell access | Full shell (bash/sh) available | No shell in runtime variants |
 | Package manager | apt/apk available | No package manager in runtime variants |
 | User | Runs as root by default | Runs as nonroot user |
+| Network authentication | Optional | Required for network access when password not set |
 | Attack surface | Larger due to additional utilities | Minimal, only essential components |
 | Debugging | Traditional shell debugging | Use Docker Debug or Image Mount for troubleshooting |
 
@@ -134,6 +160,7 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
 | Entry point | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
 | No shell | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage. |
 | ulimits | Always set `--ulimit nofile=262144:262144` for proper ClickHouse operation. |
+| Authentication | Set `CLICKHOUSE_PASSWORD` environment variable to enable network access. Without it, network access for the default user is disabled. |
 
 The following steps outline the general migration process.
 
@@ -178,3 +205,7 @@ By default, image variants intended for runtime don't contain a shell. Use dev i
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+
+### Network access disabled
+
+If you see the message `disabling network access for user 'default'` in logs, set the `CLICKHOUSE_PASSWORD` environment variable when starting the container to enable HTTP and remote client connections.
