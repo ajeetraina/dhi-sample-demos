@@ -133,17 +133,57 @@ docker run --rm -it --pid container:my-clickhouse-server \
 
 Docker Hardened Images come in different variants depending on their intended use.
 
+The ClickHouse Docker Hardened Image is available as runtime variants only. There are no `dev` variants for this image. Available tags include version-specific tags (25.3, 25.8, 25.11) and Debian 13-based variants (25.11-debian13, 25.8-debian13, 25.3-debian13).
+
 Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
 
 - Run as the nonroot user
-- Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the app
 
-Build-time variants typically include `dev` in the variant name and are intended for use in the first stage of a multi-stage Dockerfile. These images typically:
+## Migrate to a Docker Hardened Image
 
-- Run as the root user
-- Include a shell and package manager
-- Are used to build or compile applications
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes:
+
+| Item | Migration note |
+|------|----------------|
+| Base image | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| Non-root user | By default, images run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. |
+| TLS certificates | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
+| Ports | Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. ClickHouse default ports 8123 and 9000 work without issues. |
+| Entry point | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| ulimits | Always set `--ulimit nofile=262144:262144` for proper ClickHouse operation. |
+
+The following steps outline the general migration process.
+
+1. **Find hardened images for your app.**
+    
+    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs. ClickHouse images are available in multiple versions (25.3, 25.8, 25.11) with Debian 13 base.
+
+2. **Update the base image in your Dockerfile.**
+    
+    Update the base image in your application's Dockerfile to the hardened image you found in the previous step.
+
+3. **Verify permissions**
+    
+    Since the image runs as nonroot user, ensure that data directories and mounted volumes are accessible to the nonroot user.
+
+## Troubleshoot migration
+
+### General debugging
+
+The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+
+### Permissions
+
+By default, image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
+
+### Privileged ports
+
+Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
+
+### Entry point
+
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
 
 ## Migrate to a Docker Hardened Image
 
