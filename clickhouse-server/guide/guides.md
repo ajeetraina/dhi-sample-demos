@@ -125,12 +125,23 @@ docker run --rm -it --pid container:my-clickhouse-server \
 
 Docker Hardened Images come in different variants depending on their intended use.
 
-The ClickHouse Docker Hardened Image is available as runtime variants only. There are no `dev` variants for this image. Available tags include version-specific tags (25.3, 25.8, 25.11) and Debian 13-based variants (25.11-debian13, 25.8-debian13, 25.3-debian13).
-
-Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+Runtime variants are designed to run your application in production. 
+These images are intended to be used either directly or as the `FROM` image in 
+the final stage of a multi-stage build. These images typically:
 
 - Run as the nonroot user
+- Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the app
+
+Build-time variants typically include `dev` in the variant name and are 
+intended for use in the first stage of a multi-stage Dockerfile. These images 
+typically:
+
+- Run as the root user
+- Include a shell and package manager
+- Are used to build or compile applications
+
+The ClickHouse Docker Hardened Image is available as runtime variants only. There are no `dev` variants for this image. 
 
 ## Migrate to a Docker Hardened Image
 
