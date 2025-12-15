@@ -16,12 +16,39 @@ Run the following command and replace `<your-namespace>` with your organization'
 namespace and `<tag>` with the image variant you want to run.
 
 ```bash
-docker run --name my-clickhouse-exporter -d \
+# Pull ClickHouse server image
+docker pull dockerdevrel/dhi-clickhouse-server:25
+
+# Create network
+docker network create test-net
+
+# Run ClickHouse server
+docker run -d \
+  --name clickhouse-server \
+  --network test-net \
+  --ulimit nofile=262144:262144 \
+  -e CLICKHOUSE_PASSWORD=mysecretpassword \
+  <your-namespace>/dhi-clickhouse-server:<tag>
+
+# Wait for startup
+sleep 15
+
+# Run metrics exporter connected to ClickHouse
+docker run -d \
+  --name clickhouse-exporter \
+  --network test-net \
   -p 9116:9116 \
   -e CLICKHOUSE_URL=http://clickhouse-server:8123/ \
   -e CLICKHOUSE_USER=default \
   -e CLICKHOUSE_PASSWORD=mysecretpassword \
   <your-namespace>/dhi-clickhouse-metrics-exporter:<tag>
+
+# Check metrics (should show actual ClickHouse metrics)
+curl -s http://localhost:9116/metrics | grep clickhouse
+
+# Cleanup
+docker rm -f clickhouse-server clickhouse-exporter
+docker network rm test-net
 ```
 
 Verify the exporter is running and collecting metrics:
