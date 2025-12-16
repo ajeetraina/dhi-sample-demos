@@ -3,7 +3,7 @@
 ## Prerequisites
 
 Before you can use any Docker Hardened Image, you must mirror the following image 
-repositories from the catalog (dhi-clickhouse-operator, dhi-clickhouse-server and dhi-clickhouse-metrics-exporter) to your organization. To mirror the repository, 
+repositories from the catalog (`dhi-clickhouse-operator`, `dhi-clickhouse-server` and `dhi-clickhouse-metrics-exporter`) to your organization. To mirror the repository, 
 select either **Mirror to repository** or 
 **View in repository > Mirror to repository**, and then follow the 
 on-screen instructions.
