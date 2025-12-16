@@ -15,11 +15,12 @@ The ClickHouse Metrics Exporter is designed to work as part of the ClickHouse Op
 
 This image cannot run as a standalone container outside of Kubernetes as it requires access to the Kubernetes API and ClickHouseInstallation custom resources.
 
-### Deploy ClickHouse Operator 
+### Deploy ClickHouse Operator (DHI)
 
 First, deploy the ClickHouse Operator using the Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
-```yaml
+```bash
+cat > clickhouse-operator.yaml << 'EOF'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -123,13 +124,17 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+EOF
+
+kubectl apply -f clickhouse-operator.yaml
 ```
 
-### Deploy Metrics Exporter 
+### Deploy Metrics Exporter (DHI)
 
 Deploy the metrics exporter using the Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
-```yaml
+```bash
+cat > clickhouse-metrics-exporter.yaml << 'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -174,19 +179,29 @@ spec:
     targetPort: 8888
   selector:
     app: clickhouse-operator-metrics
+EOF
+
+kubectl apply -f clickhouse-metrics-exporter.yaml
 ```
 
 ### Deploy a ClickHouse Cluster (DHI)
 
 Deploy a ClickHouse cluster using the Docker Hardened Image for the metrics exporter to monitor. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
-```yaml
+```bash
+# Create the namespace first
+kubectl create namespace clickhouse-system
+
+cat > clickhouse-cluster.yaml << 'EOF'
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
   name: my-cluster
   namespace: clickhouse-system
 spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse-stable
   configuration:
     users:
       clickhouse_operator/password: your-secure-password
@@ -205,11 +220,37 @@ spec:
           containers:
             - name: clickhouse
               image: <your-namespace>/dhi-clickhouse-server:<tag>
+              livenessProbe:
+                exec:
+                  command:
+                    - clickhouse-client
+                    - --query
+                    - "SELECT 1"
+                initialDelaySeconds: 60
+                periodSeconds: 10
+                failureThreshold: 10
+              readinessProbe:
+                exec:
+                  command:
+                    - clickhouse-client
+                    - --query
+                    - "SELECT 1"
+                initialDelaySeconds: 30
+                periodSeconds: 5
+                failureThreshold: 10
+EOF
+
+kubectl apply -f clickhouse-cluster.yaml
 ```
+
+**Important notes:**
+- The `defaults.templates.podTemplate` setting is required to ensure the operator uses your specified DHI image
+- The `exec` probes use `clickhouse-client` instead of HTTP probes because DHI ClickHouse listens on localhost only by default
 
 Verify the deployment:
 
 ```bash
+kubectl get pods -n clickhouse-system
 kubectl get pods -n kube-system -l app=clickhouse-operator-metrics
 kubectl logs -n kube-system -l app=clickhouse-operator-metrics
 ```
@@ -220,7 +261,8 @@ kubectl logs -n kube-system -l app=clickhouse-operator-metrics
 
 Create a ServiceMonitor for Prometheus Operator to automatically scrape metrics from the exporter.
 
-```yaml
+```bash
+cat > servicemonitor.yaml << 'EOF'
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -234,19 +276,26 @@ spec:
   - port: metrics
     interval: 30s
     path: /metrics
+EOF
+
+kubectl apply -f servicemonitor.yaml
 ```
 
 ### Configure ClickHouse authentication
 
 Configure the `clickhouse_operator` user in your ClickHouseInstallation to allow the exporter to query ClickHouse metrics. Ensure you're using the Docker Hardened ClickHouse Server image.
 
-```yaml
+```bash
+cat > clickhouse-with-auth.yaml << 'EOF'
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
   name: my-cluster
   namespace: clickhouse-system
 spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse-stable
   configuration:
     users:
       clickhouse_operator/password: your-secure-password
@@ -265,13 +314,35 @@ spec:
           containers:
             - name: clickhouse
               image: <your-namespace>/dhi-clickhouse-server:<tag>
+              livenessProbe:
+                exec:
+                  command:
+                    - clickhouse-client
+                    - --query
+                    - "SELECT 1"
+                initialDelaySeconds: 60
+                periodSeconds: 10
+                failureThreshold: 10
+              readinessProbe:
+                exec:
+                  command:
+                    - clickhouse-client
+                    - --query
+                    - "SELECT 1"
+                initialDelaySeconds: 30
+                periodSeconds: 5
+                failureThreshold: 10
+EOF
+
+kubectl apply -f clickhouse-with-auth.yaml
 ```
 
 ### Mount custom configuration
 
 Mount a custom ClickHouse Operator configuration file to modify exporter behavior.
 
-```yaml
+```bash
+cat > custom-config.yaml << 'EOF'
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -305,6 +376,9 @@ spec:
       - name: config
         configMap:
           name: clickhouse-operator-config
+EOF
+
+kubectl apply -f custom-config.yaml
 ```
 
 ## Non-hardened images vs Docker Hardened Images
