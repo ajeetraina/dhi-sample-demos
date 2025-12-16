@@ -2,31 +2,12 @@
 
 ## Prerequisites
 
-Before you can use any Docker Hardened Image, you must mirror the image 
-repository from the catalog to your organization. To mirror the repository, 
+Before you can use any Docker Hardened Image, you must mirror the following image 
+repositories from the catalog (dhi-clickhouse-operator, dhi-clickhouse-server and dhi-clickhouse-metrics-exporter) to your organization. To mirror the repository, 
 select either **Mirror to repository** or 
 **View in repository > Mirror to repository**, and then follow the 
 on-screen instructions.
 
-### Required Image Repositories
-
-The ClickHouse Metrics Exporter requires three Docker Hardened Image repositories to be mirrored to your organization:
-
-1. **ClickHouse Operator** - `dhi-clickhouse-operator`
-   - Required to manage ClickHouse clusters in Kubernetes
-   - Mirror version 0.25.6 or later
-
-2. **ClickHouse Server** - `dhi-clickhouse-server`
-   - Required to run ClickHouse database instances
-   - Mirror version 25 or later
-
-3. **ClickHouse Metrics Exporter** - `dhi-clickhouse-metrics-exporter`
-   - The metrics exporter itself
-   - Mirror version 0.25.6 or later
-
-**Important:** You cannot pull these images directly from `dockerdevrel`. They must be mirrored to your organization's namespace first. All three repositories must be mirrored before proceeding with deployment.
-
-After mirroring, replace `<your-namespace>` in all examples below with your organization's namespace (e.g., `mycompany` if you mirrored to `mycompany/dhi-clickhouse-operator`).
 
 ## Start a ClickHouse Metrics Exporter instance
 
@@ -393,229 +374,48 @@ typically:
 
 The ClickHouse Metrics Exporter Docker Hardened Image is available as runtime variants only. There are no `dev` variants for this image.
 
-### Available tags
-
-- `0` or `0-debian13` - Latest version 0.x series with Debian 13 base
-- `0.25` or `0.25-debian13` - Version 0.25.x with Debian 13 base
-- `0.25.6` or `0.25.6-debian13` - Specific version 0.25.6 with Debian 13 base
-
-All variants support both `linux/amd64` and `linux/arm64` architectures.
-
-### Related Docker Hardened Images
-
-The ClickHouse Metrics Exporter works with other ClickHouse Docker Hardened Images:
-
-- **ClickHouse Operator**: `dhi-clickhouse-operator:0.25.6` (runtime) or `dhi-clickhouse-operator:0.25.6-dev` (build-time)
-- **ClickHouse Server**: `dhi-clickhouse-server:25` (see ClickHouse Server DHI guide for details)
-
 ## Migrate to a Docker Hardened Image
 
-To migrate your ClickHouse Operator deployment to use the Docker Hardened Images, you must update your Kubernetes manifests. At minimum, you must update the image references in your existing deployments to Docker Hardened Images. This and a few other common changes are listed in the following table of migration notes:
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes:
 
 | Item | Migration note |
 |------|----------------|
-| Base image | Replace the metrics exporter image in your ClickHouse Operator deployment with the Docker Hardened Image. |
-| Operator image | Replace the ClickHouse Operator image with `dhi-clickhouse-operator:0.25.6`. |
-| ClickHouse image | Replace ClickHouse server images in ClickHouseInstallation specs with `dhi-clickhouse-server:25`. |
-| Non-root user | By default, the image runs as the nonroot user. Ensure that mounted volumes and service account permissions are accessible to the nonroot user. |
+| Base image | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| Non-root user | By default, images run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. |
 | TLS certificates | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
-| Ports | The hardened image runs as a nonroot user by default. The metrics port 8888 works without issues as it's above 1024. |
-| Entry point | The exporter binary is located at `/usr/local/bin/clickhouse-metrics-exporter`. Docker Hardened Images may have different entry points than standard images. |
-| ServiceAccount | The deployment must use a ServiceAccount with appropriate RBAC permissions to access ClickHouseInstallation resources. |
-| Namespace | Deploy in the same namespace as the ClickHouse Operator's ServiceAccount (typically `kube-system`). |
+| Ports | Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. ClickHouse default ports 8123 and 9000 work without issues. |
+| Entry point | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| ulimits | Always set `--ulimit nofile=262144:262144` for proper ClickHouse operation. |
 
-The following steps outline the general migration process:
+The following steps outline the general migration process.
 
-1. **Find hardened images for your deployment.**
+1. **Find hardened images for your app.**
     
-    A hardened image may have several variants. Inspect the image tags and 
-    find the image variant that meets your needs. ClickHouse Metrics Exporter images are available in version 0.25.6 with Debian 13 base. You'll also need `dhi-clickhouse-operator:0.25.6` and `dhi-clickhouse-server:25`.
-    
-2. **Update the image in your Kubernetes manifests.**
-    
-    Update the `image` field in your Deployment for the ClickHouse Operator and metrics exporter to reference the hardened images. Update ClickHouseInstallation specs to use `dhi-clickhouse-server:25`.
-    
-3. **Verify RBAC permissions.**
-    
-    Ensure that the ServiceAccount has appropriate RBAC permissions to access ClickHouseInstallation resources and the Kubernetes API.
+    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs. ClickHouse images are available in multiple versions (25.3, 25.8, 25.11) with Debian 13 base.
 
-4. **Configure ClickHouse authentication.**
+2. **Update the base image in your Dockerfile.**
     
-    Ensure the `clickhouse_operator` user exists in your ClickHouse clusters with appropriate permissions to query system tables for metrics.
+    Update the base image in your application's Dockerfile to the hardened image you found in the previous step.
 
-5. **Test in a non-production environment.**
+3. **Verify permissions**
     
-    Deploy the updated manifest to a test namespace and verify metrics are being collected correctly before rolling out to production.
+    Since the image runs as nonroot user, ensure that data directories and mounted volumes are accessible to the nonroot user.
 
 ## Troubleshoot migration
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools 
-for debugging. The recommended method for debugging applications built with 
-Docker Hardened Images is to use Kubernetes-native debugging tools or
-[Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/).
-
-For Kubernetes debugging:
-
-```bash
-# Check pod logs
-kubectl logs -n kube-system -l app=clickhouse-operator-metrics
-
-# Describe the pod for events
-kubectl describe pod -n kube-system <pod-name>
-
-# Use kubectl debug to attach a debug container
-kubectl debug -n kube-system pod/<pod-name> -it --image=busybox --target=metrics-exporter
-```
+The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
-By default, the image runs as the nonroot user. Ensure that:
-- The ServiceAccount has proper RBAC permissions to list and watch ClickHouseInstallation resources
-- Any mounted ConfigMaps or Secrets are readable by the nonroot user
-- The ServiceAccount exists in the deployment namespace
+By default image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
 
 ### Privileged ports
 
-The hardened image runs as a nonroot user by default. The default metrics endpoint port (8888) is above 1024 and works without issues.
-
-### No shell
-
-By default, the runtime image doesn't contain a shell. For debugging:
-- Use `kubectl logs` to view container logs
-- Use `kubectl describe` to view pod events
-- Use `kubectl debug` to attach a debugging container with tools
-- Use Docker Debug if you have access to the node
+Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
 
 ### Entry point
 
-The metrics exporter binary is located at `/usr/local/bin/clickhouse-metrics-exporter`. You can override the entry point in your Kubernetes deployment if needed, but this is rarely necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
 
-### ServiceAccount not found
-
-If you see an error about the ServiceAccount not being found:
-
-```
-error looking up service account clickhouse-system/clickhouse-operator: 
-serviceaccount "clickhouse-operator" not found
-```
-
-This occurs when the metrics exporter deployment is in a different namespace than the ClickHouse Operator's ServiceAccount. Deploy the metrics exporter in the same namespace as the operator (typically `kube-system`).
-
-### ClickHouse authentication errors
-
-If metrics show authentication failures in the logs:
-
-```
-Authentication failed: password is incorrect, or there is no user with such name
-```
-
-Configure the `clickhouse_operator` user in your ClickHouseInstallation:
-
-```yaml
-configuration:
-  users:
-    clickhouse_operator/password: your-secure-password
-    clickhouse_operator/networks/ip:
-      - "0.0.0.0/0"
-    clickhouse_operator/profile: default
-```
-
-### Kubernetes API connection issues
-
-If the exporter fails to connect to the Kubernetes API:
-
-1. Verify the ServiceAccount has appropriate RBAC permissions:
-   ```bash
-   kubectl auth can-i list clickhouseinstallations.clickhouse.altinity.com \
-     --as=system:serviceaccount:kube-system:clickhouse-operator
-   ```
-
-2. Check if the kubeconfig is correctly mounted (if running outside cluster)
-
-3. Verify network connectivity to the Kubernetes API server
-
-4. Check logs for specific error messages:
-   ```bash
-   kubectl logs -n kube-system -l app=clickhouse-operator-metrics
-   ```
-
-### ImagePullBackOff or pull access denied
-
-If you see errors like:
-
-```
-Failed to pull image: pull access denied, repository does not exist or may require authorization
-ImagePullBackOff
-```
-
-This means the Docker Hardened Image repositories have not been mirrored to your organization. You cannot pull DHI images directly from `dockerdevrel`.
-
-**Solution:**
-
-1. Go to the Docker Hardened Images catalog
-2. Mirror all three required repositories to your organization:
-   - `dhi-clickhouse-operator`
-   - `dhi-clickhouse-server`
-   - `dhi-clickhouse-metrics-exporter`
-3. Update all image references in your manifests to use your organization's namespace
-4. Redeploy with the corrected image references
-
-**To verify your mirrored images:**
-
-```bash
-# Check if you can pull from your organization
-docker pull <your-namespace>/dhi-clickhouse-operator:0.25.6
-docker pull <your-namespace>/dhi-clickhouse-server:25
-docker pull <your-namespace>/dhi-clickhouse-metrics-exporter:0.25.6
-```
-
-### ClickHouseInstallation status shows "Aborted"
-
-If the ClickHouseInstallation shows a status of "Aborted" with errors like:
-
-```
-FAILED to reconcile CR clickhouse-system/test-cluster, err: crud error - should abort
-reconcile completed UNSUCCESSFULLY
-```
-
-The operator's reconciliation process may have timed out before the ClickHouse Server completed initialization. Docker Hardened Images may take longer to start due to security hardening measures.
-
-**Solutions:**
-
-1. Increase probe delays in the ClickHouseInstallation pod template:
-   ```yaml
-   templates:
-     podTemplates:
-       - name: clickhouse-stable
-         spec:
-           containers:
-             - name: clickhouse
-               image: <your-namespace>/dhi-clickhouse-server:25
-               livenessProbe:
-                 httpGet:
-                   path: /ping
-                   port: 8123
-                 initialDelaySeconds: 180
-                 periodSeconds: 10
-                 failureThreshold: 10
-               readinessProbe:
-                 httpGet:
-                   path: /ping
-                   port: 8123
-                 initialDelaySeconds: 120
-                 periodSeconds: 5
-                 failureThreshold: 10
-   ```
-
-2. Ensure sufficient cluster resources for faster container startup
-
-3. Consider using standard ClickHouse images if startup time is critical for your deployment
-
-4. Check operator logs for specific timeout details:
-   ```bash
-   kubectl logs -n kube-system -l app=clickhouse-operator --tail=50
-   ```
-
-The metrics exporter DHI works correctly once a stable ClickHouse cluster is established.
