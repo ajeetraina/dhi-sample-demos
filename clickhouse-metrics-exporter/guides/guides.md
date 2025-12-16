@@ -44,7 +44,6 @@ curl -s http://localhost:9116/metrics | grep clickhouse
 
 # Cleanup
 docker rm -f clickhouse-server clickhouse-exporter
-docker network rm test-net
 ```
 
 Verify the exporter is running and collecting metrics:
@@ -60,8 +59,6 @@ curl http://localhost:9116/metrics
 For better isolation, run both ClickHouse server and metrics exporter on the same Docker network:
 
 ```bash
-# Create a network
-docker network create clickhouse-net
 
 # Run ClickHouse server
 docker run -d \
