@@ -8,7 +8,25 @@ select either **Mirror to repository** or
 **View in repository > Mirror to repository**, and then follow the 
 on-screen instructions.
 
-**Note:** The ClickHouse Metrics Exporter requires the ClickHouse Operator to be deployed. Ensure you have also mirrored the `dhi-clickhouse-operator` and `dhi-clickhouse-server` repositories.
+### Required Image Repositories
+
+The ClickHouse Metrics Exporter requires three Docker Hardened Image repositories to be mirrored to your organization:
+
+1. **ClickHouse Operator** - `dhi-clickhouse-operator`
+   - Required to manage ClickHouse clusters in Kubernetes
+   - Mirror version 0.25.6 or later
+
+2. **ClickHouse Server** - `dhi-clickhouse-server`
+   - Required to run ClickHouse database instances
+   - Mirror version 25 or later
+
+3. **ClickHouse Metrics Exporter** - `dhi-clickhouse-metrics-exporter`
+   - The metrics exporter itself
+   - Mirror version 0.25.6 or later
+
+**Important:** You cannot pull these images directly from `dockerdevrel`. They must be mirrored to your organization's namespace first. All three repositories must be mirrored before proceeding with deployment.
+
+After mirroring, replace `<your-namespace>` in all examples below with your organization's namespace (e.g., `mycompany` if you mirrored to `mycompany/dhi-clickhouse-operator`).
 
 ## Start a ClickHouse Metrics Exporter instance
 
@@ -113,7 +131,7 @@ spec:
       serviceAccountName: clickhouse-operator
       containers:
       - name: clickhouse-operator
-        image: <your-namespace>/dhi-clickhouse-operator:0.25.6
+        image: <your-namespace>/dhi-clickhouse-operator:<tag>
         imagePullPolicy: Always
         env:
         - name: OPERATOR_POD_NAMESPACE
@@ -205,7 +223,7 @@ spec:
         spec:
           containers:
             - name: clickhouse
-              image: <your-namespace>/dhi-clickhouse-server:25
+              image: <your-namespace>/dhi-clickhouse-server:<tag>
 ```
 
 Verify the deployment:
@@ -265,7 +283,7 @@ spec:
         spec:
           containers:
             - name: clickhouse
-              image: <your-namespace>/dhi-clickhouse-server:25
+              image: <your-namespace>/dhi-clickhouse-server:<tag>
 ```
 
 ### Mount custom configuration
@@ -522,3 +540,82 @@ If the exporter fails to connect to the Kubernetes API:
    ```bash
    kubectl logs -n kube-system -l app=clickhouse-operator-metrics
    ```
+
+### ImagePullBackOff or pull access denied
+
+If you see errors like:
+
+```
+Failed to pull image: pull access denied, repository does not exist or may require authorization
+ImagePullBackOff
+```
+
+This means the Docker Hardened Image repositories have not been mirrored to your organization. You cannot pull DHI images directly from `dockerdevrel`.
+
+**Solution:**
+
+1. Go to the Docker Hardened Images catalog
+2. Mirror all three required repositories to your organization:
+   - `dhi-clickhouse-operator`
+   - `dhi-clickhouse-server`
+   - `dhi-clickhouse-metrics-exporter`
+3. Update all image references in your manifests to use your organization's namespace
+4. Redeploy with the corrected image references
+
+**To verify your mirrored images:**
+
+```bash
+# Check if you can pull from your organization
+docker pull <your-namespace>/dhi-clickhouse-operator:0.25.6
+docker pull <your-namespace>/dhi-clickhouse-server:25
+docker pull <your-namespace>/dhi-clickhouse-metrics-exporter:0.25.6
+```
+
+### ClickHouseInstallation status shows "Aborted"
+
+If the ClickHouseInstallation shows a status of "Aborted" with errors like:
+
+```
+FAILED to reconcile CR clickhouse-system/test-cluster, err: crud error - should abort
+reconcile completed UNSUCCESSFULLY
+```
+
+The operator's reconciliation process may have timed out before the ClickHouse Server completed initialization. Docker Hardened Images may take longer to start due to security hardening measures.
+
+**Solutions:**
+
+1. Increase probe delays in the ClickHouseInstallation pod template:
+   ```yaml
+   templates:
+     podTemplates:
+       - name: clickhouse-stable
+         spec:
+           containers:
+             - name: clickhouse
+               image: <your-namespace>/dhi-clickhouse-server:25
+               livenessProbe:
+                 httpGet:
+                   path: /ping
+                   port: 8123
+                 initialDelaySeconds: 180
+                 periodSeconds: 10
+                 failureThreshold: 10
+               readinessProbe:
+                 httpGet:
+                   path: /ping
+                   port: 8123
+                 initialDelaySeconds: 120
+                 periodSeconds: 5
+                 failureThreshold: 10
+   ```
+
+2. Ensure sufficient cluster resources for faster container startup
+
+3. Consider using standard ClickHouse images if startup time is critical for your deployment
+
+4. Check operator logs for specific timeout details:
+   ```bash
+   kubectl logs -n kube-system -l app=clickhouse-operator --tail=50
+   ```
+
+The metrics exporter DHI works correctly once a stable ClickHouse cluster is established.
