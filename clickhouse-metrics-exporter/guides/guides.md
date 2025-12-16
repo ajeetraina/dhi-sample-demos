@@ -16,10 +16,6 @@ Run the following command and replace `<your-namespace>` with your organization'
 namespace and `<tag>` with the image variant you want to run.
 
 ```bash
-# Pull ClickHouse server image
-docker pull dockerdevrel/dhi-clickhouse-server:25
-
-# Create network
 docker network create test-net
 
 # Run ClickHouse server
