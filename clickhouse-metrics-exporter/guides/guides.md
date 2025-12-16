@@ -15,7 +15,7 @@ The ClickHouse Metrics Exporter is designed to work as part of the ClickHouse Op
 
 This image cannot run as a standalone container outside of Kubernetes as it requires access to the Kubernetes API and ClickHouseInstallation custom resources.
 
-### Deploy ClickHouse Operator (DHI)
+### Deploy ClickHouse Operator 
 
 First, deploy the ClickHouse Operator using the Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
@@ -125,7 +125,7 @@ spec:
               fieldPath: metadata.name
 ```
 
-### Deploy Metrics Exporter (DHI)
+### Deploy Metrics Exporter 
 
 Deploy the metrics exporter using the Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
