@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-Before you can use any Docker Hardened Image, you must mirror the following image 
-repositories from the catalog (`dhi-clickhouse-operator`, `dhi-clickhouse-server` and `dhi-clickhouse-metrics-exporter`) to your organization. To mirror the repository, 
+Before you can use any Docker Hardened Image, you must mirror the image 
+repositories (**dhi-clickhouse-operator** ,**dhi-clickhouse-metrics-exporter**)  from the catalog to your organization. To mirror the repository, 
 select either **Mirror to repository** or 
 **View in repository > Mirror to repository**, and then follow the 
 on-screen instructions.
@@ -184,9 +184,9 @@ EOF
 kubectl apply -f clickhouse-metrics-exporter.yaml
 ```
 
-### Deploy a ClickHouse Cluster (DHI)
+### Deploy a ClickHouse Cluster
 
-Deploy a ClickHouse cluster using the Docker Hardened Image for the metrics exporter to monitor. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
+Deploy a ClickHouse cluster for the metrics exporter to monitor.
 
 ```bash
 # Create the namespace first
@@ -199,9 +199,6 @@ metadata:
   name: my-cluster
   namespace: clickhouse-system
 spec:
-  defaults:
-    templates:
-      podTemplate: clickhouse-stable
   configuration:
     users:
       clickhouse_operator/password: your-secure-password
@@ -213,39 +210,10 @@ spec:
         layout:
           shardsCount: 1
           replicasCount: 1
-  templates:
-    podTemplates:
-      - name: clickhouse-stable
-        spec:
-          containers:
-            - name: clickhouse
-              image: <your-namespace>/dhi-clickhouse-server:<tag>
-              livenessProbe:
-                exec:
-                  command:
-                    - clickhouse-client
-                    - --query
-                    - "SELECT 1"
-                initialDelaySeconds: 60
-                periodSeconds: 10
-                failureThreshold: 10
-              readinessProbe:
-                exec:
-                  command:
-                    - clickhouse-client
-                    - --query
-                    - "SELECT 1"
-                initialDelaySeconds: 30
-                periodSeconds: 5
-                failureThreshold: 10
 EOF
 
 kubectl apply -f clickhouse-cluster.yaml
 ```
-
-**Important notes:**
-- The `defaults.templates.podTemplate` setting is required to ensure the operator uses your specified DHI image
-- The `exec` probes use `clickhouse-client` instead of HTTP probes because DHI ClickHouse listens on localhost only by default
 
 Verify the deployment:
 
@@ -260,6 +228,8 @@ kubectl logs -n kube-system -l app=clickhouse-operator-metrics
 ### Integrate with Prometheus using ServiceMonitor
 
 Create a ServiceMonitor for Prometheus Operator to automatically scrape metrics from the exporter.
+
+**Note:** This requires [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator) to be installed in your cluster to provide the ServiceMonitor CRD.
 
 ```bash
 cat > servicemonitor.yaml << 'EOF'
@@ -283,7 +253,7 @@ kubectl apply -f servicemonitor.yaml
 
 ### Configure ClickHouse authentication
 
-Configure the `clickhouse_operator` user in your ClickHouseInstallation to allow the exporter to query ClickHouse metrics. Ensure you're using the Docker Hardened ClickHouse Server image.
+Configure the `clickhouse_operator` user in your ClickHouseInstallation to allow the exporter to query ClickHouse metrics.
 
 ```bash
 cat > clickhouse-with-auth.yaml << 'EOF'
@@ -293,9 +263,6 @@ metadata:
   name: my-cluster
   namespace: clickhouse-system
 spec:
-  defaults:
-    templates:
-      podTemplate: clickhouse-stable
   configuration:
     users:
       clickhouse_operator/password: your-secure-password
@@ -307,31 +274,6 @@ spec:
         layout:
           shardsCount: 2
           replicasCount: 2
-  templates:
-    podTemplates:
-      - name: clickhouse-stable
-        spec:
-          containers:
-            - name: clickhouse
-              image: <your-namespace>/dhi-clickhouse-server:<tag>
-              livenessProbe:
-                exec:
-                  command:
-                    - clickhouse-client
-                    - --query
-                    - "SELECT 1"
-                initialDelaySeconds: 60
-                periodSeconds: 10
-                failureThreshold: 10
-              readinessProbe:
-                exec:
-                  command:
-                    - clickhouse-client
-                    - --query
-                    - "SELECT 1"
-                initialDelaySeconds: 30
-                periodSeconds: 5
-                failureThreshold: 10
 EOF
 
 kubectl apply -f clickhouse-with-auth.yaml
@@ -454,42 +396,60 @@ To migrate your application to a Docker Hardened Image, you must update your Doc
 
 | Item | Migration note |
 |------|----------------|
-| Base image | Replace your base images in your Dockerfile with a Docker Hardened Image. |
-| Non-root user | By default, images run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. |
-| TLS certificates | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
-| Ports | Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. ClickHouse default ports 8123 and 9000 work without issues. |
-| Entry point | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
-| ulimits | Always set `--ulimit nofile=262144:262144` for proper ClickHouse operation. |
+| **Base image** | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| **Nonroot user** | Runtime images run as a nonroot user. Ensure that necessary files and directories are accessible to that user |
+| **Multi-stage build** | Utilize images with a dev tag for build stages and runtime images for runtime. |
+| **TLS certificates** | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
+| **Ports** | Non-dev hardened images run as a nonroot user by default. Configure your Rust application to use ports above 1024. |
+| **Entry point** | Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
 
-The following steps outline the general migration process.
+### Migration process
 
 1. **Find hardened images for your app.**
-    
-    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs. ClickHouse images are available in multiple versions (25.3, 25.8, 25.11) with Debian 13 base.
+   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs. Rust images are available in multiple versions.
 
 2. **Update the base image in your Dockerfile.**
-    
-    Update the base image in your application's Dockerfile to the hardened image you found in the previous step.
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For Rust applications, this is typically going to be an image tagged as `dev` because it has the Rust toolchain needed to compile applications.
 
-3. **Verify permissions**
-    
-    Since the image runs as nonroot user, ensure that data directories and mounted volumes are accessible to the nonroot user.
+   Example:
+   ```dockerfile
+   FROM <your-namespace>/dhi-rust:<version>-dev
+   ```
+
+3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. Use dev images for build stages and runtime images for final runtime.
+
+4. **Install additional packages**
+   Docker Hardened Images selectively remove certain tools while maintaining operational capabilities. You may need to install additional packages in your Dockerfile.
+
+   Both dev and runtime variants include cargo and rustc. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a dev image. Then copy any necessary artifacts to the runtime stage that uses a minimal image.
 
 ## Troubleshoot migration
 
 ### General debugging
 
-The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+Docker Hardened Images provide robust debugging capabilities through **Docker Debug**, which attaches comprehensive debugging tools to running containers while maintaining the security benefits of minimal runtime images.
+
+**Docker Debug** provides a shell, common debugging tools, and lets you install additional tools in an ephemeral, writable layer that only exists during the debugging session:
+
+```bash
+docker debug <container-name>
+```
+
+**Docker Debug advantages:**
+- Full debugging environment with shells and tools
+- Temporary, secure debugging layer that doesn't modify the runtime container
+- Install additional debugging tools as needed during the session
+- Perfect for troubleshooting DHI containers while preserving security
 
 ### Permissions
 
-By default image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
+Runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to copy files to different directories or change permissions so your application running as a nonroot user can access them.
 
 ### Privileged ports
 
-Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Configure your Rust applications to listen on ports 8000, 8080, or other ports above 1024.
 
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
-
