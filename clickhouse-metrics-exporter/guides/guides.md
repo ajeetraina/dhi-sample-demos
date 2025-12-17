@@ -1,13 +1,14 @@
+
 ## Prerequisites
 
 All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
 
-Public image: dhi.io/<repository>:<tag>
-Mirrored image: <your-namespace>/dhi-<repository>:<tag>
-For the examples, you must first use docker login dhi.io to authenticate to the registry to pull the images.
+- Public image: `dhi.io/<repository>:<tag>`
+- Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
 
+For the examples, you must first use docker `login dhi.io` to authenticate to the registry to pull the images.
 
 ## Start a ClickHouse Metrics Exporter instance
 
@@ -17,7 +18,7 @@ This image cannot run as a standalone container outside of Kubernetes as it requ
 
 ### Deploy ClickHouse Operator (DHI)
 
-First, deploy the ClickHouse Operator using the Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
+First, deploy the ClickHouse Operator using the Docker Hardened Image. Replace `<tag>` with the image variant you want to run.
 
 ```bash
 cat > clickhouse-operator.yaml << 'EOF'
@@ -113,7 +114,7 @@ spec:
       serviceAccountName: clickhouse-operator
       containers:
       - name: clickhouse-operator
-        image: <your-namespace>/dhi-clickhouse-operator:<tag>
+        image: dhi.io/clickhouse-operator:<tag>
         imagePullPolicy: Always
         env:
         - name: OPERATOR_POD_NAMESPACE
@@ -131,7 +132,7 @@ kubectl apply -f clickhouse-operator.yaml
 
 ### Deploy Metrics Exporter (DHI)
 
-Deploy the metrics exporter using the Docker Hardened Image. Replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
+Deploy the metrics exporter using the Docker Hardened Image. Replace `<tag>` with the image variant you want to run.
 
 ```bash
 cat > clickhouse-metrics-exporter.yaml << 'EOF'
@@ -153,7 +154,7 @@ spec:
       serviceAccountName: clickhouse-operator
       containers:
       - name: metrics-exporter
-        image: <your-namespace>/dhi-clickhouse-metrics-exporter:<tag>
+        image: dhi.io/clickhouse-metrics-exporter:<tag>
         ports:
         - name: metrics
           containerPort: 8888
@@ -307,7 +308,7 @@ spec:
     spec:
       containers:
       - name: metrics-exporter
-        image: <your-namespace>/dhi-clickhouse-metrics-exporter:<tag>
+        image: dhi.io/clickhouse-metrics-exporter:<tag>
         args:
         - "-metrics-endpoint=:8888"
         - "-config=/etc/clickhouse-operator/config.yaml"
@@ -327,14 +328,15 @@ kubectl apply -f custom-config.yaml
 
 ### Key differences
 
-| Feature | Standard ClickHouse Metrics Exporter | Docker Hardened ClickHouse Metrics Exporter |
-|---------|--------------------------------------|---------------------------------------------|
-| Security | Standard base with common utilities | Minimal, hardened base with security patches |
-| Shell access | Full shell (bash/sh) available | No shell in runtime variants |
-| Package manager | apt available | No package manager in runtime variants |
-| User | May run as root | Runs as nonroot user |
-| Attack surface | Larger due to additional utilities | Minimal, only essential components |
-| Debugging | Traditional shell debugging | Use Docker Debug or kubectl debug for troubleshooting |
+| Feature         | Standard ClickHouse Metrics Exporter         | Docker Hardened ClickHouse Metrics Exporter           |
+| --------------- | -------------------------------------------- | ----------------------------------------------------- |
+| Security        | Standard base with bash, curl, and utilities | Minimal, hardened base with security patches          |
+| Shell access    | Full shell (bash/sh) available               | No shell in runtime variants                          |
+| Package manager | Package manager available                    | No package manager in runtime variants                |
+| User            | Runs as `nobody` user                        | Runs as `nonroot` user                                |
+| Image size      | 107MB (30.3MB compressed)                    | 80.9MB (21.1MB compressed) - 25% smaller              |
+| Attack surface  | 29 total files, includes bash/curl           | 15 total files - 48% fewer components                 |
+| Debugging       | Traditional shell debugging                  | Use Docker Debug or kubectl debug for troubleshooting |
 
 ### Why no shell or package manager?
 
@@ -344,17 +346,13 @@ Docker Hardened Images prioritize security through minimalism:
 - Immutable infrastructure: Runtime containers shouldn't be modified after deployment
 - Compliance ready: Meets strict security requirements for regulated environments
 
-The hardened images intended for runtime don't contain a shell nor any tools for
-debugging. Common debugging methods for applications built with Docker
-Hardened Images include:
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
 
 - [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers
 - Docker's Image Mount feature to mount debugging tools
 - Kubernetes-specific debugging with `kubectl debug`
 
-Docker Debug provides a shell, common debugging tools, and lets you
-install other tools in an ephemeral, writable layer that only exists during the
-debugging session.
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 For Kubernetes environments, you can use kubectl debug:
 
@@ -372,17 +370,13 @@ docker debug <container-id>
 
 Docker Hardened Images come in different variants depending on their intended use.
 
-Runtime variants are designed to run your application in production. 
-These images are intended to be used either directly or as the `FROM` image in 
-the final stage of a multi-stage build. These images typically:
+Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
 
 - Run as the nonroot user
 - Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the app
 
-Build-time variants typically include `dev` in the variant name and are 
-intended for use in the first stage of a multi-stage Dockerfile. These images 
-typically:
+Build-time variants typically include `dev` in the variant name and are intended for use in the first stage of a multi-stage Dockerfile. These images typically:
 
 - Run as the root user
 - Include a shell and package manager
@@ -394,35 +388,24 @@ The ClickHouse Metrics Exporter Docker Hardened Image is available as runtime va
 
 To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes:
 
-| Item | Migration note |
-|------|----------------|
-| **Base image** | Replace your base images in your Dockerfile with a Docker Hardened Image. |
-| **Nonroot user** | Runtime images run as a nonroot user. Ensure that necessary files and directories are accessible to that user |
-| **Multi-stage build** | Utilize images with a dev tag for build stages and runtime images for runtime. |
-| **TLS certificates** | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
-| **Ports** | Non-dev hardened images run as a nonroot user by default. Configure your Rust application to use ports above 1024. |
-| **Entry point** | Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| Item                  | Migration note                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Base image**        | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                             |
+| **Nonroot user**      | Runtime images run as a nonroot user. Ensure that necessary files and directories are accessible to that user                                          |
+| **Multi-stage build** | Utilize images with a dev tag for build stages and runtime images for runtime.                                                                         |
+| **TLS certificates**  | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                     |
+| **Ports**             | Non-dev hardened images run as a nonroot user by default. Configure your application to use ports above 1024.                                          |
+| **Entry point**       | Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                               |
 
 ### Migration process
 
-1. **Find hardened images for your app.**
-   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs. Rust images are available in multiple versions.
+1. **Find hardened images for your app.** A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-2. **Update the base image in your Dockerfile.**
-   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For Rust applications, this is typically going to be an image tagged as `dev` because it has the Rust toolchain needed to compile applications.
+2. **Update the base image in your Dockerfile.** Update the base image in your application's Dockerfile to the hardened image you found in the previous step.
 
-   Example:
-   ```dockerfile
-   FROM <your-namespace>/dhi-rust:<version>-dev
-   ```
+3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.** To ensure that your final image is as minimal as possible, you should use a multi-stage build. Use dev images for build stages and runtime images for final runtime.
 
-3. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
-   To ensure that your final image is as minimal as possible, you should use a multi-stage build. Use dev images for build stages and runtime images for final runtime.
-
-4. **Install additional packages**
-   Docker Hardened Images selectively remove certain tools while maintaining operational capabilities. You may need to install additional packages in your Dockerfile.
-
-   Both dev and runtime variants include cargo and rustc. You should use a multi-stage Dockerfile to install the packages. Install the packages in the build stage that uses a dev image. Then copy any necessary artifacts to the runtime stage that uses a minimal image.
+4. **Install additional packages** Docker Hardened Images selectively remove certain tools while maintaining operational capabilities. You may need to install additional packages in your Dockerfile.
 
 ## Troubleshoot migration
 
@@ -437,6 +420,7 @@ docker debug <container-name>
 ```
 
 **Docker Debug advantages:**
+
 - Full debugging environment with shells and tools
 - Temporary, secure debugging layer that doesn't modify the runtime container
 - Install additional debugging tools as needed during the session
@@ -448,7 +432,7 @@ Runtime image variants run as the nonroot user. Ensure that necessary files and 
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Configure your Rust applications to listen on ports 8000, 8080, or other ports above 1024.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. Configure your applications to listen on ports 8000, 8080, or other ports above 1024.
 
 ### Entry point
 
