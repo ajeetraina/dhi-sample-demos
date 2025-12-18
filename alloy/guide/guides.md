@@ -1,13 +1,20 @@
 ## Prerequisites
 
-All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
+All examples in this guide use the DHI registry. You must authenticate first:
 
-For example:
+```bash
+docker login dhi.io
+```
 
-- Public image: `dhi.io/alloy:<tag>`
+**Image naming:**
+- Official DHI image: `dhi.io/dhi-alloy:<tag>`
 - Mirrored image: `<your-namespace>/dhi-alloy:<tag>`
 
-For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
+**Available tags:**
+- `1.12.1-debian13` - Runtime variant (recommended for production)
+- `1.12.1-debian13-dev` - Dev variant (includes shell and debugging tools)
+
+Replace `<tag>` in the commands below with your desired version tag (e.g., `1.12.1-debian13`).
 
 Once the container is running, you can access the Alloy UI at `http://localhost:12345` and the metrics endpoint at `http://localhost:12345/metrics`.
 
@@ -15,7 +22,7 @@ Once the container is running, you can access the Alloy UI at `http://localhost:
 
 ```bash
 # Pull the public image
-docker pull dhi.io/alloy:1.12.1-debian13
+docker pull dhi.io/dhi-alloy:<tag>
 
 # Create minimal config
 cat > config.alloy << 'EOF'
@@ -36,7 +43,7 @@ docker run --rm -d \
   -v "$PWD/config.alloy:/etc/alloy/config.alloy:ro" \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
-  dhi.io/alloy:1.12.1-debian13 \
+  dhi.io/dhi-alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
@@ -62,7 +69,7 @@ docker run --rm \
   -v "$PWD/config.alloy:/etc/alloy/config.alloy:ro" \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
-  dhi.io/alloy:1.12.1-debian13 \
+  dhi.io/dhi-alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
@@ -74,7 +81,15 @@ The container starts using the default entrypoint, `alloy`, and command, `run /e
 
 ### Use case 1: Send metrics to Prometheus
 
-Configuration file (`config-prometheus.alloy`):
+**Step 1: Create a Docker network**
+
+```bash
+docker network create monitoring
+```
+
+**Step 2: Create the configuration file**
+
+Create `config-prometheus.alloy`:
 
 ```alloy
 logging {
@@ -96,7 +111,25 @@ prometheus.remote_write "prom" {
 }
 ```
 
-Run command:
+**Step 3: Verify the configuration**
+
+```bash
+cat config-prometheus.alloy
+```
+
+**Step 4: Start Prometheus (if not already running)**
+
+```bash
+docker run -d \
+  --name prometheus \
+  --network monitoring \
+  -p 9090:9090 \
+  prom/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --web.enable-remote-write-receiver
+```
+
+**Step 5: Start Alloy**
 
 ```bash
 docker run --rm -d \
@@ -105,15 +138,33 @@ docker run --rm -d \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
   --network monitoring \
-  dhi.io/alloy:1.12.1-debian13 \
+  dhi.io/dhi-alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
 ```
 
+**Step 6: Verify Alloy is running**
+
+```bash
+docker logs alloy
+```
+
+You should see: `msg="now listening for http traffic" addr=0.0.0.0:12345`
+
 ### Use case 2: Collect Docker container metrics
 
-Configuration file (`config-docker.alloy`):
+**Step 1: Ensure the monitoring network exists**
+
+If you already completed Use Case 1, the `monitoring` network already exists. If not, create it:
+
+```bash
+docker network create monitoring
+```
+
+**Step 2: Create the configuration file**
+
+Create `config-docker.alloy`:
 
 ```alloy
 logging {
@@ -137,7 +188,25 @@ prometheus.remote_write "prom" {
 }
 ```
 
-Run command:
+**Step 3: Verify the configuration**
+
+```bash
+cat config-docker.alloy
+```
+
+**Step 4: Start Prometheus (if not already running)**
+
+```bash
+docker run -d \
+  --name prometheus \
+  --network monitoring \
+  -p 9090:9090 \
+  prom/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --web.enable-remote-write-receiver
+```
+
+**Step 5: Start Alloy with Docker socket access**
 
 ```bash
 docker run --rm -d \
@@ -147,11 +216,19 @@ docker run --rm -d \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
   --network monitoring \
-  dhi.io/alloy:1.12.1-debian13 \
+  dhi.io/dhi-alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
 ```
+
+**Step 6: Verify Alloy is running**
+
+```bash
+docker logs alloy
+```
+
+You should see: `msg="now listening for http traffic" addr=0.0.0.0:12345`
 
 ## Image variants
 
