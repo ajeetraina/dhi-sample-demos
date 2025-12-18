@@ -1,20 +1,12 @@
 ## Prerequisites
 
-All examples in this guide use the DHI registry. You must authenticate first:
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
-```bash
-docker login dhi.io
-```
+For example:
+- Public image: `dhi.io/<repository>:<tag>`
+- Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
 
-**Image naming:**
-- Official DHI image: `dhi.io/dhi-alloy:<tag>`
-- Mirrored image: `<your-namespace>/dhi-alloy:<tag>`
-
-**Available tags:**
-- `1.12.1-debian13` - Runtime variant (recommended for production)
-- `1.12.1-debian13-dev` - Dev variant (includes shell and debugging tools)
-
-Replace `<tag>` in the commands below with your desired version tag (e.g., `1.12.1-debian13`).
+For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
 Once the container is running, you can access the Alloy UI at `http://localhost:12345` and the metrics endpoint at `http://localhost:12345/metrics`.
 
@@ -22,7 +14,7 @@ Once the container is running, you can access the Alloy UI at `http://localhost:
 
 ```bash
 # Pull the public image
-docker pull dhi.io/dhi-alloy:<tag>
+docker pull dhi.io/alloy:<tag>
 
 # Create minimal config
 cat > config.alloy << 'EOF'
@@ -43,7 +35,7 @@ docker run --rm -d \
   -v "$PWD/config.alloy:/etc/alloy/config.alloy:ro" \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
-  dhi.io/dhi-alloy:<tag> \
+  dhi.io/alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
@@ -69,7 +61,7 @@ docker run --rm \
   -v "$PWD/config.alloy:/etc/alloy/config.alloy:ro" \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
-  dhi.io/dhi-alloy:<tag> \
+  dhi.io/alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
@@ -138,7 +130,7 @@ docker run --rm -d \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
   --network monitoring \
-  dhi.io/dhi-alloy:<tag> \
+  dhi.io/alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
@@ -216,7 +208,7 @@ docker run --rm -d \
   -v alloy-data:/var/lib/alloy/data \
   -p 12345:12345 \
   --network monitoring \
-  dhi.io/dhi-alloy:<tag> \
+  dhi.io/alloy:<tag> \
   run /etc/alloy/config.alloy \
   --storage.path=/var/lib/alloy/data \
   --server.http.listen-addr=0.0.0.0:12345
