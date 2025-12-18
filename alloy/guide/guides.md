@@ -9,6 +9,8 @@ For example:
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
+Once the container is running, you can access the Alloy UI at `http://localhost:12345` and the metrics endpoint at `http://localhost:12345/metrics`.
+
 ## Start an Alloy instance
 
 ```bash
@@ -67,6 +69,89 @@ docker run --rm \
 ```
 
 The container starts using the default entrypoint, `alloy`, and command, `run /etc/alloy/config.alloy --storage.path=/var/lib/alloy/data`.
+
+## Use cases
+
+### Use case 1: Send metrics to Prometheus
+
+Configuration file (`config-prometheus.alloy`):
+
+```alloy
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+prometheus.exporter.self "alloy" {}
+
+prometheus.scrape "alloy" {
+  targets    = prometheus.exporter.self.alloy.targets
+  forward_to = [prometheus.remote_write.prom.receiver]
+}
+
+prometheus.remote_write "prom" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+```
+
+Run command:
+
+```bash
+docker run --rm -d \
+  --name alloy \
+  -v "$PWD/config-prometheus.alloy:/etc/alloy/config.alloy:ro" \
+  -v alloy-data:/var/lib/alloy/data \
+  -p 12345:12345 \
+  --network monitoring \
+  dhi.io/alloy:1.12.1-debian13 \
+  run /etc/alloy/config.alloy \
+  --storage.path=/var/lib/alloy/data \
+  --server.http.listen-addr=0.0.0.0:12345
+```
+
+### Use case 2: Collect Docker container metrics
+
+Configuration file (`config-docker.alloy`):
+
+```alloy
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+prometheus.scrape "docker" {
+  targets    = discovery.docker.containers.targets
+  forward_to = [prometheus.remote_write.prom.receiver]
+}
+
+prometheus.remote_write "prom" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+```
+
+Run command:
+
+```bash
+docker run --rm -d \
+  --name alloy \
+  -v "$PWD/config-docker.alloy:/etc/alloy/config.alloy:ro" \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -v alloy-data:/var/lib/alloy/data \
+  -p 12345:12345 \
+  --network monitoring \
+  dhi.io/alloy:1.12.1-debian13 \
+  run /etc/alloy/config.alloy \
+  --storage.path=/var/lib/alloy/data \
+  --server.http.listen-addr=0.0.0.0:12345
+```
 
 ## Image variants
 
