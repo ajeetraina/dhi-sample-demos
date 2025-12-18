@@ -9,8 +9,9 @@ For example:
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
-## Start an Alloy instance
+Once the container is running, you can access the Alloy UI at `http://localhost:12345` and the metrics endpoint at `http://localhost:12345/metrics`.
 
+## Start an Alloy instance
 
 ```bash
 # Pull the public image
@@ -88,6 +89,36 @@ Docker Hardened Images come in different variants depending on their intended us
 - Are used to build or compile applications
 
 To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
+
+## Non-hardened images vs Docker Hardened Images
+
+Key differences:
+
+| Feature | Standard Grafana Alloy | Docker Hardened Grafana Alloy |
+|---------|------------------------|-------------------------------|
+| Security | Standard base with bash, curl, and utilities | Minimal, hardened base with security patches |
+| Shell access | Full shell (bash/sh) available | No shell in runtime variants |
+| Package manager | Package manager available | No package manager in runtime variants |
+| User | Runs as alloy user | Runs as alloy user (UID 473) |
+| Image size | Standard size | Optimized and minimal |
+| Attack surface | Includes unnecessary utilities | Minimal components only |
+| Debugging | Traditional shell debugging | Use Docker Debug or kubectl debug for troubleshooting |
+
+## Why no shell or package manager?
+
+Docker Hardened Images prioritize security through minimalism:
+
+- Reduced attack surface: Fewer binaries mean fewer potential vulnerabilities
+- Immutable infrastructure: Runtime containers shouldn't be modified after deployment
+- Compliance ready: Meets strict security requirements for regulated environments
+
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
+
+- Docker Debug to attach to containers
+- Docker's Image Mount feature to mount debugging tools
+- Kubernetes-specific debugging with kubectl debug
+
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ## Migrate to a Docker Hardened Image
 
