@@ -9,8 +9,6 @@ For example:
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
-Once the container is running, you can access the Alloy UI at `http://localhost:12345` and the metrics endpoint at `http://localhost:12345/metrics`.
-
 ## Start an Alloy instance
 
 ```bash
