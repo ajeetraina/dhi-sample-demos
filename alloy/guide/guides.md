@@ -226,37 +226,6 @@ docker logs alloy
 
 You should see: `msg="now listening for http traffic" addr=0.0.0.0:12345`
 
-
-## Non-hardened images vs Docker Hardened Images
-
-Key differences:
-
-| Feature | Standard Grafana Alloy | Docker Hardened Grafana Alloy |
-|---------|------------------------|-------------------------------|
-| Security | Standard base with bash, curl, and utilities | Minimal, hardened base with security patches |
-| Shell access | Full shell (bash/sh) available | No shell in runtime variants |
-| Package manager | Package manager available | No package manager in runtime variants |
-| User | Runs as alloy user | Runs as alloy user (UID 473) |
-| Image size | Standard size | Optimized and minimal |
-| Attack surface | Includes unnecessary utilities | Minimal components only |
-| Debugging | Traditional shell debugging | Use Docker Debug or kubectl debug for troubleshooting |
-
-## Why no shell or package manager?
-
-Docker Hardened Images prioritize security through minimalism:
-
-- Reduced attack surface: Fewer binaries mean fewer potential vulnerabilities
-- Immutable infrastructure: Runtime containers shouldn't be modified after deployment
-- Compliance ready: Meets strict security requirements for regulated environments
-
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
-
-- Docker Debug to attach to containers
-- Docker's Image Mount feature to mount debugging tools
-- Kubernetes-specific debugging with kubectl debug
-
-Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
-
 ## Image variants
 
 The Alloy Hardened Image is available as dev and runtime variants.
@@ -275,8 +244,46 @@ Docker Hardened Images come in different variants depending on their intended us
 - Include a shell and package manager
 - Are used to build or compile applications
 
+**For Alloy dev variant:** To access debugging tools, override the entrypoint:
+```bash
+docker run --rm -it --entrypoint=/bin/bash dhi.io/alloy:<tag>-dev
+```
+
 To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
 
+## Non-hardened images vs Docker Hardened Images
+
+Based on empirical testing, here are the key differences:
+
+| Feature | Standard Grafana Alloy | Docker Hardened Grafana Alloy |
+|---------|------------------------|-------------------------------|
+| Base Image | Standard base with utilities | Debian 13 with security patches |
+| Shell access | Shell available (sh) | No shell in runtime variants |
+| Image size | 641MB | 510MB runtime / 606MB dev (optimized) |
+| Layers | 18 layers | 10 layers (more efficient) |
+| User | Default user | Runs as alloy user (UID 473) |
+| Security patches | Standard update cycle | Proactive security patches and hardening |
+| Image variants | Production image only | Runtime (production) + Dev (debugging) variants |
+| Dev/Debug support | Shell-based debugging | Dev variant with bash, apt, and debugging tools |
+
+## Why no shell or package manager?
+
+Docker Hardened Images prioritize security through minimalism:
+
+- Reduced attack surface: Fewer binaries mean fewer potential vulnerabilities
+- Immutable infrastructure: Runtime containers shouldn't be modified after deployment
+- Compliance ready: Meets strict security requirements for regulated environments
+
+The hardened runtime images don't contain a shell nor any tools for debugging. For Grafana Alloy, debugging options include:
+
+- **DHI Dev variant**: Use `dhi.io/alloy:<tag>-dev` with entrypoint override
+  ```bash
+  docker run --rm -it --entrypoint=/bin/bash dhi.io/alloy:<tag>-dev
+  ```
+- **Docker Debug**: Attach ephemeral debugging tools to running containers
+- **Container logs**: Use `docker logs` to inspect application output
+
+The dev variant includes bash, apt, and standard utilities, but requires overriding the entrypoint since the default is still to run Alloy. This design ensures the dev variant can be used for both debugging (with entrypoint override) and testing (with default behavior).
 
 ## Migrate to a Docker Hardened Image
 
