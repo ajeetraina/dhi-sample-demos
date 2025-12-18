@@ -244,13 +244,6 @@ Docker Hardened Images come in different variants depending on their intended us
 - Include a shell and package manager
 - Are used to build or compile applications
 
-**For Alloy dev variant:** To access debugging tools, override the entrypoint:
-```bash
-docker run --rm -it --entrypoint=/bin/bash dhi.io/alloy:<tag>-dev
-```
-
-To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
-
 ## Non-hardened images vs Docker Hardened Images
 
 Based on empirical testing, here are the key differences:
