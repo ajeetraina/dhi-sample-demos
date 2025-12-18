@@ -73,6 +73,8 @@ The container starts using the default entrypoint, `alloy`, and command, `run /e
 
 ### Use case 1: Send metrics to Prometheus
 
+This example shows how to collect Alloy's internal metrics and forward them to Prometheus using the remote write API.
+
 **Step 1: Create a Docker network**
 
 ```bash
@@ -145,6 +147,8 @@ docker logs alloy
 You should see: `msg="now listening for http traffic" addr=0.0.0.0:12345`
 
 ### Use case 2: Collect Docker container metrics
+
+This example shows how to automatically discover and scrape metrics from running Docker containers using Docker socket access.
 
 **Step 1: Ensure the monitoring network exists**
 
@@ -222,25 +226,6 @@ docker logs alloy
 
 You should see: `msg="now listening for http traffic" addr=0.0.0.0:12345`
 
-## Image variants
-
-The Alloy Hardened Image is available as dev and runtime variants.
-
-Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by their tag.
-
-**Runtime variants** are designed to run your application in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
-
-- Run as a nonroot user
-- Do not include a shell or a package manager
-- Contain only the minimal set of libraries needed to run the app
-
-**Build-time variants** typically include `dev` in the tag name and are intended for use in the first stage of a multi-stage Dockerfile. These images typically:
-
-- Run as the root user
-- Include a shell and package manager
-- Are used to build or compile applications
-
-To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
 
 ## Non-hardened images vs Docker Hardened Images
 
@@ -271,6 +256,27 @@ The hardened images intended for runtime don't contain a shell nor any tools for
 - Kubernetes-specific debugging with kubectl debug
 
 Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+
+## Image variants
+
+The Alloy Hardened Image is available as dev and runtime variants.
+
+Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by their tag.
+
+**Runtime variants** are designed to run your application in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
+
+- Run as a nonroot user
+- Do not include a shell or a package manager
+- Contain only the minimal set of libraries needed to run the app
+
+**Build-time variants** typically include `dev` in the tag name and are intended for use in the first stage of a multi-stage Dockerfile. These images typically:
+
+- Run as the root user
+- Include a shell and package manager
+- Are used to build or compile applications
+
+To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
+
 
 ## Migrate to a Docker Hardened Image
 
