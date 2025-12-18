@@ -71,6 +71,8 @@ The container starts using the default entrypoint, `alloy`, and command, `run /e
 
 ## Image variants
 
+The Alloy Hardened Image is available as dev and runtime variants.
+
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by their tag.
 
 **Runtime variants** are designed to run your application in production. These images are intended to be used either directly or as the FROM image in the final stage of a multi-stage build. These images typically:
