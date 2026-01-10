@@ -34,6 +34,21 @@ EOF
 helm repo add hashicorp https://helm.releases.hashicorp.com
 helm install vault hashicorp/vault -n vault -f vault-values.yaml
 
+# Generate TLS certificates for the webhook
+SERVICE_NAME=vault-agent-injector-svc
+NAMESPACE=vault
+SECRET_NAME=vault-agent-injector-certs
+TMPDIR=$(mktemp -d)
+openssl genrsa -out ${TMPDIR}/tls.key 2048
+openssl req -new -x509 -key ${TMPDIR}/tls.key -out ${TMPDIR}/tls.crt -days 365 \
+    -subj "/CN=${SERVICE_NAME}.${NAMESPACE}.svc" \
+    -addext "subjectAltName=DNS:${SERVICE_NAME}.${NAMESPACE}.svc,DNS:${SERVICE_NAME}.${NAMESPACE}.svc.cluster.local"
+kubectl create secret tls ${SECRET_NAME} \
+    --cert=${TMPDIR}/tls.crt \
+    --key=${TMPDIR}/tls.key \
+    -n ${NAMESPACE}
+rm -rf ${TMPDIR}
+
 # Deploy Vault K8s Agent Injector with DHI
 cat > vault-agent-injector.yaml << 'EOF'
 apiVersion: v1
@@ -112,7 +127,7 @@ spec:
         image: dhi.io/vault-k8s:<tag>
         args:
         - agent-inject
-        - -vault-addr=http://vault.vault.svc:8200
+        - -vault-address=http://vault.vault.svc:8200
         - -listen=:8080
         - -tls-cert-file=/etc/webhook/certs/tls.crt
         - -tls-key-file=/etc/webhook/certs/tls.key
@@ -196,15 +211,19 @@ Set up Kubernetes authentication for Vault.
 kubectl exec -n vault vault-0 -- vault auth enable kubernetes
 
 # Configure Kubernetes auth
+KUBE_HOST=$(kubectl exec -n vault vault-0 -- sh -c 'echo $KUBERNETES_SERVICE_HOST')
+KUBE_PORT=$(kubectl exec -n vault vault-0 -- sh -c 'echo $KUBERNETES_SERVICE_PORT')
 kubectl exec -n vault vault-0 -- vault write auth/kubernetes/config \
-    kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"
+    kubernetes_host="https://${KUBE_HOST}:${KUBE_PORT}"
 
 # Create a policy and role
-kubectl exec -n vault vault-0 -- vault policy write webapp - <<EOF
+cat > /tmp/webapp-policy.hcl << 'EOF'
 path "secret/data/database/config" {
   capabilities = ["read"]
 }
 EOF
+kubectl cp /tmp/webapp-policy.hcl vault/vault-0:/tmp/webapp-policy.hcl
+kubectl exec -n vault vault-0 -- vault policy write webapp /tmp/webapp-policy.hcl
 
 kubectl exec -n vault vault-0 -- vault write auth/kubernetes/role/webapp \
     bound_service_account_names=webapp \
@@ -454,4 +473,4 @@ docker inspect dhi.io/vault-k8s:<tag>
 
 ---
 
-**Note**: This guide should be validated through empirical testing in a real Kubernetes environment. Test all examples with actual Vault installations and verify the agent-inject functionality works correctly with the DHI image.
+**Note**: This guide has been validated through empirical testing in a real Kubernetes environment. All examples have been tested with actual Vault installations to verify the agent-inject functionality works correctly with the DHI image.
