@@ -63,7 +63,7 @@ spec:
       serviceAccountName: vault
       containers:
       - name: vault
-        image: dhi.io/vault:1-debian13
+        image: dhi.io/dhi-vault:1-debian13
         args:
         - server
         - -dev
