@@ -90,9 +90,12 @@ kubectl apply -f vault-server.yaml
 kubectl wait --for=condition=ready pod -l app=vault -n vault --timeout=60s
 ```
 
-### Deploy Vault K8s Agent Injector (DHI)
+### Deploy Vault K8s Agent Injector
 
-Generate TLS certificates and deploy the Vault K8s agent injector using the Docker Hardened Image.
+
+The vault-agent-injector operates as a Kubernetes Mutating Admission Webhook. Kubernetes requires all admission webhooks to use HTTPS/TLS for security - this is not optional, it's a Kubernetes requirement.
+
+Let's generate TLS certificates and deploy the Vault K8s agent injector.
 
 ```bash
 # Generate TLS certificates for the webhook
