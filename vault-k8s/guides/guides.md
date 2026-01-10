@@ -188,7 +188,7 @@ spec:
       serviceAccountName: vault-agent-injector
       containers:
       - name: vault-agent-injector
-        image: dhi.io/vault-k8s:1.7-debian13
+        image: <your-namespace>/vault-k8s:<tag>
         args:
         - agent-inject
         - -vault-address=http://vault.vault.svc:8200
