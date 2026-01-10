@@ -1,144 +1,68 @@
 # Create namespace
 kubectl create namespace vault
 
-# Deploy Vault server (example using Vault Helm chart values)
-cat > vault-values.yaml << 'EOF'
-server:
-  dev:
-    enabled: true
-  injector:
-    enabled: false  # We'll deploy this separately with DHI
-EOF
-
-helm repo add hashicorp https://helm.releases.hashicorp.com
-helm install vault hashicorp/vault -n vault -f vault-values.yaml
-
-# Generate TLS certificates for the webhook
-SERVICE_NAME=vault-agent-injector-svc
-NAMESPACE=vault
-SECRET_NAME=vault-agent-injector-certs
-TMPDIR=$(mktemp -d)
-openssl genrsa -out ${TMPDIR}/tls.key 2048
-openssl req -new -x509 -key ${TMPDIR}/tls.key -out ${TMPDIR}/tls.crt -days 365 \
-    -subj "/CN=${SERVICE_NAME}.${NAMESPACE}.svc" \
-    -addext "subjectAltName=DNS:${SERVICE_NAME}.${NAMESPACE}.svc,DNS:${SERVICE_NAME}.${NAMESPACE}.svc.cluster.local"
-kubectl create secret tls ${SECRET_NAME} \
-    --cert=${TMPDIR}/tls.crt \
-    --key=${TMPDIR}/tls.key \
-    -n ${NAMESPACE}
-rm -rf ${TMPDIR}
-
-# Deploy Vault K8s Agent Injector with DHI
-cat > vault-agent-injector.yaml << 'EOF'
+# Deploy Vault server in dev mode
+cat > vault-server.yaml << 'EOF'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: vault-agent-injector
+  name: vault
   namespace: vault
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: vault-agent-injector
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - admissionregistration.k8s.io
-  resources:
-  - mutatingwebhookconfigurations
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: vault-agent-injector
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: vault-agent-injector
-subjects:
-- kind: ServiceAccount
-  name: vault-agent-injector
-  namespace: vault
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: vault-agent-injector
-  namespace: vault
-  labels:
-    app: vault-agent-injector
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: vault-agent-injector
-  template:
-    metadata:
-      labels:
-        app: vault-agent-injector
-    spec:
-      serviceAccountName: vault-agent-injector
-      containers:
-      - name: vault-agent-injector
-        image: dhi.io/vault-k8s:1.7-debian13
-        args:
-        - agent-inject
-        - -vault-address=http://vault.vault.svc:8200
-        - -listen=:8080
-        - -tls-cert-file=/etc/webhook/certs/tls.crt
-        - -tls-key-file=/etc/webhook/certs/tls.key
-        env:
-        - name: AGENT_INJECT_VAULT_ADDR
-          value: "http://vault.vault.svc:8200"
-        - name: AGENT_INJECT_LISTEN
-          value: ":8080"
-        ports:
-        - name: https
-          containerPort: 8080
-        volumeMounts:
-        - name: webhook-certs
-          mountPath: /etc/webhook/certs
-          readOnly: true
-      volumes:
-      - name: webhook-certs
-        secret:
-          secretName: vault-agent-injector-certs
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: vault-agent-injector-svc
+  name: vault
   namespace: vault
 spec:
   ports:
-  - name: https
-    port: 443
-    targetPort: 8080
+  - name: vault
+    port: 8200
+    targetPort: 8200
   selector:
-    app: vault-agent-injector
+    app: vault
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  serviceName: vault
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      serviceAccountName: vault
+      containers:
+      - name: vault
+        image: dockerdevrel/dhi-vault:1-debian13
+        args:
+        - server
+        - -dev
+        - -dev-root-token-id=root
+        - -dev-listen-address=0.0.0.0:8200
+        env:
+        - name: VAULT_DEV_ROOT_TOKEN_ID
+          value: "root"
+        - name: VAULT_ADDR
+          value: "http://127.0.0.1:8200"
+        ports:
+        - containerPort: 8200
+          name: vault
+        readinessProbe:
+          httpGet:
+            path: /v1/sys/health
+            port: 8200
+          initialDelaySeconds: 5
 EOF
 
-kubectl apply -f vault-agent-injector.yaml
+kubectl apply -f vault-server.yaml
+
+# Wait for Vault to be ready
+kubectl wait --for=condition=ready pod -l app=vault -n vault --timeout=60s
