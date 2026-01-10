@@ -394,12 +394,7 @@ Docker Hardened Images come in different variants depending on their intended us
 - Include a shell and package manager
 - Are used to build or compile applications
 
-The Vault K8s Docker Hardened Image is available in both runtime and dev variants:
-
-- **Runtime variants**: `1.7-debian13`, `1.7.2`, `1.6-debian13`, etc. (~12 MB uncompressed, no shell/package manager)
-- **Dev variants**: `1.7-dev`, `1.7-debian13-dev`, `1.6-dev`, etc. (~50 MB compressed, includes shell/package manager)
-
-Use dev variants for building custom configurations or extensions, and runtime variants for production deployments.
+The Vault K8s Docker Hardened Image is available in both runtime and dev variants. Use dev variants for building custom configurations or extensions, and runtime variants for production deployments.
 
 ## Migrate to a Docker Hardened Image
 
@@ -441,20 +436,3 @@ Hardened images run as a nonroot user by default. As a result, applications in t
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
-
-## Production considerations
-
-This guide uses Vault in dev mode for simplicity. For production deployments:
-
-1. **Use a production Vault cluster** with proper storage backend (Consul, Raft, etc.)
-2. **Enable TLS** for Vault server communication
-3. **Use cert-manager** for webhook certificate management
-4. **Configure proper RBAC** and security policies
-5. **Set up Vault high availability** for resilience
-6. **Use namespace isolation** for multi-tenant environments
-7. **Implement proper secret rotation** policies
-8. **Monitor and audit** Vault access logs
-
----
-
-**Note**: This guide has been validated through empirical testing in a real Kubernetes environment. All examples have been tested to verify the agent-inject functionality works correctly with the DHI image.
