@@ -335,89 +335,19 @@ You should see the rendered template with the actual credentials:
 postgresql://db-user:db-password@postgres:5432/mydb
 ```
 
-### Custom agent configuration
-
-Mount custom Vault agent configuration for advanced use cases.
-
-```yaml
-cat > custom-agent-config.yaml << 'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vault-agent-config
-  namespace: default
-data:
-  config.hcl: |
-    vault {
-      address = "http://vault.vault.svc:8200"
-    }
-    auto_auth {
-      method {
-        type = "kubernetes"
-        config = {
-          role = "webapp"
-        }
-      }
-      sink {
-        type = "file"
-        config = {
-          path = "/vault/.vault-token"
-        }
-      }
-    }
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: webapp-custom-config
-  namespace: default
-  annotations:
-    vault.hashicorp.com/agent-inject: "true"
-    vault.hashicorp.com/agent-configmap: "vault-agent-config"
-    vault.hashicorp.com/role: "webapp"
-spec:
-  serviceAccountName: webapp
-  containers:
-  - name: webapp
-    image: nginx:latest
-EOF
-
-kubectl apply -f custom-agent-config.yaml
-```
-
-### Run Vault K8s commands
-
-The vault-k8s binary supports various subcommands for different operations.
-
-**Display version:**
-```bash
-docker run --rm dhi.io/vault-k8s:1.7-debian13 version
-```
-
-**Show general help:**
-```bash
-docker run --rm dhi.io/vault-k8s:1.7-debian13 --help
-```
-
-**Show help for agent-inject:**
-```bash
-docker run --rm dhi.io/vault-k8s:1.7-debian13 agent-inject --help
-```
-
 ## Non-hardened images vs Docker Hardened Images
 
 ### Key differences
 
 | Feature | Standard Vault K8s | Docker Hardened Vault K8s |
 |---------|-------------------|---------------------------|
-| **Security** | Standard base with bash, curl, and utilities | Minimal, hardened base with security patches |
-| **Shell access** | Full shell (bash/sh) available | No shell in runtime variants |
-| **Package manager** | Package manager available | No package manager in runtime variants |
-| **User** | Runs as root or configurable user | Runs as nonroot user |
-| **Image size (runtime)** | ~150MB (compressed) | 12.94MB (compressed) - 91% smaller |
-| **Image size (dev)** | ~180MB (compressed) | 49.46MB (compressed) - 73% smaller |
-| **Attack surface** | Includes unnecessary binaries and utilities | Minimal - contains only vault-k8s binary and essential libraries |
-| **Debugging** | Traditional shell debugging | Use Docker Debug or kubectl debug for troubleshooting |
+| **Security** | Standard minimal base | Hardened base with security patches |
+| **Shell access** | No shell in runtime variants | No shell in runtime variants |
+| **Package manager** | No package manager in runtime variants | No package manager in runtime variants |
+| **User** | Runs as `vault` user | Runs as `nonroot` user (UID 65532) |
+| **Image size (runtime)** | ~35 MB (uncompressed) | ~12 MB (uncompressed) - 67% smaller |
+| **Attack surface** | Minimal binaries and libraries | Further minimized with additional hardening |
+| **Debugging** | Use Docker Debug or kubectl debug | Use Docker Debug or kubectl debug |
 
 ### Why no shell or package manager?
 
@@ -463,118 +393,51 @@ Docker Hardened Images come in different variants depending on their intended us
 
 The Vault K8s Docker Hardened Image is available in both runtime and dev variants:
 
-- **Runtime variants**: `1.7-debian13`, `1.7.2`, `1.6-debian13`, etc. (~12-13 MB compressed)
-- **Dev variants**: `1.7-dev`, `1.7-debian13-dev`, `1.6-dev`, etc. (~47-50 MB compressed)
+- **Runtime variants**: `1.7-debian13`, `1.7.2`, `1.6-debian13`, etc. (~12 MB uncompressed, no shell/package manager)
+- **Dev variants**: `1.7-dev`, `1.7-debian13-dev`, `1.6-dev`, etc. (~50 MB compressed, includes shell/package manager)
 
 Use dev variants for building custom configurations or extensions, and runtime variants for production deployments.
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your Kubernetes manifests or Helm values. This and a few other common changes are listed in the following table of migration notes:
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes:
 
 | Item | Migration note |
 |------|----------------|
-| **Base image** | Replace your base images in your Dockerfile or Kubernetes manifests with a Docker Hardened Image. |
-| **Package management** | Non-dev images don't contain package managers. Use package managers only in images with a `dev` tag. |
-| **Nonroot user** | Runtime images run as a nonroot user. Ensure that necessary files and directories are accessible to that user. |
-| **Multi-stage build** | Utilize images with a `dev` tag for build stages and non-dev images for runtime. |
+| **Base image** | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| **Non-root user** | By default, images run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. |
 | **TLS certificates** | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
-| **Ports** | Non-dev hardened images run as a nonroot user by default. Configure your application to use ports above 1024 (e.g., 8080 instead of 80). |
-| **Entry point** | Inspect entry points for Docker Hardened Images and update your manifests if necessary. |
-| **No shell** | Runtime images don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage. |
-| **Webhooks** | Ensure webhook configurations work with the nonroot user and non-privileged ports. |
+| **Ports** | Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. |
+| **Entry point** | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
 
-### Migration process
+The following steps outline the general migration process.
 
-1. **Find hardened images for your app**: A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
+1. **Find hardened images for your app.**
+   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-2. **Update the image reference**: Update the image in your Kubernetes manifests or Helm values to the hardened image you found in the previous step. For runtime deployments, use non-dev tags like `1.7-debian13`. For custom builds, use dev tags like `1.7-debian13-dev`.
+2. **Update the base image in your Dockerfile.**
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step.
 
-3. **Update port configurations**: If you're using privileged ports (below 1024), update your service and deployment to use ports above 1024.
-
-4. **Verify permissions**: Ensure all mounted volumes and file paths are accessible to the nonroot user.
-
-5. **Install additional packages**: If you need to install additional packages, use a multi-stage build with dev variants for the build stage.
-
-6. **Test the deployment**: Deploy to a test environment and verify all functionality works as expected.
+3. **Verify permissions**
+   Since the image runs as nonroot user, ensure that data directories and mounted volumes are accessible to the nonroot user.
 
 ## Troubleshoot migration
 
 ### General debugging
 
-Docker Hardened Images provide robust debugging capabilities through Docker Debug, which attaches comprehensive debugging tools to running containers while maintaining the security benefits of minimal runtime images.
-
-Docker Debug provides a shell, common debugging tools, and lets you install additional tools in an ephemeral, writable layer that only exists during the debugging session:
-```bash
-docker debug <container-name>
-```
-
-**Docker Debug advantages:**
-- Full debugging environment with shells and tools
-- Temporary, secure debugging layer that doesn't modify the runtime container
-- Install additional debugging tools as needed during the session
-- Perfect for troubleshooting DHI containers while preserving security
+The recommended method for debugging applications built with Docker Hardened Images is to use **Docker Debug** to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
-Runtime image variants run as the nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to:
-
-- Update volume mount permissions
-- Use init containers to set proper ownership
-- Configure SecurityContext in your pod specs
-```yaml
-securityContext:
-  fsGroup: 65532  # nonroot user group
-  runAsNonRoot: true
-  runAsUser: 65532
-```
+By default image variants run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
-
-**Solution**: Configure Vault K8s agent-inject to listen on ports 8000, 8080, or other ports above 1024:
-```yaml
-args:
-- agent-inject
-- -listen=:8080  # Use port 8080 instead of 443
-```
-
-Then update your Service to map the high port to a lower port if needed:
-```yaml
-spec:
-  ports:
-  - name: https
-    port: 443       # External port
-    targetPort: 8080  # Container port (non-privileged)
-```
-
-### No shell
-
-Runtime images don't contain a shell. Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. For debugging, use Docker Debug or kubectl debug to attach to containers with no shell.
-
-### Webhook certificate issues
-
-If you encounter TLS certificate issues with the mutating webhook:
-
-1. **Verify certificate secret exists**:
-```bash
-kubectl get secret vault-agent-injector-certs -n vault
-```
-
-2. **Check certificate validity**:
-```bash
-kubectl get secret vault-agent-injector-certs -n vault -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -text -noout
-```
-
-3. **Regenerate certificates if needed** using cert-manager or manual certificate generation.
+Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than standard images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your configuration if necessary:
-```bash
-docker inspect dhi.io/vault-k8s:1.7-debian13
-```
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
 
 ## Production considerations
 
