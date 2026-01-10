@@ -63,7 +63,7 @@ spec:
       serviceAccountName: vault
       containers:
       - name: vault
-        image: <your-namespace>/dhi-vault:<tag>
+        image: hashicorp/vault:1.21.1
         args:
         - server
         - -dev
