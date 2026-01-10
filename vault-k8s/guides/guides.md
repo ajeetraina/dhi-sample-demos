@@ -15,25 +15,86 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 
 Vault K8s is designed to work with HashiCorp Vault in Kubernetes environments. It provides the agent-inject functionality that automatically injects secrets from Vault into pods.
 
-### Deploy Vault K8s Agent Injector (DHI)
+### Deploy Vault Server
 
-First, deploy Vault server in your Kubernetes cluster, then deploy the Vault K8s agent injector using the Docker Hardened Image. Replace `<tag>` with the image variant you want to run.
+First, deploy a Vault server in dev mode for testing. In production, you would use a properly configured Vault instance.
+
 ```bash
 # Create namespace
 kubectl create namespace vault
 
-# Deploy Vault server (example using Vault Helm chart values)
-cat > vault-values.yaml << 'EOF'
-server:
-  dev:
-    enabled: true
-  injector:
-    enabled: false  # We'll deploy this separately with DHI
+# Deploy Vault server in dev mode
+cat > vault-server.yaml << 'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault
+  namespace: vault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  ports:
+  - name: vault
+    port: 8200
+    targetPort: 8200
+  selector:
+    app: vault
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  serviceName: vault
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      serviceAccountName: vault
+      containers:
+      - name: vault
+        image: hashicorp/vault:1.21.1
+        args:
+        - server
+        - -dev
+        - -dev-root-token-id=root
+        - -dev-listen-address=0.0.0.0:8200
+        env:
+        - name: VAULT_DEV_ROOT_TOKEN_ID
+          value: "root"
+        - name: VAULT_ADDR
+          value: "http://127.0.0.1:8200"
+        ports:
+        - containerPort: 8200
+          name: vault
+        readinessProbe:
+          httpGet:
+            path: /v1/sys/health
+            port: 8200
+          initialDelaySeconds: 5
 EOF
 
-helm repo add hashicorp https://helm.releases.hashicorp.com
-helm install vault hashicorp/vault -n vault -f vault-values.yaml
+kubectl apply -f vault-server.yaml
 
+# Wait for Vault to be ready
+kubectl wait --for=condition=ready pod -l app=vault -n vault --timeout=60s
+```
+
+### Deploy Vault K8s Agent Injector (DHI)
+
+Generate TLS certificates and deploy the Vault K8s agent injector using the Docker Hardened Image.
+
+```bash
 # Generate TLS certificates for the webhook
 SERVICE_NAME=vault-agent-injector-svc
 NAMESPACE=vault
@@ -124,18 +185,13 @@ spec:
       serviceAccountName: vault-agent-injector
       containers:
       - name: vault-agent-injector
-        image: dhi.io/vault-k8s:<tag>
+        image: dhi.io/vault-k8s:1.7-debian13
         args:
         - agent-inject
         - -vault-address=http://vault.vault.svc:8200
         - -listen=:8080
         - -tls-cert-file=/etc/webhook/certs/tls.crt
         - -tls-key-file=/etc/webhook/certs/tls.key
-        env:
-        - name: AGENT_INJECT_VAULT_ADDR
-          value: "http://vault.vault.svc:8200"
-        - name: AGENT_INJECT_LISTEN
-          value: ":8080"
         ports:
         - name: https
           containerPort: 8080
@@ -165,7 +221,24 @@ EOF
 kubectl apply -f vault-agent-injector.yaml
 ```
 
+### Update webhook configuration
+
+If you have an existing MutatingWebhookConfiguration, update it with the new CA bundle:
+
+```bash
+# Update the webhook with the new CA certificate
+CA_BUNDLE=$(kubectl get secret vault-agent-injector-certs -n vault -o jsonpath='{.data.tls\.crt}')
+kubectl patch mutatingwebhookconfiguration vault-agent-injector-cfg --type='json' -p="[
+  {
+    \"op\": \"replace\",
+    \"path\": \"/webhooks/0/clientConfig/caBundle\",
+    \"value\": \"${CA_BUNDLE}\"
+  }
+]" 2>/dev/null || echo "No existing webhook configuration to update"
+```
+
 ### Verify the deployment
+
 ```bash
 kubectl get pods -n vault
 kubectl logs -n vault -l app=vault-agent-injector
@@ -173,9 +246,51 @@ kubectl logs -n vault -l app=vault-agent-injector
 
 ## Common Vault K8s use cases
 
+### Configure Vault authentication
+
+Set up Kubernetes authentication for Vault.
+
+```bash
+# Enable Kubernetes auth in Vault
+kubectl exec -n vault vault-0 -- sh -c 'VAULT_TOKEN=root vault auth enable kubernetes'
+
+# Configure Kubernetes auth
+KUBE_HOST=$(kubectl exec -n vault vault-0 -- sh -c 'echo $KUBERNETES_SERVICE_HOST')
+KUBE_PORT=$(kubectl exec -n vault vault-0 -- sh -c 'echo $KUBERNETES_SERVICE_PORT')
+
+kubectl exec -n vault vault-0 -- sh -c "VAULT_TOKEN=root vault write auth/kubernetes/config \
+    kubernetes_host='https://${KUBE_HOST}:${KUBE_PORT}' \
+    disable_local_ca_jwt=false"
+
+# Create a test secret
+kubectl exec -n vault vault-0 -- sh -c 'VAULT_TOKEN=root vault kv put secret/database/config \
+    username="db-user" \
+    password="db-password"'
+
+# Create a policy
+cat > /tmp/webapp-policy.hcl << 'EOF'
+path "secret/data/database/config" {
+  capabilities = ["read"]
+}
+EOF
+kubectl cp /tmp/webapp-policy.hcl vault/vault-0:/tmp/webapp-policy.hcl
+kubectl exec -n vault vault-0 -- sh -c 'VAULT_TOKEN=root vault policy write webapp /tmp/webapp-policy.hcl'
+
+# Create service account for the application
+kubectl create serviceaccount webapp -n default
+
+# Create role
+kubectl exec -n vault vault-0 -- sh -c 'VAULT_TOKEN=root vault write auth/kubernetes/role/webapp \
+    bound_service_account_names=webapp \
+    bound_service_account_namespaces=default \
+    policies=webapp \
+    ttl=24h'
+```
+
 ### Inject secrets into application pods
 
 Annotate your application pods to automatically inject Vault secrets.
+
 ```yaml
 cat > app-with-secrets.yaml << 'EOF'
 apiVersion: v1
@@ -203,38 +318,27 @@ EOF
 kubectl apply -f app-with-secrets.yaml
 ```
 
-### Configure Vault authentication
+### Verify secret injection
 
-Set up Kubernetes authentication for Vault.
+Once the pod is running, verify the secret was injected:
+
 ```bash
-# Enable Kubernetes auth in Vault
-kubectl exec -n vault vault-0 -- vault auth enable kubernetes
+# Wait for pod to be ready
+kubectl wait --for=condition=ready pod webapp -n default --timeout=60s
 
-# Configure Kubernetes auth
-KUBE_HOST=$(kubectl exec -n vault vault-0 -- sh -c 'echo $KUBERNETES_SERVICE_HOST')
-KUBE_PORT=$(kubectl exec -n vault vault-0 -- sh -c 'echo $KUBERNETES_SERVICE_PORT')
-kubectl exec -n vault vault-0 -- vault write auth/kubernetes/config \
-    kubernetes_host="https://${KUBE_HOST}:${KUBE_PORT}"
+# Check the injected secret
+kubectl exec webapp -n default -c webapp -- cat /vault/secrets/database-config
+```
 
-# Create a policy and role
-cat > /tmp/webapp-policy.hcl << 'EOF'
-path "secret/data/database/config" {
-  capabilities = ["read"]
-}
-EOF
-kubectl cp /tmp/webapp-policy.hcl vault/vault-0:/tmp/webapp-policy.hcl
-kubectl exec -n vault vault-0 -- vault policy write webapp /tmp/webapp-policy.hcl
-
-kubectl exec -n vault vault-0 -- vault write auth/kubernetes/role/webapp \
-    bound_service_account_names=webapp \
-    bound_service_account_namespaces=default \
-    policies=webapp \
-    ttl=24h
+You should see the rendered template with the actual credentials:
+```
+postgresql://db-user:db-password@postgres:5432/mydb
 ```
 
 ### Custom agent configuration
 
 Mount custom Vault agent configuration for advanced use cases.
+
 ```yaml
 cat > custom-agent-config.yaml << 'EOF'
 apiVersion: v1
@@ -272,6 +376,7 @@ metadata:
     vault.hashicorp.com/agent-configmap: "vault-agent-config"
     vault.hashicorp.com/role: "webapp"
 spec:
+  serviceAccountName: webapp
   containers:
   - name: webapp
     image: nginx:latest
@@ -286,17 +391,17 @@ The vault-k8s binary supports various subcommands for different operations.
 
 **Display version:**
 ```bash
-docker run --rm dhi.io/vault-k8s:<tag> version
+docker run --rm dhi.io/vault-k8s:1.7-debian13 version
 ```
 
 **Show general help:**
 ```bash
-docker run --rm dhi.io/vault-k8s:<tag> --help
+docker run --rm dhi.io/vault-k8s:1.7-debian13 --help
 ```
 
 **Show help for agent-inject:**
 ```bash
-docker run --rm dhi.io/vault-k8s:<tag> agent-inject --help
+docker run --rm dhi.io/vault-k8s:1.7-debian13 agent-inject --help
 ```
 
 ## Non-hardened images vs Docker Hardened Images
@@ -468,9 +573,22 @@ kubectl get secret vault-agent-injector-certs -n vault -o jsonpath='{.data.tls\.
 
 Docker Hardened Images may have different entry points than standard images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your configuration if necessary:
 ```bash
-docker inspect dhi.io/vault-k8s:<tag>
+docker inspect dhi.io/vault-k8s:1.7-debian13
 ```
+
+## Production considerations
+
+This guide uses Vault in dev mode for simplicity. For production deployments:
+
+1. **Use a production Vault cluster** with proper storage backend (Consul, Raft, etc.)
+2. **Enable TLS** for Vault server communication
+3. **Use cert-manager** for webhook certificate management
+4. **Configure proper RBAC** and security policies
+5. **Set up Vault high availability** for resilience
+6. **Use namespace isolation** for multi-tenant environments
+7. **Implement proper secret rotation** policies
+8. **Monitor and audit** Vault access logs
 
 ---
 
-**Note**: This guide has been validated through empirical testing in a real Kubernetes environment. All examples have been tested with actual Vault installations to verify the agent-inject functionality works correctly with the DHI image.
+**Note**: This guide has been validated through empirical testing in a real Kubernetes environment. All examples have been tested to verify the agent-inject functionality works correctly with the DHI image.
