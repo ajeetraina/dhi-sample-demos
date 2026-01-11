@@ -394,7 +394,7 @@ Docker Hardened Images come in different variants depending on their intended us
 - Include a shell and package manager
 - Are used to build or compile applications
 
-The Vault K8s Docker Hardened Image is available in both runtime and dev variants. Use dev variants for building custom configurations or extensions, and runtime variants for production deployments.
+The Vault K8s Docker Hardened Image is available in both runtime and dev variants. Use `dev` variants for building custom configurations or extensions, and runtime variants for production deployments.
 
 ## Migrate to a Docker Hardened Image
 
