@@ -351,7 +351,9 @@ The hardened images intended for runtime don't contain a shell nor any tools for
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
+By default image variants intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to copy files to different directories or change permissions so your application running as a nonroot user can access them.
+
+To view the user for an image variant, select the **Tags** tab for this repository.
 
 ### Privileged ports
 
@@ -361,6 +363,10 @@ Non-dev hardened images run as a nonroot user by default. As a result, applicati
 
 By default, image variants intended for runtime don't contain a shell. Use Docker Debug to debug containers with no shell.
 
+To see if a shell is available in an image variant and which one, select the **Tags** tab for this repository.
+
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images.
+
+To view the Entrypoint or CMD defined for an image variant, select the **Tags** tab for this repository, select a tag, and then select the **Specifications** tab.
