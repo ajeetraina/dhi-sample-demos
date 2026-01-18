@@ -93,7 +93,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-exporter
-  namespace: <kubernetes-namespace>
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -121,7 +121,7 @@ EOF
 Then apply the manifest to your Kubernetes cluster:
 
 ```console
-$ kubectl apply -n <kubernetes-namespace> -f kafka-exporter.yaml
+$ kubectl apply -n default -f kafka-exporter.yaml
 ```
 
 ### Full Stack Kubernetes Deployment (with DHI Kafka)
@@ -134,7 +134,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka
-  namespace: <kubernetes-namespace>
+  namespace: default
 spec:
   ports:
     - port: 9092
@@ -146,7 +146,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka
-  namespace: <kubernetes-namespace>
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -189,7 +189,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-exporter
-  namespace: <kubernetes-namespace>
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -215,7 +215,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka-exporter
-  namespace: <kubernetes-namespace>
+  namespace: default
 spec:
   ports:
     - port: 9308
@@ -228,14 +228,14 @@ EOF
 Apply the manifests:
 
 ```console
-$ kubectl apply -n <kubernetes-namespace> -f kafka.yaml
-$ kubectl apply -n <kubernetes-namespace> -f kafka-exporter.yaml
+$ kubectl apply -n default -f kafka.yaml
+$ kubectl apply -n default -f kafka-exporter.yaml
 ```
 
 Verify the deployment:
 
 ```console
-$ kubectl get pods -n <kubernetes-namespace>
+$ kubectl get pods -n default
 NAME                              READY   STATUS    RESTARTS   AGE
 kafka-6959756cc4-bbkp9            1/1     Running   0          38s
 kafka-exporter-6d4576bc86-p7f8h   1/1     Running   0          7s
@@ -244,7 +244,7 @@ kafka-exporter-6d4576bc86-p7f8h   1/1     Running   0          7s
 Access the metrics:
 
 ```console
-$ kubectl port-forward -n <kubernetes-namespace> deployment/kafka-exporter 9308:9308
+$ kubectl port-forward -n default deployment/kafka-exporter 9308:9308
 $ curl http://localhost:9308/metrics | grep kafka_brokers
 kafka_brokers 1
 ```
