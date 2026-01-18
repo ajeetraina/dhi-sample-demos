@@ -18,7 +18,7 @@ This Docker Hardened Kafka Exporter image includes a Kafka exporter for Promethe
 ## Start a Kafka Exporter image
 
 ```bash
-docker run -ti --rm -p 9308:9308 dhi.io/kafka-exporter:<tag> --kafka.server=kafka:9092 [--kafka.server=kafka-2:9092 ...]
+docker run -ti --rm -p 9308:9308 <your-namespace>/dhi-kafka-exporter:<tag> --kafka.server=kafka:9092
 ```
 
 ## Common use cases
@@ -29,7 +29,7 @@ docker run -ti --rm -p 9308:9308 dhi.io/kafka-exporter:<tag> --kafka.server=kafk
 cat <<EOF > docker-compose.yml
 services:
   kafka-exporter:
-    image: dhi.io/kafka-exporter:<tag>
+    image: <your-namespace>/dhi-kafka-exporter:<tag>
     command: ["--kafka.server=kafka:9092"]
     ports:
       - 9308:9308
@@ -44,7 +44,7 @@ To test Kafka Exporter with a running Kafka broker, use this complete Docker Com
 cat <<EOF > docker-compose.yml
 services:
   kafka:
-    image: dhi.io/kafka:<tag>
+    image: <your-namespace>/dhi-kafka:<tag>
     container_name: kafka
     ports:
       - "9092:9092"
@@ -58,7 +58,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   kafka-exporter:
-    image: dhi.io/kafka-exporter:<tag>
+    image: <your-namespace>/dhi-kafka-exporter:<tag>
     command: ["--kafka.server=kafka:9092"]
     ports:
       - "9308:9308"
@@ -106,10 +106,9 @@ spec:
     spec:
       containers:
         - name: kafka-exporter
-          image: dhi.io/kafka-exporter:<tag>
+          image: <your-namespace>/dhi-kafka-exporter:<tag>
           args:
             - --kafka.server=kafka:9092
-            - --kafka.server=kafka-2:9092
           ports:
           - containerPort: 9308
             name: metrics
@@ -159,7 +158,7 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: dhi.io/kafka:<tag>
+          image: <your-namespace>/dhi-kafka:<tag>
           ports:
             - containerPort: 9092
             - containerPort: 9093
@@ -202,7 +201,7 @@ spec:
     spec:
       containers:
         - name: kafka-exporter
-          image: dhi.io/kafka-exporter:<tag>
+          image: <your-namespace>/dhi-kafka-exporter:<tag>
           args:
             - --kafka.server=kafka:9092
           ports:
@@ -291,8 +290,8 @@ Or mount debugging tools with the image mount feature:
 
 ```console
 $ docker run --rm -it --pid container:my-container \
-  --mount=type=image,source=dhi.io/busybox,destination=/dbg,ro \
-  dhi.io/<image-name>:<tag> /dbg/bin/sh
+  --mount=type=image,source=<your-namespace>/dhi-busybox:<tag>,destination=/dbg,ro \
+  <your-namespace>/dhi-kafka-exporter:<tag> /dbg/bin/sh
 ```
 
 ## Image variants
@@ -360,7 +359,7 @@ Non-dev hardened images run as a nonroot user by default. As a result, applicati
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
+By default, image variants intended for runtime don't contain a shell. Use Docker Debug to debug containers with no shell.
 
 ### Entry point
 
