@@ -18,158 +18,160 @@ NC='\033[0m' # No Color
 NON_DHI_IMAGE="danielqsj/kafka-exporter:latest"
 DHI_IMAGE="dockerdevrel/dhi-kafka-exporter:1.9.0"
 
-echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}   DHI vs Non-DHI Image Comparison: Kafka Exporter${NC}"
-echo -e "${BLUE}============================================================${NC}"
-echo ""
+printf "${BLUE}============================================================${NC}\n"
+printf "${BLUE}   DHI vs Non-DHI Image Comparison: Kafka Exporter${NC}\n"
+printf "${BLUE}============================================================${NC}\n"
+printf "\n"
 
 # Pull both images
-echo -e "${YELLOW}Pulling images...${NC}"
+printf "${YELLOW}Pulling images...${NC}\n"
 docker pull $NON_DHI_IMAGE > /dev/null 2>&1
 docker pull $DHI_IMAGE > /dev/null 2>&1
-echo -e "${GREEN}✓ Images pulled successfully${NC}"
-echo ""
+printf "${GREEN}✓ Images pulled successfully${NC}\n"
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Image Size Comparison
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}📦 IMAGE SIZE${NC}"
-echo "-----------------------------------------------------------"
+printf "${BLUE}📦 IMAGE SIZE${NC}\n"
+printf "-----------------------------------------------------------\n"
 NON_DHI_SIZE=$(docker images --format "{{.Size}}" $NON_DHI_IMAGE)
 DHI_SIZE=$(docker images --format "{{.Size}}" $DHI_IMAGE)
-echo -e "Non-DHI (danielqsj/kafka-exporter):  ${RED}$NON_DHI_SIZE${NC}"
-echo -e "DHI (dhi-kafka-exporter):            ${GREEN}$DHI_SIZE${NC}"
-echo ""
+printf "Non-DHI (danielqsj/kafka-exporter):  ${RED}%s${NC}\n" "$NON_DHI_SIZE"
+printf "DHI (dhi-kafka-exporter):            ${GREEN}%s${NC}\n" "$DHI_SIZE"
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Layer Count
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}📚 LAYER COUNT${NC}"
-echo "-----------------------------------------------------------"
-NON_DHI_LAYERS=$(docker history --no-trunc $NON_DHI_IMAGE | tail -n +2 | wc -l)
-DHI_LAYERS=$(docker history --no-trunc $DHI_IMAGE | tail -n +2 | wc -l)
-echo -e "Non-DHI: ${RED}$NON_DHI_LAYERS layers${NC}"
-echo -e "DHI:     ${GREEN}$DHI_LAYERS layers${NC}"
-echo ""
+printf "${BLUE}📚 LAYER COUNT${NC}\n"
+printf "-----------------------------------------------------------\n"
+NON_DHI_LAYERS=$(docker history --no-trunc $NON_DHI_IMAGE | tail -n +2 | wc -l | tr -d ' ')
+DHI_LAYERS=$(docker history --no-trunc $DHI_IMAGE | tail -n +2 | wc -l | tr -d ' ')
+printf "Non-DHI: ${RED}%s layers${NC}\n" "$NON_DHI_LAYERS"
+printf "DHI:     ${GREEN}%s layers${NC}\n" "$DHI_LAYERS"
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # User Check
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}👤 DEFAULT USER${NC}"
-echo "-----------------------------------------------------------"
+printf "${BLUE}👤 DEFAULT USER${NC}\n"
+printf "-----------------------------------------------------------\n"
 NON_DHI_USER=$(docker inspect --format '{{.Config.User}}' $NON_DHI_IMAGE)
 DHI_USER=$(docker inspect --format '{{.Config.User}}' $DHI_IMAGE)
-echo -e "Non-DHI: ${YELLOW}${NON_DHI_USER:-root (not set)}${NC}"
-echo -e "DHI:     ${GREEN}${DHI_USER:-nonroot}${NC}"
-echo ""
+printf "Non-DHI: ${YELLOW}%s${NC}\n" "${NON_DHI_USER:-root (not set)}"
+printf "DHI:     ${GREEN}%s${NC}\n" "${DHI_USER:-nonroot}"
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Shell Availability
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}🐚 SHELL AVAILABILITY${NC}"
-echo "-----------------------------------------------------------"
-echo -n "Non-DHI: "
+printf "${BLUE}🐚 SHELL AVAILABILITY${NC}\n"
+printf "-----------------------------------------------------------\n"
+printf "Non-DHI: "
 if docker run --rm --entrypoint="" $NON_DHI_IMAGE /bin/sh -c "echo shell exists" > /dev/null 2>&1; then
-    echo -e "${RED}Shell available (/bin/sh)${NC}"
+    printf "${RED}Shell available (/bin/sh)${NC}\n"
 else
-    echo -e "${GREEN}No shell${NC}"
+    printf "${GREEN}No shell${NC}\n"
 fi
 
-echo -n "DHI:     "
+printf "DHI:     "
 if docker run --rm --entrypoint="" $DHI_IMAGE /bin/sh -c "echo shell exists" > /dev/null 2>&1; then
-    echo -e "${RED}Shell available (/bin/sh)${NC}"
+    printf "${RED}Shell available (/bin/sh)${NC}\n"
 else
-    echo -e "${GREEN}No shell (hardened)${NC}"
+    printf "${GREEN}No shell (hardened)${NC}\n"
 fi
-echo ""
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Package Manager Check
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}📦 PACKAGE MANAGER${NC}"
-echo "-----------------------------------------------------------"
-echo -n "Non-DHI: "
+printf "${BLUE}📦 PACKAGE MANAGER${NC}\n"
+printf "-----------------------------------------------------------\n"
+printf "Non-DHI: "
 if docker run --rm --entrypoint="" $NON_DHI_IMAGE which apk > /dev/null 2>&1; then
-    echo -e "${RED}apk available${NC}"
+    printf "${RED}apk available${NC}\n"
 elif docker run --rm --entrypoint="" $NON_DHI_IMAGE which apt > /dev/null 2>&1; then
-    echo -e "${RED}apt available${NC}"
+    printf "${RED}apt available${NC}\n"
 else
-    echo -e "${GREEN}No package manager${NC}"
+    printf "${GREEN}No package manager${NC}\n"
 fi
 
-echo -n "DHI:     "
+printf "DHI:     "
 if docker run --rm --entrypoint="" $DHI_IMAGE which apk > /dev/null 2>&1; then
-    echo -e "${RED}apk available${NC}"
+    printf "${RED}apk available${NC}\n"
 elif docker run --rm --entrypoint="" $DHI_IMAGE which apt > /dev/null 2>&1; then
-    echo -e "${RED}apt available${NC}"
+    printf "${RED}apt available${NC}\n"
 else
-    echo -e "${GREEN}No package manager (hardened)${NC}"
+    printf "${GREEN}No package manager (hardened)${NC}\n"
 fi
-echo ""
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Binary Count (Attack Surface)
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}⚔️  ATTACK SURFACE (Binary Count)${NC}"
-echo "-----------------------------------------------------------"
-echo -n "Non-DHI: "
-NON_DHI_BINS=$(docker run --rm --entrypoint="" $NON_DHI_IMAGE ls /bin /usr/bin 2>/dev/null | wc -l || echo "0")
-echo -e "${RED}$NON_DHI_BINS binaries${NC}"
+printf "${BLUE}⚔️  ATTACK SURFACE (Binary Count)${NC}\n"
+printf "-----------------------------------------------------------\n"
+printf "Non-DHI: "
+NON_DHI_BINS=$(docker run --rm --entrypoint="" $NON_DHI_IMAGE ls /bin /usr/bin 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+printf "${RED}%s binaries${NC}\n" "$NON_DHI_BINS"
 
-echo -n "DHI:     "
-DHI_BINS=$(docker run --rm --entrypoint="" $DHI_IMAGE ls /bin /usr/bin 2>/dev/null | wc -l || echo "0")
-if [ "$DHI_BINS" -eq "0" ] || [ "$DHI_BINS" -lt "10" ]; then
-    echo -e "${GREEN}Minimal (~1 binary)${NC}"
+printf "DHI:     "
+DHI_BINS=$(docker run --rm --entrypoint="" $DHI_IMAGE ls /bin /usr/bin 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+if [ "$DHI_BINS" -eq "0" ] 2>/dev/null || [ "$DHI_BINS" -lt "10" ] 2>/dev/null; then
+    printf "${GREEN}Minimal (~1 binary)${NC}\n"
 else
-    echo -e "${YELLOW}$DHI_BINS binaries${NC}"
+    printf "${YELLOW}%s binaries${NC}\n" "$DHI_BINS"
 fi
-echo ""
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Vulnerability Scan (if trivy is available)
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}🔒 VULNERABILITY SCAN${NC}"
-echo "-----------------------------------------------------------"
+printf "${BLUE}🔒 VULNERABILITY SCAN${NC}\n"
+printf "-----------------------------------------------------------\n"
 if command -v trivy &> /dev/null; then
-    echo "Scanning Non-DHI image..."
+    printf "Scanning Non-DHI image...\n"
     NON_DHI_VULNS=$(trivy image --quiet --severity HIGH,CRITICAL --format json $NON_DHI_IMAGE 2>/dev/null | jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0')
-    echo -e "Non-DHI HIGH/CRITICAL: ${RED}$NON_DHI_VULNS vulnerabilities${NC}"
+    printf "Non-DHI HIGH/CRITICAL: ${RED}%s vulnerabilities${NC}\n" "$NON_DHI_VULNS"
     
-    echo "Scanning DHI image..."
+    printf "Scanning DHI image...\n"
     DHI_VULNS=$(trivy image --quiet --severity HIGH,CRITICAL --format json $DHI_IMAGE 2>/dev/null | jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0')
-    echo -e "DHI HIGH/CRITICAL:     ${GREEN}$DHI_VULNS vulnerabilities${NC}"
+    printf "DHI HIGH/CRITICAL:     ${GREEN}%s vulnerabilities${NC}\n" "$DHI_VULNS"
 else
-    echo -e "${YELLOW}Trivy not installed. Install with: brew install trivy${NC}"
-    echo "Skipping vulnerability scan..."
+    printf "${YELLOW}Trivy not installed. Install with: brew install trivy${NC}\n"
+    printf "Skipping vulnerability scan...\n"
 fi
-echo ""
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Entrypoint Comparison
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}🚀 ENTRYPOINT${NC}"
-echo "-----------------------------------------------------------"
+printf "${BLUE}🚀 ENTRYPOINT${NC}\n"
+printf "-----------------------------------------------------------\n"
 NON_DHI_EP=$(docker inspect --format '{{json .Config.Entrypoint}}' $NON_DHI_IMAGE)
 DHI_EP=$(docker inspect --format '{{json .Config.Entrypoint}}' $DHI_IMAGE)
-echo -e "Non-DHI: $NON_DHI_EP"
-echo -e "DHI:     $DHI_EP"
-echo ""
+printf "Non-DHI: %s\n" "$NON_DHI_EP"
+printf "DHI:     %s\n" "$DHI_EP"
+printf "\n"
 
 # -----------------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}   SUMMARY${NC}"
-echo -e "${BLUE}============================================================${NC}"
-echo ""
-echo -e "| Feature              | Non-DHI              | DHI                  |"
-echo -e "|----------------------|----------------------|----------------------|"
-echo -e "| Image Size           | $NON_DHI_SIZE               | $DHI_SIZE              |"
-echo -e "| Layers               | $NON_DHI_LAYERS                    | $DHI_LAYERS                     |"
-echo -e "| User                 | ${NON_DHI_USER:-nobody}               | ${DHI_USER:-nonroot}              |"
-echo -e "| Shell                | Available            | ${GREEN}None${NC}                 |"
-echo -e "| Package Manager      | None                 | ${GREEN}None${NC}                 |"
-echo -e "| Attack Surface       | ~$NON_DHI_BINS binaries        | ${GREEN}Minimal${NC}              |"
-echo ""
-echo -e "${GREEN}✓ DHI provides a hardened, minimal attack surface${NC}"
-echo ""
+printf "${BLUE}============================================================${NC}\n"
+printf "${BLUE}   SUMMARY${NC}\n"
+printf "${BLUE}============================================================${NC}\n"
+printf "\n"
+printf "┌──────────────────────┬──────────────────────┬──────────────────────┐\n"
+printf "│ Feature              │ Non-DHI              │ DHI                  │\n"
+printf "├──────────────────────┼──────────────────────┼──────────────────────┤\n"
+printf "│ Image Size           │ %-20s │ %-20s │\n" "$NON_DHI_SIZE" "$DHI_SIZE"
+printf "│ Layers               │ %-20s │ %-20s │\n" "$NON_DHI_LAYERS" "$DHI_LAYERS"
+printf "│ User                 │ %-20s │ %-20s │\n" "${NON_DHI_USER:-nobody}" "${DHI_USER:-nonroot}"
+printf "│ Shell                │ %-20s │ %-20s │\n" "Available" "None"
+printf "│ Package Manager      │ %-20s │ %-20s │\n" "None" "None"
+printf "│ Attack Surface       │ %-20s │ %-20s │\n" "$NON_DHI_BINS binaries" "Minimal"
+printf "└──────────────────────┴──────────────────────┴──────────────────────┘\n"
+printf "\n"
+printf "${GREEN}✓ DHI provides a hardened, minimal attack surface${NC}\n"
+printf "\n"
