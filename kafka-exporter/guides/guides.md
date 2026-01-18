@@ -1,7 +1,6 @@
-## How to use this Kafka Exporter image
+# How to use this Kafka Exporter image
 
-All examples in this guide use the public image. If you’ve mirrored the repository for your own use (for example, to
-your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
 
@@ -12,12 +11,11 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 
 This guide provides practical examples for using the Kafka Exporter Hardened Image to send Kafka metrics to Prometheus.
 
-### What's included in this Kafka Exporter image
+## What's included in this Kafka Exporter image
 
-This Docker Hardened Kafka Exporter image includes a Kafka exporter for Prometheus. For other metrics from Kafka, have a
-look at the Docker Hardened JMX exporter image.
+This Docker Hardened Kafka Exporter image includes a Kafka exporter for Prometheus. For other metrics from Kafka, have a look at the Docker Hardened JMX exporter image.
 
-### Start a Kafka Exporter image
+## Start a Kafka Exporter image
 
 ```bash
 docker run -ti --rm -p 9308:9308 dhi.io/kafka-exporter:<tag> --kafka.server=kafka:9092 [--kafka.server=kafka-2:9092 ...]
@@ -27,22 +25,70 @@ docker run -ti --rm -p 9308:9308 dhi.io/kafka-exporter:<tag> --kafka.server=kafk
 
 ### Run with Docker Compose
 
-```yaml
+```bash
+cat <<EOF > docker-compose.yml
 services:
   kafka-exporter:
     image: dhi.io/kafka-exporter:<tag>
-    command: ["--kafka.server=kafka:9092"] #", ... --kafka.server=kafka-2:9092 ..."
+    command: ["--kafka.server=kafka:9092"]
     ports:
       - 9308:9308
+EOF
+```
+
+### Run with Docker Compose (Full Stack with DHI Kafka)
+
+To test Kafka Exporter with a running Kafka broker, use this complete Docker Compose configuration:
+
+```bash
+cat <<EOF > docker-compose.yml
+services:
+  kafka:
+    image: dhi.io/kafka:<tag>
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka-exporter:
+    image: dhi.io/kafka-exporter:<tag>
+    command: ["--kafka.server=kafka:9092"]
+    ports:
+      - "9308:9308"
+    depends_on:
+      - kafka
+    restart: on-failure
+EOF
+```
+
+Start the stack:
+
+```console
+$ docker compose up -d
+```
+
+Wait approximately 30 seconds for Kafka to initialize, then verify the metrics endpoint:
+
+```console
+$ curl http://localhost:9308/metrics | grep kafka_brokers
+# HELP kafka_brokers Number of Brokers in the Kafka Cluster.
+# TYPE kafka_brokers gauge
+kafka_brokers 1
 ```
 
 ### Use Kafka Exporter in Kubernetes
 
-To use the Kafka Exporter hardened image in Kubernetes, [set up authentication](https://docs.docker.com/dhi/how-to/k8s/)
-and update your Kubernetes deployment. For example, in your `kafka-exporter.yaml` file, replace the image reference in
-the container spec. In the following example, `<tag>` with the desired tag.
+To use the Kafka Exporter hardened image in Kubernetes, [set up authentication](https://docs.docker.com/dhi/how-to/k8s/) and update your Kubernetes deployment.
 
-```yaml
+```bash
+cat <<EOF > kafka-exporter.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,30 +115,155 @@ spec:
             name: metrics
       imagePullSecrets:
         - name: <your-registry-secret>
+EOF
 ```
 
-Then apply the manifest to your Kubernetes cluster.
+Then apply the manifest to your Kubernetes cluster:
 
 ```console
 $ kubectl apply -n <kubernetes-namespace> -f kafka-exporter.yaml
 ```
 
-For examples of how to configure Kafka Exporter itself, see the
-[Kafka Exporter documentation](https://github.com/danielqsj/kafka_exporter).
+### Full Stack Kubernetes Deployment (with DHI Kafka)
+
+To deploy both Kafka and Kafka Exporter in Kubernetes:
+
+```bash
+cat <<EOF > kafka.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: <kubernetes-namespace>
+spec:
+  ports:
+    - port: 9092
+      targetPort: 9092
+  selector:
+    app: kafka
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: <kubernetes-namespace>
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: dhi.io/kafka:<tag>
+          ports:
+            - containerPort: 9092
+            - containerPort: 9093
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka:9092"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@localhost:9093"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+      imagePullSecrets:
+        - name: <your-registry-secret>
+EOF
+```
+
+```bash
+cat <<EOF > kafka-exporter.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-exporter
+  namespace: <kubernetes-namespace>
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-exporter
+  template:
+    metadata:
+      labels:
+        app: kafka-exporter
+    spec:
+      containers:
+        - name: kafka-exporter
+          image: dhi.io/kafka-exporter:<tag>
+          args:
+            - --kafka.server=kafka:9092
+          ports:
+          - containerPort: 9308
+            name: metrics
+      imagePullSecrets:
+        - name: <your-registry-secret>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-exporter
+  namespace: <kubernetes-namespace>
+spec:
+  ports:
+    - port: 9308
+      targetPort: 9308
+  selector:
+    app: kafka-exporter
+EOF
+```
+
+Apply the manifests:
+
+```console
+$ kubectl apply -n <kubernetes-namespace> -f kafka.yaml
+$ kubectl apply -n <kubernetes-namespace> -f kafka-exporter.yaml
+```
+
+Verify the deployment:
+
+```console
+$ kubectl get pods -n <kubernetes-namespace>
+NAME                              READY   STATUS    RESTARTS   AGE
+kafka-6959756cc4-bbkp9            1/1     Running   0          38s
+kafka-exporter-6d4576bc86-p7f8h   1/1     Running   0          7s
+```
+
+Access the metrics:
+
+```console
+$ kubectl port-forward -n <kubernetes-namespace> deployment/kafka-exporter 9308:9308
+$ curl http://localhost:9308/metrics | grep kafka_brokers
+kafka_brokers 1
+```
+
+For examples of how to configure Kafka Exporter itself, see the [Kafka Exporter documentation](https://github.com/danielqsj/kafka_exporter).
 
 ## Non-hardened images vs Docker Hardened Images
 
 ### Key differences
 
-| Feature         | Non-hardened Kafka Exporter         | Docker Hardened Kafka Exporter                             |
-| --------------- | ----------------------------------- | ---------------------------------------------------------- |
-| Base image      | BusyBox container                   | Debian hardened base                                       |
-| Security        | Standard image with basic utilities | Hardened build with security patches and security metadata |
-| Shell access    | BusyBox shell (`/bin/sh`) available | No shell                                                   |
-| Package manager | No package manager                  | No package manager                                         |
-| User            | Runs as `nobody` (UID 65534)        | Runs as `nonroot` user (UID 65532)                         |
-| Attack surface  | 400+ BusyBox utilities              | Only `kafka-exporter` binary, no additional utilities      |
-| Debugging       | Full BusyBox shell and utilities    | Use Docker Debug or image mount for troubleshooting        |
+| Feature | Non-hardened Kafka Exporter | Docker Hardened Kafka Exporter |
+|---------|----------------------------|-------------------------------|
+| Base image | BusyBox container | Debian hardened base |
+| Security | Standard image with basic utilities | Hardened build with security patches and security metadata |
+| Shell access | BusyBox shell (`/bin/sh`) available | No shell |
+| Package manager | No package manager | No package manager |
+| User | Runs as `nobody` (UID 65534) | Runs as `nonroot` user (UID 65532) |
+| Attack surface | 400+ BusyBox utilities | Only `kafka-exporter` binary, no additional utilities |
+| Debugging | Full BusyBox shell and utilities | Use Docker Debug or image mount for troubleshooting |
 
 ### Why no shell or package manager?
 
@@ -102,53 +273,74 @@ Docker Hardened Images prioritize security through minimalism:
 - Immutable infrastructure: Runtime containers shouldn't be modified after deployment
 - Compliance ready: Meets strict security requirements for regulated environments
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for
-applications built with Docker Hardened Images include:
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
 
 - [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers
 - Docker's Image Mount feature to mount debugging tools
 - Ecosystem-specific debugging approaches
 
-Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer
-that only exists during the debugging session.
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 For example, you can use Docker Debug:
 
-```
-docker debug <image-name>
+```console
+$ docker debug <container-name>
 ```
 
-or mount debugging tools with the image mount feature:
+Or mount debugging tools with the image mount feature:
 
-```
-docker run --rm -it --pid container:my-container \
+```console
+$ docker run --rm -it --pid container:my-container \
   --mount=type=image,source=dhi.io/busybox,destination=/dbg,ro \
   dhi.io/<image-name>:<tag> /dbg/bin/sh
 ```
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use. The Kafka Exporter image provides
-only the runtime variant Runtime variants are designed to run your application in production. These images are intended
-to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by their tag.
 
-- Run as the nonroot user
+The Kafka Exporter image provides only runtime variants. Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+
+- Run as a nonroot user
 - Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the app
 
+To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
+
+### FIPS variants
+
+FIPS variants include `fips` in the variant name and tag. These variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure cryptographic operations. Docker Hardened Kafka Exporter images include FIPS-compliant variants for environments requiring Federal Information Processing Standards compliance.
+
+#### Steps to verify FIPS:
+
+```shell
+# Compare image sizes (FIPS variants are larger due to FIPS crypto libraries)
+$ docker images | grep dhi-kafka-exporter
+
+# Verify FIPS compliance using image labels
+$ docker inspect <your-namespace>/dhi-kafka-exporter:<tag>-fips \
+  --format '{{index .Config.Labels "com.docker.dhi.compliance"}}'
+fips
+```
+
+#### Runtime requirements specific to FIPS:
+
+- FIPS mode enforces stricter cryptographic standards
+- Use FIPS variants when connecting to Kafka clusters with FIPS-compliant TLS
+- Required for deployments in US government or regulated environments
+- Only FIPS-approved cryptographic algorithms are available for TLS connections
+
 ## Migrate to a Docker Hardened Image
 
-Switching to the hardened Kafka Exporter image does not require any special changes. You can use it as a drop-in
-replacement for the standard Kafka Exporter image in your existing Docker deployments and configurations. The hardened
-image uses the same port (9308) and accepts the same command-line arguments as the original.
+Switching to the hardened Kafka Exporter image does not require any special changes. You can use it as a drop-in replacement for the standard Kafka Exporter image in your existing Docker deployments and configurations. The hardened image uses the same port (9308) and accepts the same command-line arguments as the original.
 
 ### Migration steps
 
 1. Replace the image reference in your Docker run command or Compose file.
 
-1. All your existing command-line arguments, environment variables, port mappings, and network settings remain the same.
+2. All your existing command-line arguments, environment variables, port mappings, and network settings remain the same.
 
-1. Test your migration and use the troubleshooting tips below if you encounter any issues.
+3. Test your migration and use the troubleshooting tips below if you encounter any issues.
 
 ## Troubleshooting migration
 
@@ -156,33 +348,20 @@ The following are common issues that you may encounter during migration.
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for
-debugging applications built with Docker Hardened Images is to use
-[Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides
-a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists
-during the debugging session.
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are
-accessible to the nonroot user. You may need to copy files to different directories or change permissions so your
-application running as the nonroot user can access them.
+By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to
-privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues,
-configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on
-the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and
-`docker run -p 80:81 my-image` won't work because the port inside the container is 81.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and `docker run -p 80:81 my-image` won't work because the port inside the container is 81.
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell
-commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers
-with no shell.
+By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
-to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
