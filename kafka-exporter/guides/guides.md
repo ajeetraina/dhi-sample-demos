@@ -296,7 +296,7 @@ Or mount debugging tools with the image mount feature:
 
 ```console
 $ docker run --rm -it --pid container:my-container \
-  --mount=type=image,source=dhi.io/dhi-busybox:<tag>,destination=/dbg,ro \
+  --mount=type=image,source=dhi.io/busybox:<tag>,destination=/dbg,ro \
   dhi.io/kafka-exporter:<tag> /dbg/bin/sh
 ```
 
