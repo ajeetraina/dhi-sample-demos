@@ -20,7 +20,7 @@ look at the Docker Hardened JMX exporter image.
 ## Start a Kafka Exporter image
 
 ```bash
-docker run -ti --rm -p 9308:9308 dhi.io/dhi-kafka-exporter:<tag> --kafka.server=kafka:9092
+docker run -ti --rm -p 9308:9308 dhi.io/kafka-exporter:<tag> --kafka.server=kafka:9092
 ```
 
 ## Common use cases
@@ -31,7 +31,7 @@ docker run -ti --rm -p 9308:9308 dhi.io/dhi-kafka-exporter:<tag> --kafka.server=
 cat <<EOF > docker-compose.yml
 services:
   kafka-exporter:
-    image: dhi.io/dhi-kafka-exporter:<tag>
+    image: dhi.io/kafka-exporter:<tag>
     command: ["--kafka.server=kafka:9092"]
     ports:
       - 9308:9308
@@ -60,7 +60,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   kafka-exporter:
-    image: dhi.io/dhi-kafka-exporter:<tag>
+    image: dhi.io/kafka-exporter:<tag>
     command: ["--kafka.server=kafka:9092"]
     ports:
       - "9308:9308"
@@ -109,7 +109,7 @@ spec:
     spec:
       containers:
         - name: kafka-exporter
-          image: dhi.io/dhi-kafka-exporter:<tag>
+          image: dhi.io/kafka-exporter:<tag>
           args:
             - --kafka.server=kafka:9092
           ports:
@@ -204,7 +204,7 @@ spec:
     spec:
       containers:
         - name: kafka-exporter
-          image: dhi.io/dhi-kafka-exporter:<tag>
+          image: dhi.io/kafka-exporter:<tag>
           args:
             - --kafka.server=kafka:9092
           ports:
@@ -297,7 +297,7 @@ Or mount debugging tools with the image mount feature:
 ```console
 $ docker run --rm -it --pid container:my-container \
   --mount=type=image,source=dhi.io/dhi-busybox:<tag>,destination=/dbg,ro \
-  dhi.io/dhi-kafka-exporter:<tag> /dbg/bin/sh
+  dhi.io/kafka-exporter:<tag> /dbg/bin/sh
 ```
 
 ## Image variants
@@ -326,10 +326,10 @@ images include FIPS-compliant variants for environments requiring Federal Inform
 
 ```shell
 # Compare image sizes (FIPS variants are larger due to FIPS crypto libraries)
-$ docker images | grep dhi-kafka-exporter
+$ docker images | grep kafka-exporter
 
 # Verify FIPS compliance using image labels
-$ docker inspect dhi.io/dhi-kafka-exporter:<tag>-fips \
+$ docker inspect dhi.io/kafka-exporter:<tag>-fips \
   --format '{{index .Config.Labels "com.docker.dhi.compliance"}}'
 fips
 ```
