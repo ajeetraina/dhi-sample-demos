@@ -1,6 +1,7 @@
 # How to use this Kafka Exporter image
 
-All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
+your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
 
@@ -13,12 +14,13 @@ This guide provides practical examples for using the Kafka Exporter Hardened Ima
 
 ## What's included in this Kafka Exporter image
 
-This Docker Hardened Kafka Exporter image includes a Kafka exporter for Prometheus. For other metrics from Kafka, have a look at the Docker Hardened JMX exporter image.
+This Docker Hardened Kafka Exporter image includes a Kafka exporter for Prometheus. For other metrics from Kafka, have a
+look at the Docker Hardened JMX exporter image.
 
 ## Start a Kafka Exporter image
 
 ```bash
-docker run -ti --rm -p 9308:9308 <your-namespace>/dhi-kafka-exporter:<tag> --kafka.server=kafka:9092
+docker run -ti --rm -p 9308:9308 dhi.io/dhi-kafka-exporter:<tag> --kafka.server=kafka:9092
 ```
 
 ## Common use cases
@@ -29,7 +31,7 @@ docker run -ti --rm -p 9308:9308 <your-namespace>/dhi-kafka-exporter:<tag> --kaf
 cat <<EOF > docker-compose.yml
 services:
   kafka-exporter:
-    image: <your-namespace>/dhi-kafka-exporter:<tag>
+    image: dhi.io/dhi-kafka-exporter:<tag>
     command: ["--kafka.server=kafka:9092"]
     ports:
       - 9308:9308
@@ -44,7 +46,7 @@ To test Kafka Exporter with a running Kafka broker, use this complete Docker Com
 cat <<EOF > docker-compose.yml
 services:
   kafka:
-    image: <your-namespace>/dhi-kafka:<tag>
+    image: dhi.io/dhi-kafka:<tag>
     container_name: kafka
     ports:
       - "9092:9092"
@@ -58,7 +60,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   kafka-exporter:
-    image: <your-namespace>/dhi-kafka-exporter:<tag>
+    image: dhi.io/dhi-kafka-exporter:<tag>
     command: ["--kafka.server=kafka:9092"]
     ports:
       - "9308:9308"
@@ -85,7 +87,8 @@ kafka_brokers 1
 
 ### Use Kafka Exporter in Kubernetes
 
-To use the Kafka Exporter hardened image in Kubernetes, [set up authentication](https://docs.docker.com/dhi/how-to/k8s/) and update your Kubernetes deployment.
+To use the Kafka Exporter hardened image in Kubernetes, [set up authentication](https://docs.docker.com/dhi/how-to/k8s/)
+and update your Kubernetes deployment.
 
 ```bash
 cat <<EOF > kafka-exporter.yaml
@@ -106,7 +109,7 @@ spec:
     spec:
       containers:
         - name: kafka-exporter
-          image: <your-namespace>/dhi-kafka-exporter:<tag>
+          image: dhi.io/dhi-kafka-exporter:<tag>
           args:
             - --kafka.server=kafka:9092
           ports:
@@ -158,7 +161,7 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: <your-namespace>/dhi-kafka:<tag>
+          image: dhi.io/dhi-kafka:<tag>
           ports:
             - containerPort: 9092
             - containerPort: 9093
@@ -201,7 +204,7 @@ spec:
     spec:
       containers:
         - name: kafka-exporter
-          image: <your-namespace>/dhi-kafka-exporter:<tag>
+          image: dhi.io/dhi-kafka-exporter:<tag>
           args:
             - --kafka.server=kafka:9092
           ports:
@@ -248,21 +251,22 @@ $ curl http://localhost:9308/metrics | grep kafka_brokers
 kafka_brokers 1
 ```
 
-For examples of how to configure Kafka Exporter itself, see the [Kafka Exporter documentation](https://github.com/danielqsj/kafka_exporter).
+For examples of how to configure Kafka Exporter itself, see the
+[Kafka Exporter documentation](https://github.com/danielqsj/kafka_exporter).
 
 ## Non-hardened images vs Docker Hardened Images
 
 ### Key differences
 
-| Feature | Non-hardened Kafka Exporter | Docker Hardened Kafka Exporter |
-|---------|----------------------------|-------------------------------|
-| Base image | BusyBox container | Debian hardened base |
-| Security | Standard image with basic utilities | Hardened build with security patches and security metadata |
-| Shell access | BusyBox shell (`/bin/sh`) available | No shell |
-| Package manager | No package manager | No package manager |
-| User | Runs as `nobody` (UID 65534) | Runs as `nonroot` user (UID 65532) |
-| Attack surface | 400+ BusyBox utilities | Only `kafka-exporter` binary, no additional utilities |
-| Debugging | Full BusyBox shell and utilities | Use Docker Debug or image mount for troubleshooting |
+| Feature         | Non-hardened Kafka Exporter         | Docker Hardened Kafka Exporter                             |
+| --------------- | ----------------------------------- | ---------------------------------------------------------- |
+| Base image      | BusyBox container                   | Debian hardened base                                       |
+| Security        | Standard image with basic utilities | Hardened build with security patches and security metadata |
+| Shell access    | BusyBox shell (`/bin/sh`) available | No shell                                                   |
+| Package manager | No package manager                  | No package manager                                         |
+| User            | Runs as `nobody` (UID 65534)        | Runs as `nonroot` user (UID 65532)                         |
+| Attack surface  | 400+ BusyBox utilities              | Only `kafka-exporter` binary, no additional utilities      |
+| Debugging       | Full BusyBox shell and utilities    | Use Docker Debug or image mount for troubleshooting        |
 
 ### Why no shell or package manager?
 
@@ -272,13 +276,15 @@ Docker Hardened Images prioritize security through minimalism:
 - Immutable infrastructure: Runtime containers shouldn't be modified after deployment
 - Compliance ready: Meets strict security requirements for regulated environments
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for
+applications built with Docker Hardened Images include:
 
 - [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers
 - Docker's Image Mount feature to mount debugging tools
 - Ecosystem-specific debugging approaches
 
-Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer
+that only exists during the debugging session.
 
 For example, you can use Docker Debug:
 
@@ -290,25 +296,31 @@ Or mount debugging tools with the image mount feature:
 
 ```console
 $ docker run --rm -it --pid container:my-container \
-  --mount=type=image,source=<your-namespace>/dhi-busybox:<tag>,destination=/dbg,ro \
-  <your-namespace>/dhi-kafka-exporter:<tag> /dbg/bin/sh
+  --mount=type=image,source=dhi.io/dhi-busybox:<tag>,destination=/dbg,ro \
+  dhi.io/dhi-kafka-exporter:<tag> /dbg/bin/sh
 ```
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by their tag.
+Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
+their tag.
 
-The Kafka Exporter image provides only runtime variants. Runtime variants are designed to run your application in production. These images are intended to be used either directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+The Kafka Exporter image provides only runtime variants. Runtime variants are designed to run your application in
+production. These images are intended to be used either directly or as the `FROM` image in the final stage of a
+multi-stage build. These images typically:
 
 - Run as a nonroot user
 - Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the app
 
-To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
+To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
+select a tag.
 
 ### FIPS variants
 
-FIPS variants include `fips` in the variant name and tag. These variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure cryptographic operations. Docker Hardened Kafka Exporter images include FIPS-compliant variants for environments requiring Federal Information Processing Standards compliance.
+FIPS variants include `fips` in the variant name and tag. These variants use cryptographic modules that have been
+validated under FIPS 140, a U.S. government standard for secure cryptographic operations. Docker Hardened Kafka Exporter
+images include FIPS-compliant variants for environments requiring Federal Information Processing Standards compliance.
 
 #### Steps to verify FIPS:
 
@@ -317,7 +329,7 @@ FIPS variants include `fips` in the variant name and tag. These variants use cry
 $ docker images | grep dhi-kafka-exporter
 
 # Verify FIPS compliance using image labels
-$ docker inspect <your-namespace>/dhi-kafka-exporter:<tag>-fips \
+$ docker inspect dhi.io/dhi-kafka-exporter:<tag>-fips \
   --format '{{index .Config.Labels "com.docker.dhi.compliance"}}'
 fips
 ```
@@ -331,42 +343,80 @@ fips
 
 ## Migrate to a Docker Hardened Image
 
-Switching to the hardened Kafka Exporter image does not require any special changes. You can use it as a drop-in replacement for the standard Kafka Exporter image in your existing Docker deployments and configurations. The hardened image uses the same port (9308) and accepts the same command-line arguments as the original.
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the
+base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the
+following table of migration notes:
 
-### Migration steps
+| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
+| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a dev tag.                                                                                                                                                                                                    |
+| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                                                                                                   |
+| Multi-stage build  | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime.                                                                                                                                                                                       |
+| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
+| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
+| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
+| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
 
-1. Replace the image reference in your Docker run command or Compose file.
+The following steps outline the general migration process.
 
-2. All your existing command-line arguments, environment variables, port mappings, and network settings remain the same.
+1. **Find hardened images for your app.**
 
-3. Test your migration and use the troubleshooting tips below if you encounter any issues.
+   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-## Troubleshooting migration
+1. **Update the base image in your Dockerfile.**
 
-The following are common issues that you may encounter during migration.
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For
+   framework images, this is typically going to be an image tagged as dev because it has the tools needed to install
+   packages and dependencies.
+
+1. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
+
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your
+   Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as dev, your final
+   runtime stage should use a non-dev image variant.
+
+1. **Install additional packages**
+
+   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to
+   install additional packages in your Dockerfile. Inspect the image variants to identify which packages are already
+   installed.
+
+   Only images tagged as dev typically have package managers. You should use a multi-stage Dockerfile to install the
+   packages. Install the packages in the build stage that uses a dev image. Then, if needed, copy any necessary
+   artifacts to the runtime stage that uses a non-dev image.
+
+   For Alpine-based images, you can use apk to install packages. For Debian-based images, you can use apt-get to install
+   packages.
+
+## Troubleshoot migration
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for
+debugging applications built with Docker Hardened Images is to use
+[Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/) to attach to these containers. Docker Debug
+provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only
+exists during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to copy files to different directories or change permissions so your application running as a nonroot user can access them.
-
-To view the user for an image variant, select the **Tags** tab for this repository.
+By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are
+accessible to the nonroot user. You may need to copy files to different directories or change permissions so your
+application running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and `docker run -p 80:81 my-image` won't work because the port inside the container is 81.
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to
+privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use Docker Debug to debug containers with no shell.
-
-To see if a shell is available in an image variant and which one, select the **Tags** tab for this repository.
+By default, image variants intended for runtime don't contain a shell. Use dev images in build stages to run shell
+commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers
+with no shell.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images.
-
-To view the Entrypoint or CMD defined for an image variant, select the **Tags** tab for this repository, select a tag, and then select the **Specifications** tab.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
+to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
