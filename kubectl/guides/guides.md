@@ -160,23 +160,23 @@ $ docker run --rm -it --pid container:<container-name> \
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use.
+The kubectl Docker Hardened Images come in different variants depending on their intended use.
 
-Runtime variants are designed to run your application in production. These images are intended to be used either
+**Runtime variants** are designed to run your application in production. These images are intended to be used either
 directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
 
 - Run as the nonroot user
 - Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the app
 
-Build-time variants typically include `dev` in the variant name and are intended for use in the first stage of a
+**Build-time variants** typically include `dev` in the variant name and are intended for use in the first stage of a
 multi-stage Dockerfile. These images typically:
 
 - Run as the root user
 - Include a shell and package manager
 - Are used to build or compile applications
 
-FIPS variants include `fips` in the variant name and provide FIPS 140-2 compliant cryptographic modules. These images:
+**FIPS variants** include `fips` in the variant name and provide FIPS 140-2 compliant cryptographic modules. These images:
 
 - Include OpenSSL with FIPS provider enabled
 - Are available in both runtime and dev variants
