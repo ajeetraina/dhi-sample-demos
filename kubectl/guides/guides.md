@@ -29,6 +29,7 @@ To connect kubectl to your Kubernetes cluster, mount your kubeconfig file and ru
 
 ```console
 $ docker run --rm \
+  --network host \
   -v ~/.kube/config:/home/nonroot/.kube/config:ro \
   dhi.io/kubectl:<tag> \
   cluster-info
@@ -40,6 +41,7 @@ Check the status of pods in a specific namespace:
 
 ```console
 $ docker run --rm \
+  --network host \
   -v ~/.kube/config:/home/nonroot/.kube/config:ro \
   dhi.io/kubectl:<tag> \
   get pods -n default
@@ -51,6 +53,7 @@ Deploy resources to your cluster by mounting a directory with Kubernetes manifes
 
 ```console
 $ docker run --rm \
+  --network host \
   -v ~/.kube/config:/home/nonroot/.kube/config:ro \
   -v $(pwd)/manifests:/manifests:ro \
   dhi.io/kubectl:<tag> \
@@ -59,65 +62,35 @@ $ docker run --rm \
 
 ### Use as a base image in CI/CD
 
-The kubectl image is commonly used in CI/CD pipelines for deploying applications to Kubernetes.
+The kubectl image is commonly used in CI/CD pipelines for deploying applications to Kubernetes:
 
-> [!IMPORTANT]
-> Runtime (non-dev) hardened images don't include a shell, so shell scripts (`.sh` files) cannot be executed directly.
-> Use one of the following approaches instead.
+```console
+$ mkdir -p manifests
 
-**Option 1: Use kubectl directly with CMD (recommended for simple deployments)**
+$ cat > manifests/configmap.yaml << 'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-app-config
+  namespace: default
+data:
+  key: value
+EOF
 
-```dockerfile
+$ cat > Dockerfile << 'EOF'
 FROM dhi.io/kubectl:<tag>
 COPY manifests/ /manifests/
 ENTRYPOINT ["/usr/local/bin/kubectl"]
 CMD ["apply", "-f", "/manifests/"]
-```
-
-**Option 2: Use a dev image if you need shell scripts**
-
-Dev images include a shell and package manager. First, create your deploy script:
-
-```console
-$ cat > deploy-script.sh << 'EOF'
-#!/bin/sh
-set -e
-
-echo "Deploying to Kubernetes..."
-kubectl apply -f /manifests/
-kubectl rollout status deployment/my-app
-echo "Deployment complete!"
 EOF
+
+$ docker build -t my-kubectl-deploy .
+
+$ docker run --rm \
+  --network host \
+  -v ~/.kube/config:/home/nonroot/.kube/config:ro \
+  my-kubectl-deploy
 ```
-
-Then use it in your Dockerfile:
-
-```dockerfile
-FROM dhi.io/kubectl:<tag>-dev
-COPY --chmod=755 deploy-script.sh /deploy-script.sh
-COPY manifests/ /manifests/
-ENTRYPOINT ["/deploy-script.sh"]
-```
-
-**Option 3: Use a multi-stage build with a compiled binary**
-
-For complex deployment logic, compile a static binary in a build stage. Using `CGO_ENABLED=0` creates a statically-linked binary that works on any runtime image:
-
-```dockerfile
-# Build stage
-FROM dhi.io/golang:alpine AS builder
-WORKDIR /app
-COPY . .
-RUN CGO_ENABLED=0 go build -o deploy-tool .
-
-# Runtime stage
-FROM dhi.io/kubectl:<tag>
-COPY --from=builder /app/deploy-tool /deploy-tool
-ENTRYPOINT ["/deploy-tool"]
-```
-
-> [!NOTE]
-> Setting `CGO_ENABLED=0` produces a statically-linked binary that doesn't depend on the C library, making it compatible with both Alpine (musl) and Debian (glibc) runtime images.
 
 ## Non-hardened images vs Docker Hardened Images
 
