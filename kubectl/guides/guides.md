@@ -1,6 +1,6 @@
 ## Prerequisites
 
-All examples in this guide use the public image. If you’ve mirrored the repository for your own use (for example, to
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
@@ -17,8 +17,8 @@ entrypoint displays help information.
 
 Run the following command and replace `<tag>` with the image variant you want to run.
 
-```
-docker run --rm dhi.io/kubectl:<tag>
+```console
+$ docker run --rm dhi.io/kubectl:<tag>
 ```
 
 ## Common kubectl use cases
@@ -27,8 +27,8 @@ docker run --rm dhi.io/kubectl:<tag>
 
 To connect kubectl to your Kubernetes cluster, mount your kubeconfig file and run kubectl commands:
 
-```
-docker run --rm \
+```console
+$ docker run --rm \
   -v ~/.kube/config:/home/nonroot/.kube/config:ro \
   dhi.io/kubectl:<tag> \
   cluster-info
@@ -38,8 +38,8 @@ docker run --rm \
 
 Check the status of pods in a specific namespace:
 
-```
-docker run --rm \
+```console
+$ docker run --rm \
   -v ~/.kube/config:/home/nonroot/.kube/config:ro \
   dhi.io/kubectl:<tag> \
   get pods -n default
@@ -49,8 +49,8 @@ docker run --rm \
 
 Deploy resources to your cluster by mounting a directory with Kubernetes manifests:
 
-```
-docker run --rm \
+```console
+$ docker run --rm \
   -v ~/.kube/config:/home/nonroot/.kube/config:ro \
   -v $(pwd)/manifests:/manifests:ro \
   dhi.io/kubectl:<tag> \
@@ -59,13 +59,65 @@ docker run --rm \
 
 ### Use as a base image in CI/CD
 
-The kubectl image is commonly used in CI/CD pipelines for deploying applications to Kubernetes:
+The kubectl image is commonly used in CI/CD pipelines for deploying applications to Kubernetes.
+
+> [!IMPORTANT]
+> Runtime (non-dev) hardened images don't include a shell, so shell scripts (`.sh` files) cannot be executed directly.
+> Use one of the following approaches instead.
+
+**Option 1: Use kubectl directly with CMD (recommended for simple deployments)**
 
 ```dockerfile
 FROM dhi.io/kubectl:<tag>
-COPY deploy-script.sh /deploy-script.sh
+COPY manifests/ /manifests/
+ENTRYPOINT ["/usr/local/bin/kubectl"]
+CMD ["apply", "-f", "/manifests/"]
+```
+
+**Option 2: Use a dev image if you need shell scripts**
+
+Dev images include a shell and package manager. First, create your deploy script:
+
+```console
+$ cat > deploy-script.sh << 'EOF'
+#!/bin/sh
+set -e
+
+echo "Deploying to Kubernetes..."
+kubectl apply -f /manifests/
+kubectl rollout status deployment/my-app
+echo "Deployment complete!"
+EOF
+```
+
+Then use it in your Dockerfile:
+
+```dockerfile
+FROM dhi.io/kubectl:<tag>-dev
+COPY --chmod=755 deploy-script.sh /deploy-script.sh
+COPY manifests/ /manifests/
 ENTRYPOINT ["/deploy-script.sh"]
 ```
+
+**Option 3: Use a multi-stage build with a compiled binary**
+
+For complex deployment logic, compile a static binary in a build stage. Using `CGO_ENABLED=0` creates a statically-linked binary that works on any runtime image:
+
+```dockerfile
+# Build stage
+FROM dhi.io/golang:alpine AS builder
+WORKDIR /app
+COPY . .
+RUN CGO_ENABLED=0 go build -o deploy-tool .
+
+# Runtime stage
+FROM dhi.io/kubectl:<tag>
+COPY --from=builder /app/deploy-tool /deploy-tool
+ENTRYPOINT ["/deploy-tool"]
+```
+
+> [!NOTE]
+> Setting `CGO_ENABLED=0` produces a statically-linked binary that doesn't depend on the C library, making it compatible with both Alpine (musl) and Debian (glibc) runtime images.
 
 ## Non-hardened images vs Docker Hardened Images
 
@@ -100,17 +152,38 @@ that only exists during the debugging session.
 
 For example, you can use Docker Debug:
 
-```
-docker debug <image-name>
+```console
+$ docker debug <container-name>
 ```
 
-or mount debugging tools with the Image Mount feature:
+or mount debugging tools with the Image Mount feature. When using Image Mount, you must override the entrypoint since
+the default entrypoint is kubectl. Choose a busybox image that matches your base OS:
 
+| kubectl Base OS | Use This Busybox Image |
+|-----------------|------------------------|
+| Alpine (`*-alpine*`) | `busybox:musl` |
+| Debian (`*-debian*`) | `busybox:glibc` or `dhi.io/busybox:<tag>` |
+
+For Alpine-based images:
+
+```console
+$ docker run --rm -it --pid container:<container-name> \
+  --entrypoint /dbg/bin/sh \
+  --mount=type=image,source=busybox:musl,destination=/dbg,ro \
+  dhi.io/kubectl:<tag>
 ```
-docker run --rm -it --pid container:my-image \
-  --mount=type=image,source=dhi.io/busybox,destination=/dbg,ro \
-  dhi.io/kubectl:<tag> /dbg/bin/sh
+
+For Debian-based images:
+
+```console
+$ docker run --rm -it --pid container:<container-name> \
+  --entrypoint /dbg/bin/sh \
+  --mount=type=image,source=busybox:glibc,destination=/dbg,ro \
+  dhi.io/kubectl:<tag>
 ```
+
+> [!NOTE]
+> The `--entrypoint /dbg/bin/sh` flag is required because the kubectl image's default entrypoint is `/usr/local/bin/kubectl`. Without this override, the shell path would be interpreted as a kubectl subcommand.
 
 ## Image variants
 
@@ -129,6 +202,12 @@ multi-stage Dockerfile. These images typically:
 - Run as the root user
 - Include a shell and package manager
 - Are used to build or compile applications
+
+FIPS variants include `fips` in the variant name and provide FIPS 140-2 compliant cryptographic modules. These images:
+
+- Include OpenSSL with FIPS provider enabled
+- Are available in both runtime and dev variants
+- Meet compliance requirements for regulated environments
 
 ## Migrate to a Docker Hardened Image
 
@@ -209,3 +288,6 @@ with no shell.
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
 to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+
+For the kubectl image, the entrypoint is `/usr/local/bin/kubectl`. This means any arguments passed to `docker run` are
+interpreted as kubectl subcommands. To run a different command, use the `--entrypoint` flag.
