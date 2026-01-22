@@ -195,8 +195,6 @@ images include FIPS-compliant variants for environments requiring Federal Inform
 ```console
 # Compare image sizes (FIPS variants are larger due to FIPS crypto libraries)
 $ docker images | grep pushgateway
-dhi.io/pushgateway:1.11.2        26.8MB    6.66MB
-dhi.io/pushgateway:1.11.2-fips   124MB     22.4MB
 
 # Verify FIPS compliance using image labels
 $ docker inspect dhi.io/pushgateway:<tag>-fips \
