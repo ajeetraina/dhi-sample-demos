@@ -165,6 +165,34 @@ The Docker Hardened pushgateway image differs from the standard Prometheus pushg
 | Attack surface  | Standard base image           | Minimal, only essential components                  |
 | Debugging       | Traditional shell debugging   | Use Docker Debug for troubleshooting                |
 
+### Why no shell or package manager?
+
+Docker Hardened Images prioritize security through minimalism:
+
+- Reduced attack surface: Fewer binaries mean fewer potential vulnerabilities
+- Immutable infrastructure: Runtime containers shouldn't be modified after deployment
+- Compliance ready: Meets strict security requirements for regulated environments
+
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for
+applications built with Docker Hardened Images include:
+
+- [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers
+- Docker's Image Mount feature to mount debugging tools
+- Ecosystem-specific debugging approaches
+
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer
+that only exists during the debugging session.
+
+For example, you can use Docker Debug:
+
+```console
+$ docker debug <container-name>
+```
+
+Inside the debug session, you can run commands like `ps aux`, `netstat -tlnp`, or `curl` to inspect the container. 
+
+To view the image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
+
 ## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
