@@ -28,6 +28,14 @@ $ docker run -d --name pushgateway -p 9091:9091 \
   dhi.io/pushgateway:<tag>
 ```
 
+Verify the container is running and healthy:
+
+```
+$ docker ps --filter name=pushgateway
+$ curl -s http://localhost:9091/-/healthy
+```
+
+
 To pass command-line flags to the Pushgateway (for example to change the listen address or enable persistence), append
 them after the image name:
 
@@ -39,9 +47,29 @@ $ docker run -d --name pushgateway -p 9091:9091 \
 ### Docker Compose example
 
 ```yaml
+# Clean up
+docker rm -f pushgateway 2>/dev/null
+
+# Create test directory
+mkdir -p /tmp/pushgateway-test && cd /tmp/pushgateway-test
+
+# Create prometheus.yml
+cat > prometheus.yml << 'EOF'
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'pushgateway'
+    honor_labels: true
+    static_configs:
+      - targets: ['pushgateway:9091']
+EOF
+
+# Create docker-compose.yml (from documentation)
+cat > docker-compose.yml << 'EOF'
 services:
   pushgateway:
-    image: dhi.io/pushgateway:<tag>
+    image: dhi.io/pushgateway:1.11.2
     container_name: pushgateway
     ports:
       - "9091:9091"
@@ -58,6 +86,19 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
+EOF
+
+# Start the services
+docker compose up -d
+
+# Check status
+docker compose ps
+
+# Test pushgateway health
+curl -s http://localhost:9091/-/healthy
+
+# Test prometheus
+curl -s http://localhost:9090/-/healthy
 ```
 
 A minimal prometheus.yml to scrape the Pushgateway:
