@@ -113,24 +113,6 @@ A simple shell script that pushes a metric (note the newline at end of each metr
 echo "batch_job_success 1" | curl --data-binary @- http://pushgateway:9091/metrics/job/batch_job
 ```
 
-## Important operational notes
-
-- Pushgateway is intended for service-level, ephemeral, or batch-job metrics. It is not a general aggregation system or
-  event store. See the upstream docs for guidance on correct usage: https://github.com/prometheus/pushgateway and
-  https://prometheus.io/docs/practices/pushing/.
-
-- The Pushgateway adds `push_time_seconds` and `push_failure_time_seconds` metrics for each metric group. These can be
-  useful for alerting on stale or failed pushes.
-
-- The hardened runtime runs the binary as a nonroot user. Avoid binding to privileged ports inside the container
-  (<1024) unless using a dev/runtime image that supports it.
-
-## Image details
-
-- Default listen port: 9091/tcp
-- Entrypoint: `pushgateway`
-- Working directory: `/pushgateway`
-- Runs as nonroot user (UID 65532)
 
 ## Non-hardened images vs. Docker Hardened Images
 
