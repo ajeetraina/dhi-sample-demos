@@ -5,8 +5,8 @@ your Docker Hub namespace), update your commands to reference the mirrored image
 
 For example:
 
-- Public image: `dhi.io/<repository>:<tag>`
-- Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
+- Public image: `dhi.io/pushgateway:<tag>`
+- Mirrored image: `<your-namespace>/dhi-pushgateway:<tag>`
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
@@ -14,8 +14,8 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 
 This Docker Hardened pushgateway image includes:
 
-- The `pushgateway` binary (statically built).
-- Minimal runtime filesystem prepared for secure execution as a nonroot user.
+- The `pushgateway` binary (statically built)
+- Minimal runtime filesystem prepared for secure execution as a nonroot user
 
 ## Start a pushgateway image
 
@@ -30,11 +30,10 @@ $ docker run -d --name pushgateway -p 9091:9091 \
 
 Verify the container is running and healthy:
 
-```
+```console
 $ docker ps --filter name=pushgateway
 $ curl -s http://localhost:9091/-/healthy
 ```
-
 
 To pass command-line flags to the Pushgateway (for example to change the listen address or enable persistence), append
 them after the image name:
@@ -44,17 +43,25 @@ $ docker run -d --name pushgateway -p 9091:9091 \
   dhi.io/pushgateway:<tag> --web.listen-address=":9091" --persistence.file=/data/pushgateway.snap
 ```
 
+Verify the container is running and check the logs:
+
+```console
+$ docker ps --filter name=pushgateway
+$ curl -s http://localhost:9091/-/healthy
+$ docker logs pushgateway
+```
+
 ### Docker Compose example
 
+Create a directory for your project and the required configuration files:
+
+```console
+$ mkdir -p pushgateway-test && cd pushgateway-test
+```
+
+Create `prometheus.yml`:
+
 ```yaml
-# Clean up
-docker rm -f pushgateway 2>/dev/null
-
-# Create test directory
-mkdir -p /tmp/pushgateway-test && cd /tmp/pushgateway-test
-
-# Create prometheus.yml
-cat > prometheus.yml << 'EOF'
 global:
   scrape_interval: 15s
 
@@ -63,13 +70,14 @@ scrape_configs:
     honor_labels: true
     static_configs:
       - targets: ['pushgateway:9091']
-EOF
+```
 
-# Create docker-compose.yml (from documentation)
-cat > docker-compose.yml << 'EOF'
+Create `docker-compose.yaml`:
+
+```yaml
 services:
   pushgateway:
-    image: dhi.io/pushgateway:1.11.2
+    image: dhi.io/pushgateway:<tag>
     container_name: pushgateway
     ports:
       - "9091:9091"
@@ -80,36 +88,14 @@ services:
       - "--persistence.file=/data/pushgateway.snap"
 
   prometheus:
-    image: prom/prometheus:latest
+    image: dhi.io/prometheus:<tag>
     container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
-EOF
-
-# Start the services
-docker compose up -d
-
-# Check status
-docker compose ps
-
-# Test pushgateway health
-curl -s http://localhost:9091/-/healthy
-
-# Test prometheus
-curl -s http://localhost:9090/-/healthy
 ```
 
-A minimal prometheus.yml to scrape the Pushgateway:
-
-```yaml
-scrape_configs:
-  - job_name: 'pushgateway'
-    honor_labels: true
-    static_configs:
-      - targets: ['pushgateway:9091']
-```
 
 ### Environment / configuration
 
@@ -134,12 +120,25 @@ You can pass flags directly as arguments to the container (see examples above).
   $ echo "some_metric 3.14" | curl --data-binary @- http://localhost:9091/metrics/job/some_job
   ```
 
+  Verify the metric was pushed:
+
+  ```console
+  $ curl -s http://localhost:9091/metrics | grep some_metric
+  ```
+
 - Persisted Pushgateway: mount a host volume for persistence and pass `--persistence.file` so metrics survive restarts:
 
   ```console
   $ docker run -d --name pushgateway -p 9091:9091 \
     -v /var/lib/pushgateway:/data \
     dhi.io/pushgateway:<tag> --persistence.file=/data/pushgateway.snap
+  ```
+
+  Push a test metric and verify:
+
+  ```console
+  $ echo "persist_test 3.14" | curl --data-binary @- http://localhost:9091/metrics/job/persist_job
+  $ curl -s http://localhost:9091/metrics | grep persist_test
   ```
 
 - Prometheus + Pushgateway in Compose: use the Compose example above and configure Prometheus to scrape the Pushgateway.
@@ -153,7 +152,6 @@ A simple shell script that pushes a metric (note the newline at end of each metr
 #!/bin/sh
 echo "batch_job_success 1" | curl --data-binary @- http://pushgateway:9091/metrics/job/batch_job
 ```
-
 
 ## Non-hardened images vs. Docker Hardened Images
 
@@ -172,22 +170,46 @@ The Docker Hardened pushgateway image differs from the standard Prometheus pushg
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
 their tag.
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either
-  directly or as the FROM image in the final stage of a multi-stage build. These images typically:
+The Pushgateway image provides runtime, dev, and FIPS variants. Runtime variants are designed to run your application in
+production. These images are intended to be used either directly or as the `FROM` image in the final stage of a
+multi-stage build. These images typically:
 
-  - Run as a nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+- Run as a nonroot user
+- Do not include a shell or a package manager
+- Contain only the minimal set of libraries needed to run the app
 
-- Build-time variants typically include `dev` in the tag name and are intended for use in the first stage of a
-  multi-stage Dockerfile. These images typically:
+Dev variants include `dev` in the tag name and are intended for debugging or as a base for custom images. These images
+include a shell and package manager, and run as root.
 
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
+To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
+select a tag.
 
-To view the image variants and get more information about them, select the Tags tab for this repository, and then select
-a tag.
+### FIPS variants
+
+FIPS variants include `fips` in the variant name and tag. These variants use cryptographic modules that have been
+validated under FIPS 140, a U.S. government standard for secure cryptographic operations. Docker Hardened Pushgateway
+images include FIPS-compliant variants for environments requiring Federal Information Processing Standards compliance.
+
+#### Steps to verify FIPS:
+
+```console
+# Compare image sizes (FIPS variants are larger due to FIPS crypto libraries)
+$ docker images | grep pushgateway
+dhi.io/pushgateway:1.11.2        26.8MB    6.66MB
+dhi.io/pushgateway:1.11.2-fips   124MB     22.4MB
+
+# Verify FIPS compliance using image labels
+$ docker inspect dhi.io/pushgateway:<tag>-fips \
+  --format '{{index .Config.Labels "com.docker.dhi.compliance"}}'
+fips,stig,cis
+```
+
+#### Runtime requirements specific to FIPS:
+
+- FIPS mode enforces stricter cryptographic standards
+- Use FIPS variants when exposing metrics over HTTPS with FIPS-compliant TLS
+- Required for deployments in US government or regulated environments
+- Only FIPS-approved cryptographic algorithms are available for TLS connections
 
 ## Migrate to a Docker Hardened Image
 
@@ -268,4 +290,3 @@ with no shell.
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
 to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
-
