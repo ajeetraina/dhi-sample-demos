@@ -1,6 +1,6 @@
 ## Prerequisites
 
-All examples in this guide use the public image. If you’ve mirrored the repository for your own use (for example, to
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
@@ -14,7 +14,7 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 
 This Docker Hardened pushgateway image includes:
 
-- The `pushgateway` binary (statically built) installed at `/bin/pushgateway`.
+- The `pushgateway` binary (statically built).
 - Minimal runtime filesystem prepared for secure execution as a nonroot user.
 
 ## Start a pushgateway image
@@ -23,7 +23,7 @@ The Pushgateway listens on port 9091 by default. Use the following examples to r
 
 ### Basic usage
 
-```bash
+```console
 $ docker run -d --name pushgateway -p 9091:9091 \
   dhi.io/pushgateway:<tag>
 ```
@@ -31,7 +31,7 @@ $ docker run -d --name pushgateway -p 9091:9091 \
 To pass command-line flags to the Pushgateway (for example to change the listen address or enable persistence), append
 them after the image name:
 
-```bash
+```console
 $ docker run -d --name pushgateway -p 9091:9091 \
   dhi.io/pushgateway:<tag> --web.listen-address=":9091" --persistence.file=/data/pushgateway.snap
 ```
@@ -39,7 +39,6 @@ $ docker run -d --name pushgateway -p 9091:9091 \
 ### Docker Compose example
 
 ```yaml
-version: '3.8'
 services:
   pushgateway:
     image: dhi.io/pushgateway:<tag>
@@ -90,14 +89,14 @@ You can pass flags directly as arguments to the container (see examples above).
 
   Push a metric with curl:
 
-  ```bash
-  echo "some_metric 3.14" | curl --data-binary @- http://localhost:9091/metrics/job/some_job
+  ```console
+  $ echo "some_metric 3.14" | curl --data-binary @- http://localhost:9091/metrics/job/some_job
   ```
 
 - Persisted Pushgateway: mount a host volume for persistence and pass `--persistence.file` so metrics survive restarts:
 
-  ```bash
-  docker run -d --name pushgateway -p 9091:9091 \
+  ```console
+  $ docker run -d --name pushgateway -p 9091:9091 \
     -v /var/lib/pushgateway:/data \
     dhi.io/pushgateway:<tag> --persistence.file=/data/pushgateway.snap
   ```
@@ -124,22 +123,26 @@ echo "batch_job_success 1" | curl --data-binary @- http://pushgateway:9091/metri
   useful for alerting on stale or failed pushes.
 
 - The hardened runtime runs the binary as a nonroot user. Avoid binding to privileged ports inside the container
-  (\<1024) unless using a dev/runtime image that supports it.
+  (<1024) unless using a dev/runtime image that supports it.
 
 ## Image details
 
 - Default listen port: 9091/tcp
-- Entrypoint: `/bin/pushgateway`
+- Entrypoint: `pushgateway`
 - Working directory: `/pushgateway`
-- Runs as nonroot user (UID 65534)
+- Runs as nonroot user (UID 65532)
 
 ## Non-hardened images vs. Docker Hardened Images
 
-*Note any key differences for this specific image, not general differences. Any information provided in the below
-boilerplate should not be repeated here.*
+The Docker Hardened pushgateway image differs from the standard Prometheus pushgateway image in the following ways:
 
-*Everything below here is boilerplate and should be included verbatim!!!!! Be sure to remove this comment and keep
-everything below this comment exactly as is.*
+| Feature         | Standard pushgateway          | Docker Hardened pushgateway                         |
+| --------------- | ----------------------------- | --------------------------------------------------- |
+| User            | Runs as nobody                | Runs as nonroot (UID 65532)                         |
+| Shell access    | Shell available               | No shell in runtime variants                        |
+| Package manager | May include package manager   | No package manager in runtime variants              |
+| Attack surface  | Standard base image           | Minimal, only essential components                  |
+| Debugging       | Traditional shell debugging   | Use Docker Debug for troubleshooting                |
 
 ## Image variants
 
@@ -167,13 +170,79 @@ a tag.
 
 To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the
 base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the
-following table of migration notes.
+following table of migration notes:
 
-| Item                                                                                              | Migration note                                                                                                                                               |
-| :------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Base image                                                                                        | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                    |
-| Package management                                                                                | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                  |
-| Non-root user                                                                                     | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.   |
-| Multi-stage build                                                                                 | Utilize images with a `dev` tag for build stages and non-dev images for runtime. To ensure that your final image is as minimal as possible, you should use a |
-| multi-stage Dockerfile. While intermediary stages will typically use images tagged as `dev`, your |                                                                                                                                                              |
-| final runtime stage should use a non-dev image variant.                                           |                                                                                                                                                              |
+| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
+| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a dev tag.                                                                                                                                                                                                    |
+| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                                                                                                   |
+| Multi-stage build  | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime.                                                                                                                                                                                       |
+| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
+| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
+| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
+| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+
+The following steps outline the general migration process.
+
+1. **Find hardened images for your app.**
+
+   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
+
+1. **Update the base image in your Dockerfile.**
+
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For
+   framework images, this is typically going to be an image tagged as dev because it has the tools needed to install
+   packages and dependencies.
+
+1. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
+
+   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your
+   Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as dev, your final
+   runtime stage should use a non-dev image variant.
+
+1. **Install additional packages**
+
+   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to
+   install additional packages in your Dockerfile. Inspect the image variants to identify which packages are already
+   installed.
+
+   Only images tagged as dev typically have package managers. You should use a multi-stage Dockerfile to install the
+   packages. Install the packages in the build stage that uses a dev image. Then, if needed, copy any necessary
+   artifacts to the runtime stage that uses a non-dev image.
+
+   For Alpine-based images, you can use apk to install packages. For Debian-based images, you can use apt-get to install
+   packages.
+
+## Troubleshoot migration
+
+### General debugging
+
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for
+debugging applications built with Docker Hardened Images is to use
+[Docker Debug](https://docs.docker.com/engine/reference/commandline/debug/) to attach to these containers. Docker Debug
+provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only
+exists during the debugging session.
+
+### Permissions
+
+By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are
+accessible to the nonroot user. You may need to copy files to different directories or change permissions so your
+application running as the nonroot user can access them.
+
+### Privileged ports
+
+Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to
+privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
+
+### No shell
+
+By default, image variants intended for runtime don't contain a shell. Use dev images in build stages to run shell
+commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers
+with no shell.
+
+### Entry point
+
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
+to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+
