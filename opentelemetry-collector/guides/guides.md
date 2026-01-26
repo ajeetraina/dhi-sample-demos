@@ -388,7 +388,7 @@ $ docker run --rm -it --pid container:otel-collector \
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
 their tag.
 
-The OpenTelemetry Collector image provides runtime and dev variants. Runtime variants are designed to run your
+The OpenTelemetry Collector image provides runtime, dev, and FIPS variants. Runtime variants are designed to run your
 application in production. These images are intended to be used either directly or as the `FROM` image in the final
 stage of a multi-stage build. These images typically:
 
