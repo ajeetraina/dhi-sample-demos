@@ -39,7 +39,7 @@ $ docker run -d --name otel-collector \
 ### Run with Docker Compose
 
 ```console
-$ cat <<EOF > docker-compose.yml
+$ cat <<EOF > docker-compose.yaml
 services:
   otel-collector:
     image: dhi.io/opentelemetry-collector:<tag>
@@ -101,10 +101,10 @@ service:
 EOF
 ```
 
-Create `docker-compose.yml`:
+Create `docker-compose.yaml`:
 
 ```console
-$ cat <<EOF > docker-compose.yml
+$ cat <<EOF > docker-compose.yaml
 services:
   otel-collector:
     image: dhi.io/opentelemetry-collector:<tag>
@@ -184,7 +184,7 @@ service:
 EOF
 ```
 
-Create `docker-compose.yml`:
+Create `docker-compose.yaml`:
 
 ```console
 $ cat <<EOF > docker-compose.yml
