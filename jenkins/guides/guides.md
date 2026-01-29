@@ -144,7 +144,6 @@ $ docker compose exec jenkins tar -czf /var/backups/jenkins-backup-$(date +%Y%m%
 This setup allows Jenkins agents to build Docker images:
 
 ```yaml
-version: '3.8'
 services:
   jenkins:
     image: dhi.io/jenkins:<tag>
