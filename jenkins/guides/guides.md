@@ -44,7 +44,6 @@ This command:
 Create a `compose.yml` file with the following content:
 
 ```yaml
-version: '3.8'
 services:
   jenkins:
     image: dhi.io/jenkins:<tag>
