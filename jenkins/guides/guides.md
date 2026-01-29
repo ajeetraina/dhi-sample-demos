@@ -211,6 +211,16 @@ $ docker run -d --name jenkins-custom -p 8080:8080 \
   my-jenkins:custom
 ```
 
+## Official Docker image (DOI) vs Docker Hardened Image (DHI)
+
+| Feature | DOI (`jenkins/jenkins`) | DHI (`dhi.io/jenkins`) |
+|---------|-------------------------|------------------------|
+| User | jenkins (UID 1000) | jenkins (UID 1000) |
+| Shell | Yes | No (runtime) / Yes (dev) |
+| Package manager | Yes (apt) | No (runtime) / Yes (dev) |
+| jenkins-plugin-cli | Yes | No |
+| FIPS variant | No | Yes |
+| Base OS | Debian 13 (trixie) | Docker Hardened Images (Debian 13) |
 
 
 ## Image variants
