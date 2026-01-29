@@ -118,7 +118,6 @@ $ docker exec jenkins-basic cat /var/jenkins_home/secrets/initialAdminPassword
 Store Jenkins data on the host filesystem for easier backups and recovery:
 
 ```yaml
-version: '3.8'
 services:
   jenkins:
     image: dhi.io/jenkins:<tag>
