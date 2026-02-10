@@ -1,6 +1,6 @@
 ## How to use this image
 
-All examples in this guide use the public image. If you’ve mirrored the repository for your own use (for example, to
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
@@ -15,24 +15,24 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 This Docker Hardened cert-manager-controller image includes the controller component of cert-manager in a single,
 security-hardened package:
 
-- `cert-manager-controller`: The main controller binary that manages certificate lifecycle operations, watches for
-  Certificate resources, and coordinates with ACME providers
+- `cert-manager` controller binary (`/usr/local/bin/cert-manager`, 87 MB) that manages certificate lifecycle operations,
+  watches for Certificate resources, and coordinates with ACME providers
 - TLS certificate management capabilities for Kubernetes clusters
 - ACME protocol support for automatic certificate provisioning from providers like Let's Encrypt
 - Certificate renewal automation and lifecycle management
+- Healthz endpoint for liveness and readiness probes
+- CIS benchmark compliance (runtime), FIPS 140 + STIG + CIS compliance (FIPS variant)
 
 ## Start a cert-manager-controller image
 
-> **Note:** The cert-manager-acmesolver image is primarily designed to run inside a Kubernetes cluster as part of a full
-> cert-manager deployment. The standalone Docker command below simply displays configuration options.
+> **Note:** The cert-manager-controller image is primarily designed to run inside a Kubernetes cluster as part of a full
+> cert-manager deployment. The standalone Docker command below displays the available configuration options.
 
-Run the following command and replace `<tag>` with the image variant you want to run.
+Run the following command and replace `<tag>` with the image variant you want to run (for example,
+`1.19.3-debian13`).
 
-**Note:** cert-manager-controller is primarily designed to run within a Kubernetes cluster as part of the complete
-cert-manager deployment. The following standalone Docker command displays the available configuration options.
-
-```bash
-docker run --rm -it dhi.io/cert-manager-controller:<tag> --help
+```console
+$ docker run --rm dhi.io/cert-manager-controller:<tag> --help
 ```
 
 ## Controller-specific flags
@@ -47,15 +47,15 @@ including certificates, orders, challenges, and issuers.
 
 You can limit which controllers run by providing a comma-separated list:
 
-```bash
-docker run --rm -it dhi.io/cert-manager-controller:<tag> \
+```console
+$ docker run --rm dhi.io/cert-manager-controller:<tag> \
   --controllers=certificates-issuing,issuers
 ```
 
 You can also disable specific controllers while keeping others enabled:
 
-```bash
-docker run --rm -it dhi.io/cert-manager-controller:<tag> \
+```console
+$ docker run --rm dhi.io/cert-manager-controller:<tag> \
   --controllers=*,-foo
 ```
 
@@ -71,8 +71,8 @@ manual cleanup.
 
 When enabled, Kubernetes automatically garbage-collects the corresponding Secret when a Certificate is deleted.
 
-```bash
-docker run --rm -it dhi.io/cert-manager-controller:<tag> \
+```console
+$ docker run --rm dhi.io/cert-manager-controller:<tag> \
   --enable-certificate-owner-ref=true
 ```
 
@@ -87,8 +87,8 @@ their Secrets.
 The default namespace is `kube-system`. This configuration is necessary because ClusterIssuers are cluster-wide
 resources not bound to a single namespace, but their credential Secrets must still reside in a specific namespace.
 
-```bash
-docker run --rm -it dhi.io/cert-manager-controller:<tag> \
+```console
+$ docker run --rm dhi.io/cert-manager-controller:<tag> \
   --cluster-resource-namespace=cert-manager
 ```
 
@@ -170,28 +170,48 @@ spec:
           class: nginx
 ```
 
+## Official Docker image (DOI) vs Docker Hardened Image (DHI)
+
+| Feature | DOI (`quay.io/jetstack/cert-manager-controller`) | DHI (`dhi.io/cert-manager-controller`) |
+|---------|--------------------------------------------------|----------------------------------------|
+| User | `1000` (numeric UID) | `nonroot` (runtime/FIPS) / `root` (dev) |
+| Shell | No | No (runtime/FIPS) / Yes (dev) |
+| Package manager | No | No (runtime/FIPS) / Yes (dev) |
+| Binary path | `/app/cmd/controller/controller` | `/usr/local/bin/cert-manager` |
+| Entrypoint | ENTRYPOINT `controller` | ENTRYPOINT `cert-manager` |
+| Zero CVE commitment | No | Yes |
+| FIPS variant | No | Yes (FIPS + STIG + CIS) |
+| Base OS | Minimal (no labels) | Docker Hardened Images (Debian 13) |
+| Uncompressed size | 100 MB | 110 MB (runtime), 182 MB (FIPS) |
+| Layers | 15 | 7 (runtime) |
+| Compliance labels | None | CIS (runtime), FIPS+STIG+CIS (fips) |
+| ENV: SSL_CERT_FILE | `/etc/ssl/certs/ca-certificates.crt` | `/etc/ssl/certs/ca-certificates.crt` |
+| Architectures | amd64, arm64 | amd64, arm64 |
+
 ## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
 their tag.
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either
-  directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+**Runtime variants** are designed to run the cert-manager controller in production. These images typically:
 
-  - Run as a nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+- Run as a nonroot user
+- Do not include a shell or a package manager
+- Contain only the `cert-manager` binary and TLS certificates
+- Include CIS benchmark compliance (`com.docker.dhi.compliance: cis`)
 
-- Build-time variants typically include `dev` in the tag name and are intended for use in the first stage of a
-  multi-stage Dockerfile. These images typically:
+**Build-time variants** typically include `dev` in the tag name and are intended for debugging and development. These
+images typically:
 
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
+- Run as the root user
+- Include a shell and package manager
+- Are useful for troubleshooting cert-manager issues
 
-- FIPS variants include `fips` in the variant name and tag. They come in both runtime and build-time variants. These
-  variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure
-  cryptographic operations. For example, usage of MD5 fails in FIPS variants.
+**FIPS variants** include `fips` in the variant name and tag. They come in both runtime and build-time variants. These
+variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure
+cryptographic operations. FIPS variants also include STIG and CIS compliance
+(`com.docker.dhi.compliance: fips,stig,cis`). For example, usage of MD5 fails in FIPS variants. Use FIPS variants in
+regulated environments such as FedRAMP, government, and financial services.
 
 To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
 select a tag.
@@ -334,13 +354,3 @@ with no shell.
 Docker Hardened Images may have different entry points than standard cert-manager images. Use `docker inspect` to
 inspect entry points for Docker Hardened Images and update your Kubernetes deployment if necessary.
 
-### cert-manager specific troubleshooting
-
-- Missing components: cert-manager requires multiple components to function. Ensure you've deployed all necessary
-  components (controller, webhook, cainjector) with compatible hardened images.
-- Certificate issuance failures: Check the cert-manager-controller logs for ACME challenges or issuer configuration
-  problems. The controller provides detailed logging about certificate lifecycle events.
-- Webhook connectivity: If using the webhook component, ensure network policies allow communication between the
-  controller and webhook pods.
-- Leader election: In multi-replica deployments, verify that leader election is functioning correctly. The controller
-  uses leader election to ensure only one instance manages certificates at a time.
