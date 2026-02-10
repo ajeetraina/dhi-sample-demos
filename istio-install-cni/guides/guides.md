@@ -14,11 +14,11 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 
 This Docker Hardened Istio CNI image includes:
 
-- Istio CNI plugin binary for pod network configuration
-- CNI configuration management for chaining with existing CNI plugins
+- Istio CNI installer daemon (`/usr/local/bin/install-cni`, 102 MB) — copies the CNI plugin to the host node
+- Istio CNI plugin binary (`/opt/cni/bin/istio-cni`, 52 MB) — handles pod network configuration
 - iptables rules management for traffic redirection in sidecar mode
 - Ambient mesh networking support for ztunnel integration
-- tini as the init process for proper signal handling
+- CIS benchmark compliance (runtime), FIPS 140 + STIG + CIS compliance (FIPS variant)
 
 ## Start an Istio CNI image
 
@@ -26,11 +26,13 @@ First follow the
 [authentication instructions for DHI in Kubernetes](https://docs.docker.com/dhi/how-to/k8s/#authentication).
 
 The Istio CNI image runs as a **DaemonSet** on each node in your Kubernetes cluster. It installs the CNI plugin binary
-and manages pod network namespace configuration. This image cannot be run standalone.
+and manages pod network namespace configuration. This image cannot be run standalone — it requires a Kubernetes cluster
+with CNI directory mounts.
 
 ### Basic usage
 
-Replace `<secret name>` with your Kubernetes image pull secret and `<tag>` with the image variant you want to use.
+Replace `<secret name>` with your Kubernetes image pull secret and `<tag>` with the image variant you want to use
+(for example, `1.28.3-debian13`).
 
 ```yaml
 apiVersion: apps/v1
@@ -55,30 +57,55 @@ spec:
         image: dhi.io/istio-install-cni:<tag>
         securityContext:
           privileged: true
+        volumeMounts:
+        - name: cni-bin-dir
+          mountPath: /opt/cni/bin
+        - name: cni-net-dir
+          mountPath: /etc/cni/net.d
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      volumes:
+      - name: cni-bin-dir
+        hostPath:
+          path: /opt/cni/bin
+      - name: cni-net-dir
+        hostPath:
+          path: /etc/cni/net.d
 ```
+
+This configuration:
+
+- Runs on the host network (`hostNetwork: true`) to manage node CNI configuration
+- Requires `privileged: true` to install CNI binaries and modify iptables rules
+- Mounts the host CNI binary and configuration directories
+- Sets resource limits for production stability
 
 ### With istioctl (recommended)
 
 Use `istioctl` to install Istio with the hardened CNI image:
 
-```bash
+```console
 $ istioctl install --set components.cni.enabled=true \
-  --set values.cni.image=dhi.io/istio-install-cni:<tag> \
-  --set values.cni.imagePullSecrets[0]=<secret name>
+  --set values.cni.image=dhi.io/istio-install-cni \
+  --set values.cni.tag=<tag>
 ```
 
 ### With Helm
 
-```bash
+```console
 $ helm install istio-cni istio/cni -n istio-system \
   --set cni.image=dhi.io/istio-install-cni \
-  --set cni.tag=<tag> \
-  --set global.imagePullSecrets[0]=<secret name>
+  --set cni.tag=<tag>
 ```
 
 ## Configuration options
 
-The Istio CNI image supports configuration through environment variables:
+The Istio CNI image supports configuration through environment variables in the DaemonSet spec:
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
@@ -111,11 +138,11 @@ containers:
 ### Sidecar mode networking
 
 The CNI plugin configures iptables rules for traffic redirection when pods with Istio sidecars are scheduled,
-eliminating the need for privileged init containers.
+eliminating the need for the privileged `istio-init` init container.
 
 Deploy the DaemonSet and enable sidecar injection:
 
-```bash
+```console
 # Apply the CNI DaemonSet
 $ kubectl apply -f istio-cni-daemonset.yaml
 
@@ -139,7 +166,7 @@ $ kubectl describe pod -l app=productpage | grep -A2 "Init Containers"
 
 In ambient mode, the CNI plugin monitors pods and configures networking for the ambient mesh without sidecar injection.
 
-```bash
+```console
 # Install with ambient mode enabled
 $ istioctl install --set profile=ambient \
   --set values.cni.image=dhi.io/istio-install-cni:<tag>
@@ -151,11 +178,11 @@ $ kubectl label namespace default istio.io/dataplane-mode=ambient
 $ kubectl logs -n istio-system -l k8s-app=istio-cni-node | grep ambient
 ```
 
-### Jenkins or CI/CD pipeline integration
+### CI/CD test cluster integration
 
 When running Istio in CI/CD test clusters (for example, with Kind or Minikube), configure the CNI for testing:
 
-```bash
+```console
 # Create a Kind cluster with CNI support
 $ kind create cluster --config kind-config.yaml
 
@@ -168,18 +195,18 @@ $ istioctl install --set components.cni.enabled=true \
 
 ## Official Docker image (DOI) vs Docker Hardened Image (DHI)
 
-Key differences specific to the Istio CNI DHI:
-
 | Feature | DOI (`istio/install-cni`) | DHI (`dhi.io/istio-install-cni`) |
 |---------|--------------------------|----------------------------------|
 | User | root | nonroot (runtime) / root (dev) |
 | Shell | Yes | No (runtime) / Yes (dev) |
 | Package manager | Yes (apt) | No (runtime) / Yes (dev) |
-| SBOM | No | Yes |
-| FIPS variant | No | Yes |
+| Entrypoint | CMD `install-cni` | ENTRYPOINT `install-cni` |
+| FIPS variant | No | Yes (FIPS + STIG + CIS) |
 | Zero CVE commitment | No | Yes |
-| Base OS | Ubuntu | Docker Hardened Images (Debian 13) |
-| Privileged requirement | Yes | Yes (required for CNI operations) |
+| Base OS | Ubuntu 24.04 | Docker Hardened Images (Debian 13) |
+| Uncompressed size | 309 MB | 283 MB (−8.4%) |
+| Compliance labels | None | CIS (runtime), FIPS+STIG+CIS (fips) |
+| End-of-life tracking | No | Yes |
 
 ## Image variants
 
@@ -192,6 +219,7 @@ typically:
 - Run as a nonroot user
 - Do not include a shell or a package manager
 - Contain only the minimal set of libraries needed to run the CNI plugin
+- Include CIS benchmark compliance (`com.docker.dhi.compliance: cis`)
 
 **Build-time variants** typically include `dev` in the tag name and are intended for debugging and development. These
 images typically:
@@ -202,10 +230,10 @@ images typically:
 
 **FIPS variants** include `fips` in the variant name and tag. They come in both runtime and build-time variants. These
 variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure
-cryptographic operations. Use FIPS variants in regulated environments (FedRAMP, government, financial services).
+cryptographic operations. FIPS variants also include STIG and CIS compliance (`com.docker.dhi.compliance: fips,stig,cis`). Use FIPS variants in regulated environments such as FedRAMP, government, and financial services.
 
 The Istio CNI Docker Hardened Image is available in all variant types: runtime, dev, FIPS, and FIPS-dev. To view the
-image variants and get more information about them, select the **Tags** tab for this repository.
+image variants and get more information about them, select the **Tags** tab for this repository, and then select a tag.
 
 ## Migrate to a Docker Hardened Image
 
@@ -215,20 +243,22 @@ table lists common migration considerations.
 | Item | Migration note |
 |------|---------------|
 | Base image | Replace `docker.io/istio/install-cni` with `dhi.io/istio-install-cni` in your DaemonSet, Helm values, or istioctl configuration. |
-| Privileged context | The DHI still requires `privileged: true` security context for CNI operations. |
-| Non-root user | By default, runtime images run as the nonroot user. The CNI binary handles privilege escalation internally. |
+| Base OS | The official image uses Ubuntu 24.04; the DHI uses Debian 13 (Trixie). |
+| Entry point | The DHI defines the CNI installer as an `ENTRYPOINT` rather than `CMD`. If your deployment overrides the command, use `args` instead of `command` in your pod spec. |
+| Non-root user | By default, runtime images run as the `nonroot` user. The CNI binary handles privilege escalation internally via the `privileged: true` security context. |
 | RBAC permissions | Ensure the DaemonSet ServiceAccount has appropriate ClusterRole bindings for pod monitoring and CNI configuration. |
-| FIPS compliance | If your environment requires FIPS 140 validated cryptography, use tags with `-fips` suffix. |
+| FIPS compliance | If your environment requires FIPS 140 validated cryptography, use tags with `-fips` suffix. FIPS variants also include STIG and CIS compliance. |
 | Image pull secrets | Configure Kubernetes image pull secrets for the DHI registry. See the [authentication instructions](https://docs.docker.com/dhi/how-to/k8s/#authentication). |
-| Entry point | Docker Hardened Images may have different entry points. Use `docker inspect` to verify the entrypoint matches your configuration. |
 | No shell | Runtime images don't contain a shell. Use `dev` images or Docker Debug for troubleshooting. |
+| Volume mounts | Ensure your DaemonSet mounts `/opt/cni/bin` and `/etc/cni/net.d` from the host for CNI binary installation and configuration. |
 
 The following steps outline the general migration process.
 
 1. **Find hardened images for your deployment.**
 
    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
-   For production, use a runtime variant. For debugging, use a `dev` variant.
+   For production, use a runtime variant (for example, `1.28.3-debian13`). For debugging, use a `dev` variant. For
+   regulated environments, use a `fips` variant.
 
 2. **Update your installation configuration.**
 
@@ -242,7 +272,7 @@ The following steps outline the general migration process.
 
    Create a Kubernetes secret for the DHI registry:
 
-   ```bash
+   ```console
    $ kubectl create secret docker-registry dhi-pull-secret \
      --docker-server=dhi.io \
      --docker-username=<username> \
@@ -254,7 +284,7 @@ The following steps outline the general migration process.
 
    Ensure the CNI DaemonSet ServiceAccount has the required permissions:
 
-   ```bash
+   ```console
    $ kubectl get clusterrolebinding | grep istio-cni
    ```
 
@@ -262,7 +292,7 @@ The following steps outline the general migration process.
 
    After migration, verify the CNI pods are running and functioning:
 
-   ```bash
+   ```console
    $ kubectl get daemonset -n istio-system istio-cni-node
    $ kubectl logs -n istio-system -l k8s-app=istio-cni-node --tail=20
    ```
@@ -281,9 +311,9 @@ during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as a nonroot user. Ensure that necessary files and directories are
-accessible to that user. You may need to copy files to different directories or change permissions so your application
-running as a nonroot user can access them.
+By default image variants intended for runtime, run as the `nonroot` user. Ensure that necessary files and directories
+are accessible to that user. You may need to copy files to different directories or change permissions so your
+application running as the nonroot user can access them.
 
 To view the user for an image variant, select the **Tags** tab for this repository.
 
@@ -295,8 +325,8 @@ configure your application to listen on port 1025 or higher inside the container
 the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and
 `docker run -p 80:81 my-image` won't work because the port inside the container is 81.
 
-> **Note:** The Istio CNI DaemonSet typically runs with `privileged: true` and `hostNetwork: true`, which may override
-> nonroot port restrictions. This note applies primarily if you customize the security context.
+> **Note:** The Istio CNI DaemonSet runs with `privileged: true` and `hostNetwork: true`, which overrides nonroot port
+> restrictions. This note applies primarily if you customize the security context.
 
 ### No shell
 
@@ -308,7 +338,9 @@ To see if a shell is available in an image variant and which one, select the **T
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images.
+The DHI defines the CNI installer binary as an `ENTRYPOINT` (`/usr/local/bin/install-cni`), while the official Istio
+image defines it as a `CMD`. If your deployment spec uses `command` to override the container command, you may need to
+switch to using `args` instead.
 
 To view the Entrypoint or CMD defined for an image variant, select the **Tags** tab for this repository, select a tag,
 and then select the **Specifications** tab.
