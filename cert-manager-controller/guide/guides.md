@@ -330,10 +330,6 @@ debugging applications built with Docker Hardened Images is to use
 provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only
 exists during the debugging session.
 
-```
---cluster-resource-namespace=cert-manager
-```
-
 ### Permissions
 
 By default image variants intended for runtime, run as the nonroot user. Ensure that necessary files and directories are
@@ -354,13 +350,3 @@ with no shell.
 Docker Hardened Images may have different entry points than standard cert-manager images. Use `docker inspect` to
 inspect entry points for Docker Hardened Images and update your Kubernetes deployment if necessary.
 
-### cert-manager specific troubleshooting
-
-- Missing components: cert-manager requires multiple components to function. Ensure you've deployed all necessary
-  components (controller, webhook, cainjector) with compatible hardened images.
-- Certificate issuance failures: Check the cert-manager-controller logs for ACME challenges or issuer configuration
-  problems. The controller provides detailed logging about certificate lifecycle events.
-- Webhook connectivity: If using the webhook component, ensure network policies allow communication between the
-  controller and webhook pods.
-- Leader election: In multi-replica deployments, verify that leader election is functioning correctly. The controller
-  uses leader election to ensure only one instance manages certificates at a time.
