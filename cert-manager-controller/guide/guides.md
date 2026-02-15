@@ -239,23 +239,19 @@ Each component may be available as a separate Docker Hardened Image for deployme
 
 ### FIPS variants considerations
 
-For allowing FIPS in this image, there are some DNS standards that still use non-FIPS compliant algorithms and cannot be
-changed:
+The FIPS variant has known compatibility constraints with legacy cryptographic algorithms:
 
-1. [RFC2136](https://cert-manager.io/docs/configuration/acme/dns01/rfc2136/) DNS-01 solver
-   ([tsigHMACProvider.Generate](https://github.com/cert-manager/cert-manager/blob/master/pkg/issuer/acme/dns/rfc2136/tsig.go#L49))
+| Area | Issue | Remediation |
+|------|-------|-------------|
+| RFC2136 DNS-01 solver | SHA1 and MD5 TSIG signatures are forbidden in FIPS mode | Set `tsigAlgorithm: HMACSHA512` in your Issuer/ClusterIssuer |
+| TLS cipher suites | Legacy ciphers (RC4, ChaCha20, SHA1) are supported in code for ACME client compatibility | Modern clients negotiate stronger ciphers automatically; no action needed |
+| PKCS#12 profiles | LegacyDES and LegacyRC2 profiles use non-FIPS algorithms | Use the `Modern2023` certificate profile |
+| CHACHA20_POLY1305 | ChaCha20Poly1305 is not allowed in FIPS 140 mode and returns an error if used | Ensure your TLS stack does not require `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305` |
 
-If you want to use the RFC2136 DNS-01 solver, there are two signatures that are forbidden by FIPS and the application
-will Panic (sha1 and md5), some of the DNS servers may require these legacy algorithms for TSIG authentication, removing
-those would break compatibility with existing DNS infrastructure.
-
-A way to mitigate this is to specifying in the `spec.acme.solvers[dnsXX].rfc2136.tsigAlgorithm` spec of your `Issuer` or
-`ClusterIssuer` with some FIPS-approved algorithm.
-
-Example:
+For RFC2136, specify a FIPS-approved algorithm in your solver configuration:
 
 ```yaml
-  apiVersion: cert-manager.io/v1
+apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: example-rfc2136
@@ -270,41 +266,11 @@ spec:
         rfc2136:
           nameserver: 203.0.113.53:53
           tsigKeyName: example-com-key
-          tsigAlgorithm: HMACSHA512 # <- choose your algorithm here
+          tsigAlgorithm: HMACSHA512
           tsigSecretSecretRef:
             name: tsig-secret
             key: tsig-secret-key
 ```
-
-2. Legacy TLS cipher suites (RC4, ChaCha20, SHA1...):
-
-Cert-manager supports non FIPS-compliant
-[ciphers](https://github.com/cert-manager/cert-manager/blob/d7090f55e7aae3ebee6a0917a2b59eef37e36c75/third_party/forked/acme/autocert/autocert.go#L363)
-from the go's autocert library, and is needed for the ACME client to be compatible with older DNS servers.
-
-cert-manager's fork of "Go's autocert" is part of a function (supportsECDSA) that decides whether to serve an ECDSA
-certificate based on what the client's TLS handshake says it supports
-
-Note: These are only supported, not preferred - modern clients will negotiate stronger ciphers
-
-3. PKCS#12 legacy profiles (DES and RC2): Cert Manager supports
-   [LegacyDESPKCS12Profile and LegacyRC2PKCS12Profile](https://github.com/cert-manager/cert-manager/blob/d7090f55e7aae3ebee6a0917a2b59eef37e36c75/pkg/controller/certificates/issuing/internal/keystore.go#L68-L73)
-   using DES and RC2, those are required for backward compatibility with systems that only support legacy PKCS#12
-   formats. Even cert manager states that this is an experimental feature, Modern2023 profile is available as
-   FIPS-compliant alternative
-
-Remediation: Avoid keystores entirely or use the
-[Modern 2023](https://github.com/cert-manager/cert-manager/blob/v1.19.1/pkg/apis/certmanager/v1/types_certificate.go#L536)
-Certificate profile which supports secure algorithms.
-
-4. CHACHA20_POLY1305 cipher
-   [scheme support](https://github.com/cert-manager/cert-manager/blob/d7090f55e7aae3ebee6a0917a2b59eef37e36c75/third_party/forked/acme/autocert/autocert.go#L337):
-   `autocert.go` Defines the `tlsECDSAWithSHA1` constant for client compatibility, it's logic checks the client's
-   offered cipher suites, if the client supports the `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305` cipher the application
-   will panic.
-
-Remediation: Ensure your FIPS-compliant stack does not negotiate the `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305` as a valid
-cipher.
 
 ## Migrate to a Docker Hardened Image
 
