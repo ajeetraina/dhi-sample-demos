@@ -52,7 +52,8 @@ $ docker run --rm dhi.io/cert-manager-controller:<tag> \
   --controllers=certificates-issuing,issuers
 ```
 
-You can also disable specific controllers while keeping others enabled:
+You can also disable specific controllers while keeping others enabled. Note the quotes around the argument to prevent
+shell glob expansion:
 
 ```console
 $ docker run --rm dhi.io/cert-manager-controller:<tag> \
@@ -124,6 +125,10 @@ First follow the
 
 The controller is typically deployed as part of a complete cert-manager installation in Kubernetes.
 
+> **Note:** The Docker Hardened Image uses the string `nonroot` as the user, which causes a
+> `CreateContainerConfigError` with Kubernetes' `runAsNonRoot` validation. You must explicitly set `runAsUser: 65532`
+> in the security context to resolve this.
+
 The following example shows a Deployment configuration for cert-manager-controller:
 
 ```yaml
@@ -142,8 +147,21 @@ spec:
         - --v=2
         - --cluster-resource-namespace=$(POD_NAMESPACE)
         - --leader-election-namespace=$(POD_NAMESPACE)
+        securityContext:
+          runAsUser: 65532
       imagePullSecrets:
       - name: <secret name>
+```
+
+When deploying with Helm, include the `securityContext.runAsUser` override:
+
+```console
+$ helm upgrade --install cert-manager jetstack/cert-manager \
+  -n cert-manager --create-namespace \
+  --set installCRDs=true \
+  --set image.repository=dhi.io/cert-manager-controller \
+  --set image.tag=1.19.3-debian13 \
+  --set securityContext.runAsUser=65532
 ```
 
 ### Integrate with multiple certificate authorities
@@ -349,4 +367,3 @@ with no shell.
 
 Docker Hardened Images may have different entry points than standard cert-manager images. Use `docker inspect` to
 inspect entry points for Docker Hardened Images and update your Kubernetes deployment if necessary.
-
