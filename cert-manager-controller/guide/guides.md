@@ -56,7 +56,7 @@ You can also disable specific controllers while keeping others enabled:
 
 ```console
 $ docker run --rm dhi.io/cert-manager-controller:<tag> \
-  --controllers=*,-foo
+  '--controllers=*,-foo'
 ```
 
 This configuration is particularly useful in high-availability setups where different cert-manager-controller instances
