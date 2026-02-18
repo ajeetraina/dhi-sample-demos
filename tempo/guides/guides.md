@@ -1,6 +1,4 @@
-
-
-## Prerequisite
+## Prerequisites
 
 All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
@@ -17,13 +15,13 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 This Docker Hardened Tempo image includes the Grafana Tempo distributed tracing backend in a single, security-hardened
 package:
 
-- `tempo` binary (`/tempo`) for trace ingestion, storage, and querying
+- `tempo` binary (`/opt/tempo/tempo`) for trace ingestion, storage, and querying
 - Support for multiple tracing protocols: OpenTelemetry (gRPC and HTTP), Jaeger (Thrift HTTP and gRPC), and Zipkin
 - TraceQL query language for trace-first queries
 - Metrics generation from traces via the metrics-generator component
 - Local and object storage backends (S3, GCS, Azure) for trace data
 - TLS certificates for secure communication
-- CIS benchmark compliance (runtime), FIPS 140 + STIG + CIS compliance (FIPS variant)
+- CIS benchmark compliance
 
 ## Start a Tempo instance
 
@@ -139,7 +137,8 @@ Verify Tempo is running:
 $ curl http://localhost:3200/ready
 ```
 
-A successful response returns `ready`.
+A successful response returns `ready`. Note that the ingester requires approximately 15 seconds to warm up after
+starting. During this period, the `/ready` endpoint returns a "not ready" status, which is expected behavior.
 
 ### Deploy Tempo with Grafana for trace visualization
 
@@ -154,7 +153,7 @@ datasources:
   - name: Tempo
     type: tempo
     access: proxy
-    url: http://tempo:3200
+    url: "http://tempo:3200"
     isDefault: true
 ```
 
@@ -175,7 +174,7 @@ services:
       - tempo-data:/var/tempo
 
   grafana:
-    image: grafana/grafana:latest
+    image: dhi.io/grafana:12-debian13-dev
     ports:
       - "3000:3000"
     environment:
@@ -331,15 +330,16 @@ $ helm upgrade --install tempo grafana/tempo \
 
 | Feature | DOI (`grafana/tempo`) | DHI (`dhi.io/tempo`) |
 |---------|----------------------|----------------------|
-| User | `10001` (numeric UID) | `nonroot` (runtime/FIPS) / `root` (dev) |
-| Shell | No | No (runtime/FIPS) / Yes (dev) |
-| Package manager | No | No (runtime/FIPS) / Yes (dev) |
-| Binary path | `/tempo` | `/tempo` |
-| Entrypoint | ENTRYPOINT `/tempo` | ENTRYPOINT `/tempo` |
+| User | `10001:10001` (numeric UID) | `nonroot` |
+| Shell | No | No |
+| Package manager | No | No |
+| Binary path | `/tempo` | `/opt/tempo/tempo` |
+| Entrypoint | ENTRYPOINT `/tempo` | ENTRYPOINT `/opt/tempo/tempo` |
+| Uncompressed size | 155 MB | 145 MB |
 | Zero CVE commitment | No | Yes |
-| FIPS variant | No | Yes (FIPS + STIG + CIS) |
-| Base OS | Minimal (Alpine-based) | Docker Hardened Images (Debian 13) |
-| Compliance labels | None | CIS (runtime), FIPS+STIG+CIS (fips) |
+| FIPS variant | No | No |
+| Base OS | Distroless (no OS labels) | Docker Hardened Images (Debian 13) |
+| Compliance labels | None | CIS |
 | ENV: SSL_CERT_FILE | `/etc/ssl/certs/ca-certificates.crt` | `/etc/ssl/certs/ca-certificates.crt` |
 | Architectures | amd64, arm64 | amd64, arm64 |
 
@@ -352,21 +352,19 @@ their tag.
 
 - Run as a nonroot user
 - Do not include a shell or a package manager
-- Contain only the `tempo` binary and TLS certificates
+- Contain only the `tempo` binary (`/opt/tempo/tempo`) and TLS certificates
 - Include CIS benchmark compliance (`com.docker.dhi.compliance: cis`)
 
-**Build-time variants** typically include `dev` in the tag name and are intended for debugging and development. These
-images typically:
+The following tags are available for this image:
 
-- Run as the root user
-- Include a shell and package manager
-- Are useful for troubleshooting Tempo issues
+| Tag | Description |
+| :--- | :--- |
+| `2`, `2-debian13` | Latest Tempo 2.x on Debian 13 |
+| `2.10`, `2.10-debian13` | Tempo 2.10.x on Debian 13 |
+| `2.10.1`, `2.10.1-debian13` | Tempo 2.10.1 on Debian 13 |
 
-**FIPS variants** include `fips` in the variant name and tag. They come in both runtime and build-time variants. These
-variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure
-cryptographic operations. FIPS variants also include STIG and CIS compliance
-(`com.docker.dhi.compliance: fips,stig,cis`). For example, usage of MD5 fails in FIPS variants. Use FIPS variants in
-regulated environments such as FedRAMP, government, and financial services.
+> **Note:** This image currently only provides runtime variants. Dev and FIPS variants are not available. For
+> debugging, use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to running containers.
 
 To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
 select a tag.
