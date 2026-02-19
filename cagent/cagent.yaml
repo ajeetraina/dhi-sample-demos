@@ -9,7 +9,7 @@ description: |
 agents:
   # ===== ROOT AGENT (Coordinator) =====
   root:
-    model: anthropic/claude-sonnet-4-20250514
+    model: openai/gpt-4o
     description: "DHI Guide Coordinator - orchestrates guide creation and validation"
     instruction: |
       You are the coordinator for creating Docker Hardened Image (DHI) user guides.
@@ -43,7 +43,7 @@ agents:
 
   # ===== GUIDE WRITER AGENT =====
   guide_writer:
-    model: anthropic/claude-sonnet-4-20250514
+    model: openai/gpt-4o
     description: "Writes DHI guides following the standard template"
     instruction: |
       You are an expert technical writer who creates Docker Hardened Image (DHI) user guides.
@@ -298,7 +298,7 @@ agents:
 
   # ===== GUIDE VALIDATOR AGENT =====
   guide_validator:
-    model: anthropic/claude-sonnet-4-20250514
+    model: openai/gpt-4o
     description: "Validates every command in the DHI guide on the local system"
     instruction: |
       You are a meticulous QA engineer who validates Docker Hardened Image guides.
@@ -386,7 +386,7 @@ agents:
 
   # ===== PR CREATOR AGENT =====
   pr_creator:
-    model: anthropic/claude-sonnet-4-20250514
+    model: openai/gpt-4o
     description: "Creates a PR with the validated guide to dhi-sample-demos repo"
     instruction: |
       You create pull requests to the dhi-sample-demos repository with validated
