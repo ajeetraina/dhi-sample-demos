@@ -185,11 +185,18 @@ $ docker run -d --name clamav-daemon \
 
 ### Deploy ClamAV in Kubernetes
 
+First follow the
+[authentication instructions for DHI in Kubernetes](https://docs.docker.com/dhi/how-to/k8s/#authentication).
+
 Create the namespace and Deployment:
 
 ```console
 $ kubectl create namespace scanning
 ```
+
+> **Note:** The ClamAV DHI entrypoint runs `chown` on `/var/lib/clamav` at startup to set correct ownership.
+> You must set `runAsUser: 0` in the security context so that the entrypoint can set permissions before
+> dropping to the `clamav` user internally.
 
 ```yaml
 # clamav-deployment.yaml
@@ -214,12 +221,16 @@ spec:
         ports:
         - containerPort: 3310
           name: clamd
+        securityContext:
+          runAsUser: 0
         volumeMounts:
         - name: clam-db
           mountPath: /var/lib/clamav
       volumes:
       - name: clam-db
         emptyDir: {}
+      imagePullSecrets:
+      - name: <secret name>
 ```
 
 ```console
