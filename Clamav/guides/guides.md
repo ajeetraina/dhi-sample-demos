@@ -1,4 +1,6 @@
-## Prerequisites
+# ClamAV
+
+## How to use this image
 
 All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
@@ -9,6 +11,17 @@ For example:
 - Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
+
+### Prerequisites
+
+- Docker Engine 20.10 or later
+- Access to the DHI registry (`docker login dhi.io`)
+
+Pull the image. Replace `<tag>` with the image variant you want to run (for example, `1.4.3-debian13`):
+
+```console
+$ docker pull dhi.io/clamav:<tag>
+```
 
 ### What's included in this ClamAV image
 
@@ -25,10 +38,13 @@ This Docker Hardened Image includes:
 ## Start a ClamAV instance
 
 Start ClamAV in daemon mode. The default entrypoint starts both `freshclam` (to update virus databases) and `clamd`
-(the scanning daemon):
+(the scanning daemon).
+
+Run the following command and replace `<tag>` with the image variant you want to run (for example,
+`1.4.3-debian13`):
 
 ```console
-$ docker run --rm -it dhi.io/clamav:1.4
+$ docker run --rm -it dhi.io/clamav:<tag>
 ```
 
 ClamAV takes approximately 10-15 seconds to initialize. The entrypoint script polls for the `clamd` socket and reports
@@ -41,7 +57,7 @@ ClamAV takes approximately 10-15 seconds to initialize. The entrypoint script po
 Verify the user the container runs as:
 
 ```console
-$ docker run --rm --entrypoint whoami dhi.io/clamav:1.4
+$ docker run --rm --entrypoint whoami dhi.io/clamav:<tag>
 clamav
 ```
 
@@ -59,7 +75,7 @@ The DHI ClamAV comes with two variants:
 In order to use the `-base` variant or to have an up-to-date virus database, run `freshclam`:
 
 ```console
-$ docker run --rm --entrypoint freshclam dhi.io/clamav:1.4
+$ docker run --rm --entrypoint freshclam dhi.io/clamav:<tag>
 ```
 
 By default, the virus database is stored within the running container in `/var/lib/clamav`. Use a volume or a bind
@@ -72,7 +88,7 @@ $ docker volume create clam_db
 
 $ docker run --rm --entrypoint freshclam \
     --mount source=clam_db,target=/var/lib/clamav \
-    dhi.io/clamav:1.4
+    dhi.io/clamav:<tag>
 ```
 
 On subsequent runs with the same volume, `freshclam` skips already-downloaded databases:
@@ -80,7 +96,7 @@ On subsequent runs with the same volume, `freshclam` skips already-downloaded da
 ```console
 $ docker run --rm --entrypoint freshclam \
     --mount source=clam_db,target=/var/lib/clamav \
-    dhi.io/clamav:1.4
+    dhi.io/clamav:<tag>
 ClamAV update process started at ...
 daily.cld database is up-to-date (version: 27916, ...)
 main.cvd database is up-to-date (version: 63, ...)
@@ -92,7 +108,7 @@ With a bind mount, map a local directory to the database path within the contain
 ```console
 $ docker run --rm --entrypoint freshclam \
     --mount type=bind,source=/path/to/databases,target=/var/lib/clamav \
-    dhi.io/clamav:1.4
+    dhi.io/clamav:<tag>
 ```
 
 ### Scan files with clamscan
@@ -103,7 +119,7 @@ loads the virus database on each invocation:
 ```console
 $ docker run --rm --entrypoint clamscan \
     -v /path/to/scan:/scandir \
-    dhi.io/clamav:1.4 /scandir
+    dhi.io/clamav:<tag> /scandir
 ```
 
 Example scanning a single file:
@@ -113,7 +129,7 @@ $ echo "This is a safe test file" > /tmp/testfile.txt
 
 $ docker run --rm --entrypoint clamscan \
     -v /tmp/testfile.txt:/scandir/testfile.txt \
-    dhi.io/clamav:1.4 /scandir/testfile.txt
+    dhi.io/clamav:<tag> /scandir/testfile.txt
 /scandir/testfile.txt: OK
 ----------- SCAN SUMMARY -----------
 Known viruses: 3627519
@@ -128,7 +144,7 @@ $ echo -n 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
 
 $ docker run --rm --entrypoint clamscan \
     -v /tmp/eicar.txt:/scandir/eicar.txt \
-    dhi.io/clamav:1.4 /scandir/eicar.txt
+    dhi.io/clamav:<tag> /scandir/eicar.txt
 /scandir/eicar.txt: Eicar-Test-Signature FOUND
 ----------- SCAN SUMMARY -----------
 Known viruses: 3627519
@@ -144,7 +160,7 @@ database loaded in memory, making scans significantly faster (~0.04s vs ~10s per
 ```console
 $ docker run -d --name clamav-daemon \
     --mount source=clam_db,target=/var/lib/clamav \
-    dhi.io/clamav:1.4
+    dhi.io/clamav:<tag>
 ```
 
 Wait for the daemon to become ready (~15 seconds), then scan:
@@ -168,7 +184,7 @@ ClamDScan can also connect over a TCP port or Unix socket for use by external ap
 $ docker run -d --name clamav-daemon \
     -p 3310:3310 \
     --mount source=clam_db,target=/var/lib/clamav \
-    dhi.io/clamav:1.4
+    dhi.io/clamav:<tag>
 ```
 
 Or via a Unix socket using a bind mount:
@@ -177,7 +193,7 @@ Or via a Unix socket using a bind mount:
 $ docker run -d --name clamav-daemon \
     --mount type=bind,source=/path/to/sockets,target=/tmp \
     --mount source=clam_db,target=/var/lib/clamav \
-    dhi.io/clamav:1.4
+    dhi.io/clamav:<tag>
 ```
 
 ### Deploy ClamAV in Kubernetes
@@ -207,7 +223,7 @@ spec:
     spec:
       containers:
       - name: clamav
-        image: dhi.io/clamav:1.4
+        image: dhi.io/clamav:<tag>
         ports:
         - containerPort: 3310
           name: clamd
@@ -326,7 +342,7 @@ The following steps outline the general migration process.
    $ docker run -d clamav/clamav:1.4
 
    $ # After (DHI)
-   $ docker run -d dhi.io/clamav:1.4
+   $ docker run -d dhi.io/clamav:<tag>
    ```
 
 1. **Update entrypoint overrides if needed.**
@@ -345,7 +361,7 @@ The following steps outline the general migration process.
 
    ```console
    $ docker volume create clam_db
-   $ docker run -d --mount source=clam_db,target=/var/lib/clamav dhi.io/clamav:1.4
+   $ docker run -d --mount source=clam_db,target=/var/lib/clamav dhi.io/clamav:<tag>
    ```
 
 ## Troubleshoot migration
@@ -390,12 +406,12 @@ The DHI entrypoint (`/usr/local/bin/docker-entrypoint.sh`) differs from the DOI 
 `docker inspect` to verify:
 
 ```console
-$ docker inspect --format '{{json .Config.Entrypoint}}' dhi.io/clamav:1.4
+$ docker inspect --format '{{json .Config.Entrypoint}}' dhi.io/clamav:<tag>
 ["/usr/local/bin/docker-entrypoint.sh"]
 ```
 
 If you need to run ClamAV commands directly (such as `clamscan` or `freshclam`), override the entrypoint:
 
 ```console
-$ docker run --rm --entrypoint clamscan dhi.io/clamav:1.4 --version
+$ docker run --rm --entrypoint clamscan dhi.io/clamav:<tag> --version
 ```
