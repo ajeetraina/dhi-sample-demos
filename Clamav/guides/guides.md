@@ -12,17 +12,6 @@ For example:
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
-### Prerequisites
-
-- Docker Engine 20.10 or later
-- Access to the DHI registry (`docker login dhi.io`)
-
-Pull the image. Replace `<tag>` with the image variant you want to run (for example, `1.4.3-debian13`):
-
-```console
-$ docker pull dhi.io/clamav:<tag>
-```
-
 ### What's included in this ClamAV image
 
 This Docker Hardened Image includes:
