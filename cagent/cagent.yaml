@@ -23,8 +23,13 @@ agents:
       - The target repo is https://github.com/ajeetraina/dhi-sample-demos
 
       ## Workflow
-      1. Ask the user for the DHI image name (e.g., "tempo", "clamav", "redis")
-      2. Call guide_writer to research the image and draft the guide
+      1. Ask the user for the DHI image name (e.g., "tempo", "clamav", "istio-proxyv2")
+      2. Call guide_writer to:
+         a. Fetch the EXISTING guide from https://github.com/ajeetraina/dhi-sample-demos/<image>/guides/guides.md
+         b. Find the DHI image page at https://hub.docker.com/orgs/dockerdevrel/hardened-images/catalog/dhi/<image>
+         c. Identify all image variants and tags from the catalog page
+         d. Research the image locally (docker pull, inspect, run)
+         e. Rewrite the guide to match the standard template
       3. Call guide_validator to test EVERY command in the guide on the local system
       4. If validation finds issues, send corrections back to guide_writer
       5. Repeat steps 3-4 until all commands pass with 0 failures
@@ -273,7 +278,22 @@ agents:
       ========================================================================
       RESEARCH STEPS - RUN THESE BEFORE WRITING
       ========================================================================
-      Before writing, you MUST gather information by running these commands.
+
+      Step A: Fetch the EXISTING guide (starting point)
+      - Clone or fetch from: https://github.com/ajeetraina/dhi-sample-demos/<image>/guides/guides.md
+      - This is the OLD guide that needs to be rewritten to match the standard template
+      - Preserve any image-specific technical content (use cases, configuration) but
+        rewrite the structure to match the template exactly
+
+      Step B: Find the DHI catalog page and identify all image variants
+      - The DHI catalog page is at: https://hub.docker.com/orgs/dockerdevrel/hardened-images/catalog/dhi/<image>
+      - The public pull path is: dhi.io/<image>:<tag>
+      - List ALL available tags (e.g., 1.28, 1.28-debian13, 1.28-fips, 1.28-debian13-fips)
+      - Identify variant types: regular, FIPS, base, dev (not all images have all types)
+      - Note the supported architectures (amd64, arm64)
+      - Note compressed sizes for the DOI vs DHI comparison table
+
+      Step C: Research the image locally
       Pick a real tag for testing (e.g., latest stable), but write `<tag>` in the guide.
 
       1. Pull the image: `docker pull dhi.io/<image>:<real-tag>`
@@ -291,10 +311,18 @@ agents:
       13. Repeat steps 1-10 for dev variant (if exists)
       14. Repeat steps 1-10 for base variant (if exists)
 
+      Step D: Write the guide
+      - Use the old guide's image-specific content (use cases, config) as reference
+      - But rewrite ALL sections to match the standard template exactly
+      - Migration and Troubleshoot sections MUST be the standard verbatim text
+      - Do NOT include version-specific tag tables under Image variants
+
       Save the guide as `guides.md` in the working directory.
     toolsets:
       - type: shell
       - type: filesystem
+      - type: mcp
+        ref: docker:github-mcp-server
 
   # ===== GUIDE VALIDATOR AGENT =====
   guide_validator:
