@@ -1,6 +1,4 @@
-# ClamAV
-
-## How to use this image
+## Prerequisite
 
 All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
@@ -11,6 +9,17 @@ For example:
 - Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
+
+### Prerequisites
+
+- Docker Engine 20.10 or later
+- Access to the DHI registry (`docker login dhi.io`)
+
+Pull the image. Replace `<tag>` with the image variant you want to run (for example, `1.4.3-debian13`):
+
+```console
+$ docker pull dhi.io/clamav:<tag>
+```
 
 ### What's included in this ClamAV image
 
@@ -263,39 +272,17 @@ typically:
 - Contain the ClamAV binaries, configuration, and pre-loaded virus databases
 - Include CIS benchmark compliance (`com.docker.dhi.compliance: cis`)
 
-The following regular tags are available:
-
-| Tag | Description |
-| :--- | :--- |
-| `1.4`, `1.4-debian13` | Latest ClamAV 1.4.x on Debian 13 |
-| `1.4.3`, `1.4.3-debian13` | ClamAV 1.4.3 on Debian 13 |
-
 **Base variants** include `-base` in the tag and do not contain the virus signature databases. These are significantly
 smaller (203 MB vs 429 MB) and are intended for environments where you manage your own database updates or share
-databases across containers via volumes:
-
-| Tag | Description |
-| :--- | :--- |
-| `1.4-base`, `1.4-debian13-base` | Latest ClamAV 1.4.x base on Debian 13 |
-| `1.4.3-base`, `1.4.3-debian13-base` | ClamAV 1.4.3 base on Debian 13 |
+databases across containers via volumes.
 
 **FIPS variants** include `fips` in the tag. These variants use cryptographic modules that have been validated under
 FIPS 140, a U.S. government standard for secure cryptographic operations. FIPS variants also include STIG and CIS
 compliance (`com.docker.dhi.compliance: fips,stig,cis`). For example, usage of MD5 fails in FIPS variants. Use FIPS
-variants in regulated environments such as FedRAMP, government, and financial services:
-
-| Tag | Description |
-| :--- | :--- |
-| `1-fips`, `1-debian13-fips` | Latest ClamAV 1.x FIPS on Debian 13 |
-| `1.5-fips`, `1.5-debian13-fips` | ClamAV 1.5.x FIPS on Debian 13 |
-| `1.5.1-fips`, `1.5.1-debian13-fips` | ClamAV 1.5.1 FIPS on Debian 13 |
+variants in regulated environments such as FedRAMP, government, and financial services.
 
 **FIPS base variants** include both `-base` and `-fips` in the tag. These combine FIPS compliance with the smaller
-base image that does not include virus databases:
-
-| Tag | Description |
-| :--- | :--- |
-| `1-base-fips`, `1-debian13-base-fips` | Latest ClamAV 1.x FIPS base on Debian 13 |
+base image that does not include virus databases.
 
 > **Note:** No `dev` variant exists for ClamAV DHI. For debugging, use
 > [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to running containers, or use the
@@ -306,101 +293,92 @@ select a tag.
 
 ## Migrate to a Docker Hardened Image
 
-| Item | Migration note |
-| :--- | :--- |
-| Base image | This is a pre-built application. Use directly via `docker run`, not as a base image in a Dockerfile. |
-| Package management | No package managers present (no `apt`, `apk`, `yum`). Cannot install additional packages at runtime. |
-| Nonroot user | Runs as user `clamav`. Writable directories: `/var/lib/clamav`, `/tmp`. |
-| Entrypoint | Custom entrypoint: `/usr/local/bin/docker-entrypoint.sh`. DOI uses `/init`. |
-| Shell | `dash` shell is available (unlike many other DHI images). |
-| Architectures | DHI supports both amd64 and arm64. DOI supports amd64 only. |
+To migrate your application to a Docker Hardened Image, you must update your
+Dockerfile. At minimum, you must update the base image in your existing
+Dockerfile to a Docker Hardened Image. This and a few other common changes are
+listed in the following table of migration notes:
+
+| Item               | Migration note                                                                                                                                                                     |
+| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                          |
+| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a dev tag.                                                           |
+| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                         |
+| Multi-stage build  | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime.                                             |
+| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                 |
+| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
+| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.        |
 
 The following steps outline the general migration process.
 
 1. **Find hardened images for your app.**
 
-   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
-   Choose between regular (with virus databases) and base (without databases) variants.
+   A hardened image may have several variants. Inspect the image tags and
+   find the image variant that meets your needs.
 
-1. **Replace the image reference.**
+1. **Update the base image in your Dockerfile.**
 
-   Update your `docker run` commands, Compose files, or Kubernetes manifests to reference the DHI image:
+   Update the base image in your application's Dockerfile to the hardened
+   image you found in the previous step. For framework images, this is
+   typically going to be an image tagged as dev because it has the tools
+   needed to install packages and dependencies.
 
-   ```console
-   $ # Before (DOI)
-   $ docker run -d clamav/clamav:1.4
+1. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
 
-   $ # After (DHI)
-   $ docker run -d dhi.io/clamav:<tag>
-   ```
+   To ensure that your final image is as minimal as possible, you should
+   use a multi-stage build. All stages in your Dockerfile should use a
+   hardened image. While intermediary stages will typically use images
+   tagged as dev, your final runtime stage should use a non-dev image variant.
 
-1. **Update entrypoint overrides if needed.**
+1. **Install additional packages**
 
-   The DHI entrypoint is `/usr/local/bin/docker-entrypoint.sh` (DOI uses `/init`). If you override the entrypoint in
-   your configuration, update the path accordingly.
+   Docker Hardened Images contain minimal packages in order to reduce the
+   potential attack surface. You may need to install additional packages in
+   your Dockerfile. Inspect the image variants to identify which packages are
+   already installed.
 
-1. **Adjust user and permission settings.**
+   Only images tagged as dev typically have package managers. You should use
+   a multi-stage Dockerfile to install the packages. Install the packages in
+   the build stage that uses a dev image. Then, if needed, copy any necessary
+   artifacts to the runtime stage that uses a non-dev image.
 
-   DHI runs as the `clamav` user. DOI runs as root by default. If your setup depends on root access, update file
-   permissions or volume ownership to be accessible by the `clamav` user.
-
-1. **Verify virus database persistence.**
-
-   Use a named volume or bind mount for `/var/lib/clamav` to persist virus databases across container restarts:
-
-   ```console
-   $ docker volume create clam_db
-   $ docker run -d --mount source=clam_db,target=/var/lib/clamav dhi.io/clamav:<tag>
-   ```
+   For Alpine-based images, you can use apk to install packages. For
+   Debian-based images, you can use apt-get to install packages.
 
 ## Troubleshoot migration
 
 ### General debugging
 
-Docker Hardened Images provide robust debugging capabilities through **Docker Debug**, which attaches comprehensive
-debugging tools to running containers while maintaining the security benefits of minimal runtime images.
-
-**Docker Debug** provides a shell, common debugging tools, and lets you install additional tools in an ephemeral,
-writable layer that only exists during the debugging session:
-
-```console
-$ docker debug <container-name>
-```
-
-**Docker Debug advantages:**
-
-- Full debugging environment with shells and tools
-- Temporary, secure debugging layer that doesn't modify the runtime container
-- Install additional debugging tools as needed during the session
-- Perfect for troubleshooting DHI containers while preserving security
-
-> **Note:** Unlike many DHI images, the ClamAV DHI does include a `dash` shell. You can use
-> `docker exec <container> sh -c "<command>"` for basic troubleshooting without Docker Debug.
+The hardened images intended for runtime don't contain a shell nor any tools
+for debugging. The recommended method for debugging applications built with
+Docker Hardened Images is to use
+[Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to
+attach to these containers. Docker Debug provides a shell, common debugging
+tools, and lets you install other tools in an ephemeral, writable layer that
+only exists during the debugging session.
 
 ### Permissions
 
-The ClamAV DHI runs as the `clamav` user. Ensure that virus database directories and scan target directories are
-accessible to this user. When using bind mounts, verify the host directory permissions allow the `clamav` user (or its
-UID) to read and write as needed.
+By default image variants intended for runtime, run as the nonroot user.
+Ensure that necessary files and directories are accessible to the nonroot user.
+You may need to copy files to different directories or change permissions so
+your application running as the nonroot user can access them.
 
-### Slow startup
+### Privileged ports
 
-ClamAV takes approximately 10-15 seconds to start as it loads virus databases into memory. On first startup with the
-base variant, `freshclam` must download the full database set (~200 MB), which may take longer depending on network
-speed. Use a persistent volume to avoid re-downloading databases on each container restart.
+Non-dev hardened images run as a nonroot user by default. As a result,
+applications in these images can't bind to privileged ports (below 1024) when
+running in Kubernetes or in Docker Engine versions older than 20.10.
+
+### No shell
+
+By default, image variants intended for runtime don't contain a shell. Use
+dev images in build stages to run shell commands and then copy any necessary
+artifacts into the runtime stage. In addition, use Docker Debug to debug
+containers with no shell.
 
 ### Entry point
 
-The DHI entrypoint (`/usr/local/bin/docker-entrypoint.sh`) differs from the DOI entrypoint (`/init`). Use
-`docker inspect` to verify:
-
-```console
-$ docker inspect --format '{{json .Config.Entrypoint}}' dhi.io/clamav:<tag>
-["/usr/local/bin/docker-entrypoint.sh"]
-```
-
-If you need to run ClamAV commands directly (such as `clamscan` or `freshclam`), override the entrypoint:
-
-```console
-$ docker run --rm --entrypoint clamscan dhi.io/clamav:<tag> --version
-```
+Docker Hardened Images may have different entry points than images such as
+Docker Official Images. Use `docker inspect` to inspect entry points for
+Docker Hardened Images and update your Dockerfile if necessary.
