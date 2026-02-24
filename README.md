@@ -54,3 +54,8 @@ git push origin minio-guide --force-with-lease
 ```
 git checkout -b guides/vault-k8s
 ```
+
+** PLEASE NOTE**
+1. We could promote our helm chart.
+2. helm upgrade is not coherent as it's our first helm install command in the guide
+
