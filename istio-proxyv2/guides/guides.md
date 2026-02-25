@@ -17,13 +17,13 @@ This Docker Hardened Image includes:
 - Istio proxy binaries and configuration
 - Pilot-agent for managing the proxy lifecycle
 - Enhanced security with non-root user operation
-- Compliance with FIPS 140 + STIG + CIS security standards
+- CIS compliance for runtime variants; FIPS 140 + STIG + CIS compliance for FIPS variants
 
 ## Start a Istio Proxy v2 instance
 
 Istio Proxy v2 is designed to function as a sidecar in a service mesh and requires an active Istio control plane. It cannot be run as a standalone container.
 
-Run the following command and replace `<tag>` with the image variant you want to run (for example, `1.16.2`):
+Run the following command and replace `<tag>` with the image variant you want to run (for example, `1.28.4`):
 
 ```console
 $ kubectl apply -f your-deployment.yaml
@@ -71,7 +71,7 @@ spec:
           image: dhi.io/istio-proxyv2:<tag>
           imagePullPolicy: IfNotPresent
           securityContext:
-            runAsUser: 65532 # Use runAsUser: 0 if root is needed for initial setup
+            runAsUser: 1337 # Istio proxy default UID
       imagePullSecrets:
       - name: <secret name>
 ```
@@ -83,27 +83,27 @@ $ kubectl get pods -n your-namespace
 
 ## Official Docker image (DOI) vs Docker Hardened Image (DHI)
 
-| Feature              | DOI (`istio/proxyv2`)  | DHI (`dhi.io/istio-proxyv2`)
-|----------------------|------------------------|----------------------------|
-| User                 | root                   | 65532                     |
-| Shell                | Bash                   | None                      |
-| Package manager      | Yes                    | None                      |
-| Entrypoint           | /usr/local/bin/envoy   | /usr/local/bin/pilot-agent |
-| Uncompressed size    | 180MB                  | 78MB                      |
-| Zero CVE commitment  | No                     | Yes                       |
-| FIPS variant         | No                     | Yes                       |
+| Feature              | DOI (`istio/proxyv2`)  | DHI (`dhi.io/istio-proxyv2`)    |
+|----------------------|------------------------|---------------------------------|
+| User                 | root                   | 1337                            |
+| Shell                | Bash                   | None                            |
+| Package manager      | Yes                    | None                            |
+| Entrypoint           | /usr/local/bin/envoy   | /usr/local/bin/pilot-agent      |
+| Uncompressed size    | 180MB                  | ~60MB                           |
+| Zero CVE commitment  | No                     | Yes (zero critical/high/medium) |
+| FIPS variant         | No                     | Yes                             |
 | Base OS              | Ubuntu 18.04           | Docker Hardened Images (Debian 13) |
-| Compliance labels    | None                   | FIPS 140, STIG, CIS       |
-| ENV                  | ISTIO_META_...         | ISTIO_META_..., etc.      |
-| Architectures        | amd64, arm64           | amd64, arm64              |
+| Compliance labels    | None                   | CIS (runtime); FIPS 140, STIG, CIS (FIPS variant) |
+| ENV                  | ISTIO_META_...         | ISTIO_META_..., etc.            |
+| Architectures        | amd64, arm64           | amd64, arm64                    |
 
 ## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
 their tag.
 
-- **Runtime variants** - production use, nonroot, no shell/pkg manager
-- **FIPS variants** - FIPS 140 + STIG + CIS compliance
+- **Runtime variants** - production use, nonroot (UID 1337), no shell/pkg manager, CIS compliance
+- **FIPS variants** - FIPS 140 + STIG + CIS compliance, slightly larger image size due to FIPS crypto libraries
 
 To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
 select a tag.
@@ -119,11 +119,11 @@ listed in the following table of migration notes:
 | :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                          |
 | Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a dev tag.                                                           |
-| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                         |
+| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user (UID 1337 for istio-proxyv2). Ensure that necessary files and directories are accessible to this user.   |
 | Multi-stage build  | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime.                                             |
 | TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                 |
 | Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint (DOI uses `/usr/local/bin/envoy`). Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
 | No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.        |
 
 The following steps outline the general migration process.
@@ -176,8 +176,8 @@ only exists during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user.
-Ensure that necessary files and directories are accessible to the nonroot user.
+By default image variants intended for runtime, run as the nonroot user (UID 1337 for istio-proxyv2).
+Ensure that necessary files and directories are accessible to this user.
 You may need to copy files to different directories or change permissions so
 your application running as the nonroot user can access them.
 
@@ -197,5 +197,5 @@ containers with no shell.
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as
-Docker Official Images. Use `docker inspect` to inspect entry points for
+Docker Official Images. The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint, while the DOI uses `/usr/local/bin/envoy`. Use `docker inspect` to inspect entry points for
 Docker Hardened Images and update your Dockerfile if necessary.
