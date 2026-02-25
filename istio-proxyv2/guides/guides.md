@@ -165,14 +165,14 @@ You should see entries confirming workload certificate generation and trust anch
 
 | Feature              | Standard (`istio/proxyv2`) | Docker Hardened (`dhi.io/istio-proxyv2`) |
 |----------------------|----------------------------|------------------------------------------|
-| **User**             | root                       | 1337 (istio-proxy)                       |
+| **User**             | root (default)             | 1337 (istio-proxy)                       |
 | **Shell**            | Bash                       | None                                     |
-| **Package manager**  | Yes                        | None                                     |
-| **Entrypoint**       | /usr/local/bin/envoy       | /usr/local/bin/pilot-agent               |
-| **Image size**       | ~180 MB (uncompressed)     | ~60 MB (uncompressed)                    |
+| **Package manager**  | Yes (apt)                  | None                                     |
+| **Entrypoint**       | /usr/local/bin/pilot-agent | /usr/local/bin/pilot-agent               |
+| **Image size**       | ~99 MB (uncompressed)      | ~60 MB (uncompressed)                    |
 | **Zero CVE**         | No                         | Yes (zero critical/high/medium)          |
 | **FIPS variant**     | No                         | Yes                                      |
-| **Base OS**          | Ubuntu 18.04               | Docker Hardened Images (Debian 13)       |
+| **Base OS**          | Ubuntu 24.04               | Docker Hardened Images (Debian 13)       |
 | **Compliance**       | None                       | CIS (runtime); FIPS 140, STIG, CIS (FIPS variant) |
 | **Architectures**    | amd64, arm64               | amd64, arm64                             |
 
@@ -238,7 +238,7 @@ listed in the following table of migration notes:
 | **Non-root user** | By default, the DHI istio-proxyv2 runs as the istio-proxy user (UID 1337). Ensure that necessary files and directories are accessible to this user. |
 | **TLS certificates** | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
 | **Ports** | Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. |
-| **Entry point** | The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint, while the standard image uses `/usr/local/bin/envoy`. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| **Entry point** | Both the standard and DHI istio-proxyv2 images use `/usr/local/bin/pilot-agent` as the entrypoint. However, Docker Hardened Images for other products may have different entry points than their standard counterparts. Inspect entry points with `docker inspect` and update your Dockerfile if necessary. |
 | **No shell** | By default, runtime images don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage. |
 
 The following steps outline the general migration process.
@@ -272,4 +272,4 @@ By default, image variants intended for runtime don't contain a shell. Use dev i
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images. The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint, while the standard image uses `/usr/local/bin/envoy`. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Both the standard and DHI istio-proxyv2 images use `/usr/local/bin/pilot-agent` as the entrypoint. For other DHI images, use `docker inspect` to verify entry points and update your Dockerfile if necessary.
