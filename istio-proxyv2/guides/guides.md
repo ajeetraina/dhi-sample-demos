@@ -5,8 +5,8 @@ your Docker Hub namespace), update your commands to reference the mirrored image
 
 For example:
 
-- Public image: `dhi.io/istio-proxyv2:<tag>`
-- Mirrored image: `<your-namespace>/dhi-istio-proxyv2:<tag>`
+- **Public image**: `dhi.io/istio-proxyv2:<tag>`
+- **Mirrored image**: `<your-namespace>/dhi-istio-proxyv2:<tag>`
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
@@ -16,44 +16,68 @@ This Docker Hardened Image includes:
 
 - Istio proxy binaries and configuration
 - Pilot-agent for managing the proxy lifecycle
-- Enhanced security with non-root user operation
+- Enhanced security with non-root user operation (UID 1337)
 - CIS compliance for runtime variants; FIPS 140 + STIG + CIS compliance for FIPS variants
 
-## Start a Istio Proxy v2 instance
+## Start an Istio Proxy v2 instance
 
 Istio Proxy v2 is designed to function as a sidecar in a service mesh and requires an active Istio control plane. It cannot be run as a standalone container.
 
-Run the following command and replace `<tag>` with the image variant you want to run (for example, `1.28.4`):
+### Install Istio control plane
 
-```console
-$ kubectl apply -f your-deployment.yaml
+First, install the Istio control plane on your Kubernetes cluster.
+
+```bash
+# Download and install istioctl
+curl -L https://istio.io/downloadIstio | sh -
+cd istio-*
+export PATH=$PWD/bin:$PATH
+
+# Install Istio with minimal profile
+istioctl install --set profile=minimal -y
+
+# Verify the control plane is running
+kubectl get pods -n istio-system
 ```
 
-## Common istio-proxyv2 use cases
+### Create a namespace with sidecar injection
 
-### Service mesh sidecar deployment
+Create a namespace and enable automatic Istio sidecar injection:
 
-The primary use case is automatic sidecar injection in Kubernetes pods within an Istio service mesh.
+```bash
+# Create namespace
+kubectl create namespace istio-app
 
-### Deploy istio-proxyv2 in Kubernetes
+# Enable Istio sidecar injection
+kubectl label namespace istio-app istio-injection=enabled
 
-To deploy `istio-proxyv2` in Kubernetes, ensure that your namespace has sidecar injection enabled and modify your Deployment manifest as necessary. Consult the Docker Hardened Images Kubernetes authentication instructions for authentication setup.
-
-Link to DHI K8s authentication instructions: [DHI Kubernetes Authentication](#) (link needed)
-
-```console
-$ kubectl create namespace your-namespace
-$ kubectl label namespace your-namespace istio-injection=enabled
+# Verify the label
+kubectl get namespace istio-app --show-labels
 ```
 
-Here is a complete Deployment YAML:
+### Create an image pull secret
 
-```yaml
+Create a Kubernetes secret so the cluster can pull images from the DHI registry:
+
+```bash
+kubectl create secret docker-registry dhi-registry-secret \
+    --docker-server=dhi.io \
+    --docker-username=<your-username> \
+    --docker-password=<your-password> \
+    -n istio-app
+```
+
+### Deploy your application with the DHI sidecar
+
+Create the deployment manifest with the DHI istio-proxyv2 sidecar:
+
+```bash
+cat > deployment.yaml << 'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: example-deployment
-  namespace: your-namespace
+  namespace: istio-app
 spec:
   replicas: 1
   selector:
@@ -66,44 +90,137 @@ spec:
     spec:
       containers:
         - name: example-app
-          image: dhi.io/example-app:<tag>
+          image: dhi.io/nginx:1-debian13
+          ports:
+            - containerPort: 8080
         - name: istio-proxy
-          image: dhi.io/istio-proxyv2:<tag>
+          image: dhi.io/istio-proxyv2:1.28.4
           imagePullPolicy: IfNotPresent
           securityContext:
-            runAsUser: 1337 # Istio proxy default UID
+            runAsUser: 1337
       imagePullSecrets:
-      - name: <secret name>
+      - name: dhi-registry-secret
+EOF
+
+kubectl apply -f deployment.yaml
 ```
 
-```console
-$ kubectl apply -f deployment.yaml
-$ kubectl get pods -n your-namespace
+### Verify the deployment
+
+```bash
+# Check pod status - both containers should show 2/2 READY
+kubectl get pods -n istio-app
+
+# Verify the sidecar is connected to the control plane
+kubectl logs -n istio-app -l app=example-app -c istio-proxy --tail=10
 ```
 
-## Official Docker image (DOI) vs Docker Hardened Image (DHI)
+You should see `Envoy proxy is ready` in the logs, confirming the sidecar has connected to the Istio control plane.
 
-| Feature              | DOI (`istio/proxyv2`)  | DHI (`dhi.io/istio-proxyv2`)    |
-|----------------------|------------------------|---------------------------------|
-| User                 | root                   | 1337                            |
-| Shell                | Bash                   | None                            |
-| Package manager      | Yes                    | None                            |
-| Entrypoint           | /usr/local/bin/envoy   | /usr/local/bin/pilot-agent      |
-| Uncompressed size    | 180MB                  | ~60MB                           |
-| Zero CVE commitment  | No                     | Yes (zero critical/high/medium) |
-| FIPS variant         | No                     | Yes                             |
-| Base OS              | Ubuntu 18.04           | Docker Hardened Images (Debian 13) |
-| Compliance labels    | None                   | CIS (runtime); FIPS 140, STIG, CIS (FIPS variant) |
-| ENV                  | ISTIO_META_...         | ISTIO_META_..., etc.            |
-| Architectures        | amd64, arm64           | amd64, arm64                    |
+## Common istio-proxyv2 use cases
+
+### Service mesh sidecar deployment
+
+The primary use case is automatic sidecar injection in Kubernetes pods within an Istio service mesh.
+
+### Traffic management with virtual services
+
+Create a VirtualService to manage traffic routing through the service mesh:
+
+```bash
+cat > virtual-service.yaml << 'EOF'
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: example-app
+  namespace: istio-app
+spec:
+  hosts:
+  - example-app
+  http:
+  - route:
+    - destination:
+        host: example-app
+        port:
+          number: 8080
+EOF
+
+kubectl apply -f virtual-service.yaml
+```
+
+### Verify mTLS is active
+
+The DHI sidecar automatically handles mutual TLS between services:
+
+```bash
+# Check workload certificate status
+kubectl logs -n istio-app -l app=example-app -c istio-proxy | grep -i "cert\|tls\|trust"
+```
+
+You should see entries confirming workload certificate generation and trust anchor caching.
+
+## Non-hardened images vs Docker Hardened Images
+
+### Key differences
+
+| Feature              | Standard (`istio/proxyv2`) | Docker Hardened (`dhi.io/istio-proxyv2`) |
+|----------------------|----------------------------|------------------------------------------|
+| **User**             | root                       | 1337 (istio-proxy)                       |
+| **Shell**            | Bash                       | None                                     |
+| **Package manager**  | Yes                        | None                                     |
+| **Entrypoint**       | /usr/local/bin/envoy       | /usr/local/bin/pilot-agent               |
+| **Image size**       | ~180 MB (uncompressed)     | ~60 MB (uncompressed)                    |
+| **Zero CVE**         | No                         | Yes (zero critical/high/medium)          |
+| **FIPS variant**     | No                         | Yes                                      |
+| **Base OS**          | Ubuntu 18.04               | Docker Hardened Images (Debian 13)       |
+| **Compliance**       | None                       | CIS (runtime); FIPS 140, STIG, CIS (FIPS variant) |
+| **Architectures**    | amd64, arm64               | amd64, arm64                             |
+
+### Why no shell or package manager?
+
+Docker Hardened Images prioritize security through minimalism:
+
+- **Reduced attack surface**: Fewer binaries mean fewer potential vulnerabilities
+- **Immutable infrastructure**: Runtime containers shouldn't be modified after deployment
+- **Compliance ready**: Meets strict security requirements for regulated environments
+
+The hardened images intended for runtime don't contain a shell nor any tools for debugging. Common debugging methods for applications built with Docker Hardened Images include:
+
+- **Docker Debug** to attach to containers
+- **Docker's Image Mount feature** to mount debugging tools
+- **Kubernetes-specific debugging** with `kubectl debug`
+
+Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+
+For Kubernetes environments, you can use kubectl debug:
+
+```bash
+kubectl debug -n istio-app pod/<pod-name> -it --image=busybox --target=istio-proxy
+```
+
+Or use Docker Debug if you have access to the node:
+
+```bash
+docker debug <container-id>
+```
 
 ## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
 their tag.
 
-- **Runtime variants** - production use, nonroot (UID 1337), no shell/pkg manager, CIS compliance
-- **FIPS variants** - FIPS 140 + STIG + CIS compliance, slightly larger image size due to FIPS crypto libraries
+**Runtime variants** are designed to run the Istio proxy in production. These images:
+
+- Run as the istio-proxy user (UID 1337)
+- Do not include a shell or a package manager
+- Contain only the minimal set of libraries needed to run the proxy
+- Carry CIS compliance labels
+
+**FIPS variants** are designed for environments that require FIPS 140 compliance. These images:
+
+- Include FIPS-validated cryptographic libraries
+- Carry FIPS 140, STIG, and CIS compliance labels
+- Are slightly larger than runtime variants due to FIPS crypto libraries
 
 To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
 select a tag.
@@ -115,87 +232,44 @@ Dockerfile. At minimum, you must update the base image in your existing
 Dockerfile to a Docker Hardened Image. This and a few other common changes are
 listed in the following table of migration notes:
 
-| Item               | Migration note                                                                                                                                                                     |
-| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                          |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a dev tag.                                                           |
-| Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user (UID 1337 for istio-proxyv2). Ensure that necessary files and directories are accessible to this user.   |
-| Multi-stage build  | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime.                                             |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                 |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint (DOI uses `/usr/local/bin/envoy`). Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.        |
+| Item | Migration note |
+|------|----------------|
+| **Base image** | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| **Non-root user** | By default, the DHI istio-proxyv2 runs as the istio-proxy user (UID 1337). Ensure that necessary files and directories are accessible to this user. |
+| **TLS certificates** | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
+| **Ports** | Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. |
+| **Entry point** | The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint, while the standard image uses `/usr/local/bin/envoy`. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary. |
+| **No shell** | By default, runtime images don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage. |
 
 The following steps outline the general migration process.
 
 1. **Find hardened images for your app.**
+   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-   A hardened image may have several variants. Inspect the image tags and
-   find the image variant that meets your needs.
+2. **Update the base image in your Dockerfile.**
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step.
 
-1. **Update the base image in your Dockerfile.**
-
-   Update the base image in your application's Dockerfile to the hardened
-   image you found in the previous step. For framework images, this is
-typically going to be an image tagged as dev because it has the tools
-   needed to install packages and dependencies.
-
-1. **For multi-stage Dockerfiles, update the runtime image in your Dockerfile.**
-
-   To ensure that your final image is as minimal as possible, you should
-   use a multi-stage build. All stages in your Dockerfile should use a
-   hardened image. While intermediary stages will typically use images
-   tagged as dev, your final runtime stage should use a non-dev image variant.
-
-1. **Install additional packages**
-
-   Docker Hardened Images contain minimal packages in order to reduce the
-   potential attack surface. You may need to install additional packages in
-your Dockerfile. Inspect the image variants to identify which packages are
-   already installed.
-
-   Only images tagged as dev typically have package managers. You should use
-   a multi-stage Dockerfile to install the packages. Install the packages in
-the build stage that uses a dev image. Then, if needed, copy any necessary
-   artifacts to the runtime stage that uses a non-dev image.
-
-   For Alpine-based images, you can use apk to install packages. For
-   Debian-based images, you can use apt-get to install packages.
+3. **Verify permissions.**
+   Since the image runs as the istio-proxy user (UID 1337), ensure that data directories and mounted volumes are accessible to this user.
 
 ## Troubleshoot migration
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools
-for debugging. The recommended method for debugging applications built with
-Docker Hardened Images is to use
-[Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to
-attach to these containers. Docker Debug provides a shell, common debugging
-tools, and lets you install other tools in an ephemeral, writable layer that
-only exists during the debugging session.
+The recommended method for debugging applications built with Docker Hardened Images is to use **Docker Debug** to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as the nonroot user (UID 1337 for istio-proxyv2).
-Ensure that necessary files and directories are accessible to this user.
-You may need to copy files to different directories or change permissions so
-your application running as the nonroot user can access them.
+By default the DHI istio-proxyv2 runs as the istio-proxy user (UID 1337). Ensure that necessary files and directories are accessible to this user. You may need to copy files to different directories or change permissions so your application running as the nonroot user can access them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result,
-applications in these images can't bind to privileged ports (below 1024) when
-running in Kubernetes or in Docker Engine versions older than 20.10.
+Hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10.
 
 ### No shell
 
-By default, image variants intended for runtime don't contain a shell. Use
-dev images in build stages to run shell commands and then copy any necessary
-artifacts into the runtime stage. In addition, use Docker Debug to debug
-containers with no shell.
+By default, image variants intended for runtime don't contain a shell. Use dev images in build stages to run shell commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers with no shell.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as
-Docker Official Images. The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint, while the DOI uses `/usr/local/bin/envoy`. Use `docker inspect` to inspect entry points for
-Docker Hardened Images and update your Dockerfile if necessary.
+Docker Hardened Images may have different entry points than images such as Docker Official Images. The DHI istio-proxyv2 uses `/usr/local/bin/pilot-agent` as the entrypoint, while the standard image uses `/usr/local/bin/envoy`. Use `docker inspect` to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
