@@ -97,44 +97,8 @@ Ztunnel is the foundational data plane component of Istio's ambient mesh mode. I
 node and automatically intercepts all traffic for enrolled workloads, encrypting it with mutual TLS (mTLS)
 without requiring sidecar injection or application code changes.
 
-Install the Istio control plane components using DHI Helm charts:
-
-```console
-$ kubectl create namespace istio-system
-$ helm install istio-base oci://dhi.io/istio-base-chart --version <version> \
-    -n istio-system --wait
-$ helm install istiod oci://dhi.io/istio-discovery-chart --version <version> \
-    -n istio-system \
-    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
-    --set profile=ambient --wait
-```
-
-Install the Istio CNI using the upstream Helm chart with the DHI image override:
-
-```console
-$ helm repo add istio https://istio-release.storage.googleapis.com/charts
-$ helm install istio-cni istio/cni --version <version> \
-    -n istio-system \
-    --set hub=dhi.io \
-    --set image=istio-install-cni \
-    --set tag=<tag> \
-    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
-    --set ambient.enabled=true --wait
-```
-
-> **Note:** There is no DHI Helm chart for Istio CNI. The command above uses the upstream `istio/cni` chart
-> with the DHI image override (`dhi.io/istio-install-cni`).
-
-Install ztunnel with the DHI Helm chart:
-
-```console
-$ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
-    -n istio-system \
-    --set "imagePullSecrets[0]=dhi-pull-secret" \
-    --wait
-```
-
-Enroll a namespace in the ambient mesh:
+After completing the installation steps in [Start a ztunnel instance](#start-a-ztunnel-instance), enroll a
+namespace in the ambient mesh:
 
 ```console
 $ kubectl label namespace default istio.io/dataplane-mode=ambient
@@ -150,73 +114,15 @@ $ kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.28/sa
 Test encrypted service-to-service communication:
 
 ```console
-$ kubectl exec deploy/sleep -- curl -s http://productpage:9080/ | head -20
+$ kubectl exec deploy/sleep -- curl -s -o /dev/null -w "%{http_code}" http://productpage:9080/
 ```
+
+Expected output: `200`
 
 Verify mTLS is active by checking ztunnel logs for HBONE tunnel connections:
 
 ```console
 $ kubectl logs -n istio-system -l app=ztunnel --tail=20
-```
-
-### L4 authorization policies for workload-level access control
-
-Ztunnel enforces L4 authorization policies at the TCP level without requiring waypoint proxies. This allows you
-to control which services can communicate with each other based on service identity.
-
-Create an authorization policy to allow traffic only from a specific service account:
-
-```console
-$ kubectl apply -f - <<EOF
-apiVersion: security.istio.io/v1
-kind: AuthorizationPolicy
-metadata:
-  name: allow-sleep-to-productpage
-  namespace: default
-spec:
-  selector:
-    matchLabels:
-      app: productpage
-  action: ALLOW
-  rules:
-  - from:
-    - source:
-        principals: ["cluster.local/ns/default/sa/sleep"]
-EOF
-```
-
-Verify that traffic from the allowed service account succeeds:
-
-```console
-$ kubectl exec deploy/sleep -- curl -s -o /dev/null -w "%{http_code}" http://productpage:9080/
-```
-
-Clean up the policy:
-
-```console
-$ kubectl delete authorizationpolicy allow-sleep-to-productpage -n default
-```
-
-### Observability and L4 telemetry
-
-Ztunnel automatically collects L4 telemetry metrics for all traffic flowing through the ambient mesh. Key
-metrics include `istio_tcp_sent_bytes_total`, `istio_tcp_received_bytes_total`,
-`istio_tcp_connections_opened_total`, and `istio_tcp_connections_closed_total`.
-
-View ztunnel metrics using port-forwarding (the runtime image does not include `curl`):
-
-```console
-$ kubectl port-forward -n istio-system \
-    $(kubectl get pods -n istio-system -l app=ztunnel -o jsonpath='{.items[0].metadata.name}') \
-    15020:15020 &
-$ curl -s http://localhost:15020/metrics | head -50
-$ kill %1
-```
-
-Inspect the workloads managed by ztunnel:
-
-```console
-$ istioctl ztunnel-config workloads
 ```
 
 ### FIPS-compliant service mesh deployments
@@ -252,56 +158,8 @@ container directly.
 
 ### Deploy ztunnel in Kubernetes
 
-Ztunnel is designed exclusively for Kubernetes and deploys as a DaemonSet via Helm. The following steps show
-the complete setup using DHI Helm charts and DHI images.
-
-First follow the
-[authentication instructions for DHI in Kubernetes](https://docs.docker.com/dhi/how-to/k8s/#authentication).
-
-Create the namespace and image pull secret:
-
-```console
-$ kubectl create namespace istio-system
-$ kubectl create secret docker-registry dhi-pull-secret \
-    --docker-server=dhi.io \
-    --docker-username=<Docker username> \
-    --docker-password=<Docker token> \
-    --docker-email=<Docker email> \
-    -n istio-system
-```
-
-Install the Istio control plane components using DHI Helm charts:
-
-```console
-$ helm install istio-base oci://dhi.io/istio-base-chart --version <version> \
-    -n istio-system --wait
-$ helm install istiod oci://dhi.io/istio-discovery-chart --version <version> \
-    -n istio-system \
-    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
-    --set profile=ambient --wait
-```
-
-Install the Istio CNI using the upstream Helm chart with the DHI image override:
-
-```console
-$ helm repo add istio https://istio-release.storage.googleapis.com/charts
-$ helm install istio-cni istio/cni --version <version> \
-    -n istio-system \
-    --set hub=dhi.io \
-    --set image=istio-install-cni \
-    --set tag=<tag> \
-    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
-    --set ambient.enabled=true --wait
-```
-
-Install ztunnel with the DHI Helm chart:
-
-```console
-$ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
-    -n istio-system \
-    --set "imagePullSecrets[0]=dhi-pull-secret" \
-    --wait
-```
+Ztunnel is designed exclusively for Kubernetes and deploys as a DaemonSet via Helm. Follow the steps in
+[Start a ztunnel instance](#start-a-ztunnel-instance) to install the full stack.
 
 Verify the DaemonSet is running on all nodes:
 
