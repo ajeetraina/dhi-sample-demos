@@ -38,17 +38,19 @@ Log in to the DHI Helm registry:
 $ helm registry login dhi.io
 ```
 
-Create a Kubernetes secret for pulling DHI images:
+Create a Kubernetes namespace and secret for pulling DHI images:
 
 ```console
+$ kubectl create namespace istio-system
 $ kubectl create secret docker-registry dhi-pull-secret \
     --docker-server=dhi.io \
     --docker-username=<Docker username> \
     --docker-password=<Docker token> \
-    --docker-email=<Docker email>
+    --docker-email=<Docker email> \
+    -n istio-system
 ```
 
-Install ztunnel using the upstream Istio Helm chart with the DHI image override:
+Install ztunnel using the DHI Helm chart. Replace `<version>` with the chart version:
 
 ```console
 $ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
