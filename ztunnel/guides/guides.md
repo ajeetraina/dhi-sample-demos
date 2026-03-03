@@ -48,7 +48,7 @@ $ kubectl create secret docker-registry dhi-pull-secret \
     --docker-email=<Docker email>
 ```
 
-Install ztunnel using the DHI Helm chart. Replace `<version>` with the chart version:
+Install ztunnel using the upstream Istio Helm chart with the DHI image override:
 
 ```console
 $ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
@@ -206,7 +206,7 @@ appropriate tag value:
 $ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
     -n istio-system \
     --set "imagePullSecrets[0].name=dhi-pull-secret" \
-    --set image.tag=<tag>-fips \
+    --set tag=<tag>-fips \
     --wait
 ```
 
