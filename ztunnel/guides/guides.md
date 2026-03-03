@@ -23,11 +23,8 @@ This Docker Hardened Image includes:
 ## Start a ztunnel instance
 
 Ztunnel is a per-node DaemonSet proxy for Istio ambient mesh. It is not designed to run as a standalone container.
-It requires the Istio control plane (Istiod) and Istio CNI to function. The recommended way to deploy ztunnel is
-using the DHI Helm chart.
-
-Before using the image, follow the Istio instructions to
-[install the control plane](https://istio.io/latest/docs/ambient/install/helm/).
+It requires the Istio control plane (Istiod) and Istio CNI to function. You must install these components before
+installing ztunnel.
 
 First follow the
 [authentication instructions for DHI in Kubernetes](https://docs.docker.com/dhi/how-to/k8s/#authentication).
@@ -49,6 +46,33 @@ $ kubectl create secret docker-registry dhi-pull-secret \
     --docker-email=<Docker email> \
     -n istio-system
 ```
+
+Install the Istio control plane prerequisites:
+
+```console
+$ helm install istio-base oci://dhi.io/istio-base-chart --version <version> \
+    -n istio-system --wait
+$ helm install istiod oci://dhi.io/istio-discovery-chart --version <version> \
+    -n istio-system \
+    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set profile=ambient --wait
+```
+
+Install the Istio CNI using the upstream Helm chart with the DHI image override:
+
+```console
+$ helm repo add istio https://istio-release.storage.googleapis.com/charts
+$ helm install istio-cni istio/cni --version <version> \
+    -n istio-system \
+    --set hub=dhi.io \
+    --set image=istio-install-cni \
+    --set tag=<tag> \
+    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set profile=ambient --wait
+```
+
+> **Note:** There is no DHI Helm chart for Istio CNI. The command above uses the upstream `istio/cni` chart
+> with the DHI image override (`dhi.io/istio-install-cni`).
 
 Install ztunnel using the DHI Helm chart. Replace `<version>` with the chart version:
 
