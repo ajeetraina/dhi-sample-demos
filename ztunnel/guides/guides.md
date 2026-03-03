@@ -54,7 +54,7 @@ $ helm install istio-base oci://dhi.io/istio-base-chart --version <version> \
     -n istio-system --wait
 $ helm install istiod oci://dhi.io/istio-discovery-chart --version <version> \
     -n istio-system \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
     --set profile=ambient --wait
 ```
 
@@ -67,8 +67,8 @@ $ helm install istio-cni istio/cni --version <version> \
     --set hub=dhi.io \
     --set image=istio-install-cni \
     --set tag=<tag> \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
-    --set profile=ambient --wait
+    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
+    --set ambient.enabled=true --wait
 ```
 
 > **Note:** There is no DHI Helm chart for Istio CNI. The command above uses the upstream `istio/cni` chart
@@ -79,7 +79,7 @@ Install ztunnel using the DHI Helm chart. Replace `<version>` with the chart ver
 ```console
 $ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
     --namespace istio-system \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set "imagePullSecrets[0]=dhi-pull-secret" \
     --wait
 ```
 
@@ -105,7 +105,7 @@ $ helm install istio-base oci://dhi.io/istio-base-chart --version <version> \
     -n istio-system --wait
 $ helm install istiod oci://dhi.io/istio-discovery-chart --version <version> \
     -n istio-system \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
     --set profile=ambient --wait
 ```
 
@@ -118,8 +118,8 @@ $ helm install istio-cni istio/cni --version <version> \
     --set hub=dhi.io \
     --set image=istio-install-cni \
     --set tag=<tag> \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
-    --set profile=ambient --wait
+    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
+    --set ambient.enabled=true --wait
 ```
 
 > **Note:** There is no DHI Helm chart for Istio CNI. The command above uses the upstream `istio/cni` chart
@@ -130,7 +130,7 @@ Install ztunnel with the DHI Helm chart:
 ```console
 $ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
     -n istio-system \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set "imagePullSecrets[0]=dhi-pull-secret" \
     --wait
 ```
 
@@ -203,12 +203,14 @@ Ztunnel automatically collects L4 telemetry metrics for all traffic flowing thro
 metrics include `istio_tcp_sent_bytes_total`, `istio_tcp_received_bytes_total`,
 `istio_tcp_connections_opened_total`, and `istio_tcp_connections_closed_total`.
 
-View ztunnel metrics:
+View ztunnel metrics using port-forwarding (the runtime image does not include `curl`):
 
 ```console
-$ kubectl exec -n istio-system \
+$ kubectl port-forward -n istio-system \
     $(kubectl get pods -n istio-system -l app=ztunnel -o jsonpath='{.items[0].metadata.name}') \
-    -- curl -s http://localhost:15020/metrics | head -50
+    15020:15020 &
+$ curl -s http://localhost:15020/metrics | head -50
+$ kill %1
 ```
 
 Inspect the workloads managed by ztunnel:
@@ -231,20 +233,22 @@ appropriate tag value:
 ```console
 $ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
     -n istio-system \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set "imagePullSecrets[0]=dhi-pull-secret" \
     --set tag=<tag>-fips \
     --wait
 ```
 
-Verify FIPS mode is active:
+Verify FIPS mode is active by checking the container environment variables (the runtime image does not include
+a shell or `env` command):
 
 ```console
-$ kubectl exec -n istio-system \
+$ kubectl get pod -n istio-system \
     $(kubectl get pods -n istio-system -l app=ztunnel -o jsonpath='{.items[0].metadata.name}') \
-    -- env | grep OPENSSL_FIPS
+    -o jsonpath='{.spec.containers[0].env}' | grep -i fips
 ```
 
-Expected output: `OPENSSL_FIPS=1`
+Alternatively, use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to inspect the running
+container directly.
 
 ### Deploy ztunnel in Kubernetes
 
@@ -273,7 +277,7 @@ $ helm install istio-base oci://dhi.io/istio-base-chart --version <version> \
     -n istio-system --wait
 $ helm install istiod oci://dhi.io/istio-discovery-chart --version <version> \
     -n istio-system \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
     --set profile=ambient --wait
 ```
 
@@ -286,8 +290,8 @@ $ helm install istio-cni istio/cni --version <version> \
     --set hub=dhi.io \
     --set image=istio-install-cni \
     --set tag=<tag> \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
-    --set profile=ambient --wait
+    --set "global.imagePullSecrets[0]=dhi-pull-secret" \
+    --set ambient.enabled=true --wait
 ```
 
 Install ztunnel with the DHI Helm chart:
@@ -295,7 +299,7 @@ Install ztunnel with the DHI Helm chart:
 ```console
 $ helm install ztunnel oci://dhi.io/ztunnel-chart --version <version> \
     -n istio-system \
-    --set "imagePullSecrets[0].name=dhi-pull-secret" \
+    --set "imagePullSecrets[0]=dhi-pull-secret" \
     --wait
 ```
 
