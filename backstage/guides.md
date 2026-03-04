@@ -302,13 +302,17 @@ application needs.
 
 > **Important**
 >
-> Only add **runtime** libraries to the customization, not build tools.
-> Packages like `g++`, `make`, and `python3` are needed during compilation
-> but not at runtime. On Alpine, these packages depend on `busybox`, which
-> provides `/bin/sh` and `wget` — defeating the purpose of a distroless
-> image. Instead, compile everything in the build stage (which uses the
-> `-dev` variant) and copy the pre-built `node_modules` into the runtime
-> image.
+> Only add **runtime** libraries to the customization, not build tools or
+> language runtimes as system packages. While build tools like `g++` and
+> `make` won't reintroduce a shell on their own, they add significant size
+> to the runtime image (over 200 MB) and serve no purpose without `/bin/sh`
+> — `make` hardcodes `SHELL := /bin/sh` to execute recipes and `gcc` shells
+> out to invoke the linker. More critically, adding `python3` as a system
+> package pulls in `busybox-binsh` as a dependency, which provides `/bin/sh`
+> and breaks the distroless property entirely. Instead, compile everything
+> in the build stage (which uses the `-dev` variant), copy the pre-built
+> `node_modules` into the runtime image, and use an OCI artifact for any
+> language runtimes needed at runtime.
 
 For Backstage, the only runtime library needed is `sqlite-libs` — the shared
 library that the compiled `better-sqlite3` native module links against.
@@ -414,8 +418,8 @@ CMD ["node", "packages/backend", "--config", "app-config.yaml"]
 ```
 
 Since the customization includes only the `sqlite-libs` runtime library and
-no build tools, the resulting image is distroless — no shell, no package
-manager:
+no build tools or language runtimes, the resulting image is distroless — no
+shell, no package manager:
 
 ```console
 docker run --rm YOUR_ORG/dhi-node:24-alpine3.23_backstage sh -c "echo hello"
@@ -429,10 +433,31 @@ docker: Error response from daemon: ... exec: "sh": executable file not found in
 
 ## Step 5: Use an OCI artifact for the Python runtime
 
-For even more security, you can add the Python runtime as an OCI artifact
-instead of installing it as a system package. This uses the hardened
+If your Backstage plugins or configuration require Python at runtime (for
+example, for `node-gyp` rebuilds during production installs), you need
+Python in the runtime image. Adding `python3` as a system package is not an
+option — on Alpine, `python3` depends on `busybox-binsh`, which provides
+`/bin/sh` and defeats the distroless property.
+
+Instead, add the Python runtime as an OCI artifact. This uses the hardened
 `dhi.io/python` image layered onto the Node.js base, keeping both runtimes
-tracked in the image SBOM without any package manager at runtime.
+tracked in the image SBOM without any package manager or shell at runtime.
+
+> **Warning**
+>
+> Do not add `python3` to the `packages` section of your customization YAML.
+> Unlike build tools such as `g++` and `make` (which install without pulling
+> in a shell), `python3` on Alpine depends on `busybox-binsh`. This
+> reintroduces `/bin/sh` into the image, breaking the distroless guarantee:
+>
+> ```console
+> # With python3 as a system package — shell is accessible
+> docker run --rm YOUR_ORG/dhi-node:24-alpine3.23_backstage sh -c "echo hello"
+> hello
+> ```
+>
+> Use an OCI artifact instead to get a hardened Python runtime without
+> compromising the image's security posture.
 
 ### Using the Docker Hub UI
 
