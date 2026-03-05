@@ -1,40 +1,24 @@
 # Harden a Backstage application with Docker Hardened Images
 
-This guide shows how to secure a Backstage application using Docker Hardened
-Images (DHI). Backstage is a CNCF open source developer portal used by
-thousands of organizations to manage their software catalogs, templates,
-and developer tooling.
+This guide shows how to secure a Backstage application using Docker Hardened Images (DHI). Backstage is a CNCF open source developer portal used by thousands of organizations to manage their software catalogs, templates, and developer tooling.
 
-By the end of this guide, you'll have a Backstage container image that is
-distroless, runs as a non-root user by default, and has dramatically fewer
-CVEs than the standard `node:24-trixie-slim` base image while still supporting
-the native module compilation that Backstage requires.
+By the end of this guide, you'll have a Backstage container image that is distroless, runs as a non-root user by default, and has dramatically fewer CVEs than the standard `node:24-trixie-slim` base image while still supporting the native module compilation that Backstage requires.
 
 ## Prerequisites
 
 - Docker Desktop or Docker Engine with BuildKit enabled
-- A Docker Hub account authenticated with `docker login` and
-  `docker login dhi.io`
+- A Docker Hub account authenticated with `docker login` and `docker login dhi.io`
 - A Backstage project created with `@backstage/create-app`
 
 ## Why Backstage needs customization
 
-The DHI migration examples cover applications where you can swap the base
-image and everything works. Backstage is different. It uses `better-sqlite3`
-and other packages that compile native Node.js modules at install time, which
-means the build stage needs `g++`, `make`, `python3`, and `sqlite-dev` —
-none of which are in the base `dhi.io/node` image. The runtime image only
-needs the shared library (`sqlite-libs`) that the compiled native module
-links against.
+The DHI migration examples cover applications where you can swap the base image and everything works. Backstage is different. It uses `better-sqlite3` and other packages that compile native Node.js modules at install time, which means the build stage needs `g++`, `make`, `python3`, and `sqlite-dev` — none of which are in the base `dhi.io/node` image. The runtime image only needs the shared library (`sqlite-libs`) that the compiled native module links against.
 
-This is a common pattern. Any Node.js application that depends on native
-addons (such as `bcrypt`, `sharp`, `sqlite3`, or `node-canvas`) faces the
-same challenge. The approach in this guide applies to all of them.
+This is a common pattern. Any Node.js application that depends on native addons (such as `bcrypt`, `sharp`, `sqlite3`, or `node-canvas`) faces the same challenge. The approach in this guide applies to all of them.
 
 ## Step 1: Examine the original Dockerfile
 
-The official Backstage documentation recommends a multi-stage Dockerfile
-using `node:24-trixie-slim` (Debian). A typical setup looks like this:
+The official Backstage documentation recommends a multi-stage Dockerfile using `node:24-trixie-slim` (Debian). A typical setup looks like this:
 
 ```dockerfile
 # Stage 1 - Create yarn install skeleton layer
@@ -104,7 +88,7 @@ CMD ["node", "packages/backend", "--config", "app-config.yaml"]
 
 Run this image and inspect what's available inside the container:
 
-```console
+```
 docker build -t backstage:init .
 docker run -d \
     -e APP_CONFIG_backend_database_client='better-sqlite3' \
@@ -118,12 +102,19 @@ docker run -d \
     backstage:init
 ```
 
-This works, but the runtime container has a shell, a package manager, and
-`yarn`. None of these are needed to run Backstage. Run `docker exec` to see
-what's accessible inside:
+This works, but the runtime container has a shell, a package manager, and yarn. None of these are needed to run Backstage. Run `docker exec` to see what's accessible inside:
 
-```console
+```
 docker exec -it <container-id> sh
+$ cat /etc/shells
+# /etc/shells: valid login shells
+/bin/sh
+/usr/bin/sh
+/bin/bash
+/usr/bin/bash
+/bin/rbash
+/usr/bin/rbash
+/usr/bin/dash
 $ yarn --version
 4.12.0
 $ dpkg --version
@@ -134,14 +125,11 @@ $ id
 uid=1000(node) gid=1000(node) groups=1000(node)
 ```
 
-Each of these tools increases the attack surface. An attacker who gains access
-to this container could use them for lateral movement across your
-infrastructure.
+The `node:24-trixie-slim` image ships with three shells (`dash`, `bash`, and `rbash`), a package manager (`dpkg`), and `yarn`. Each of these tools increases the attack surface. An attacker who gains access to this container could use them for lateral movement across your infrastructure.
 
 ## Step 2: Switch the build stages to DHI
 
-Replace all three stages with DHI equivalents. DHI Node.js images use Alpine,
-so the package installation commands change from `apt-get` to `apk`:
+Replace all three stages with DHI equivalents. DHI Node.js images use Alpine, so the package installation commands change from `apt-get` to `apk`:
 
 ```dockerfile
 # Stage 1: prepare packages
@@ -194,38 +182,27 @@ CMD ["node", "packages/backend", "--config", "app-config.yaml"]
 
 Build and tag this version:
 
-```console
+```
 docker build -t backstage:dhi-dev .
 ```
 
 > **Note**
 >
-> The `-dev` variant includes a shell and package manager, which is why
-> `apk add` works. Backstage requires `python3` and native build tools in
-> the runtime image because `yarn workspaces focus --all --production`
-> recompiles native modules during the production install. This is specific
-> to Backstage's build process — most Node.js applications can use the
-> standard (non-dev) DHI runtime variant without additional packages.
+> The `-dev` variant includes a shell and package manager, which is why `apk add` works. Backstage requires `python3` and native build tools in the runtime image because `yarn workspaces focus --all --production` recompiles native modules during the production install. This is specific to Backstage's build process — most Node.js applications can use the standard (non-dev) DHI runtime variant without additional packages.
 
-The DHI images come with attestations that the original `node:24-trixie-slim`
-images don't have. Check what's attached:
+The DHI images come with attestations that the original `node:24-trixie-slim` images don't have. Check what's attached:
 
-```console
+```
 docker scout attest list dhi.io/node:24-alpine3.23
 ```
 
-DHI images ship with 15 attestations including CycloneDX SBOM, SLSA
-provenance, OpenVEX, Scout health reports, secret scans, virus/malware
-reports, and an SLSA verification summary.
+DHI images ship with 15 attestations including CycloneDX SBOM, SLSA provenance, OpenVEX, Scout health reports, secret scans, virus/malware reports, and an SLSA verification summary.
 
 ## Step 3: Add Socket Firewall protection
 
-DHI provides `-sfw` (Socket Firewall) variants for Node.js images. Socket
-Firewall intercepts `npm` and `yarn` commands during the build to detect and
-block malicious packages before they execute install scripts.
+DHI provides `-sfw` (Socket Firewall) variants for Node.js images. Socket Firewall intercepts `npm` and `yarn` commands during the build to detect and block malicious packages before they execute install scripts.
 
-To enable Socket Firewall, change the `-dev` tags to `-sfw-dev` in all three
-stages. The SFW version of the Dockerfile:
+To enable Socket Firewall, change the `-dev` tags to `-sfw-dev` in all three stages. The SFW version of the Dockerfile:
 
 ```dockerfile
 # Stage 1: prepare packages
@@ -278,46 +255,30 @@ CMD ["node", "packages/backend", "--config", "app-config.yaml"]
 
 Build this version:
 
-```console
+```
 docker build -t backstage:dhi-sfw-dev .
 ```
 
-When you build, you'll see Socket Firewall messages in the build output:
-`Protected by Socket Firewall for any yarn and npm commands executed in the
-Dockerfile or in the running containers.`
+When you build, you'll see Socket Firewall messages in the build output: `Protected by Socket Firewall` for any `yarn` and `npm` commands executed in the Dockerfile or in the running containers.
 
 > **Tip**
 >
-> The `-sfw-dev` variant is larger (1.9 GB vs 1.72 GB) because Socket
-> Firewall adds monitoring tooling. The security benefit during `yarn
-> install` outweighs the size increase.
+> The `-sfw-dev` variant is larger (1.9 GB vs 1.72 GB) because Socket Firewall adds monitoring tooling. The security benefit during `yarn install` outweighs the size increase.
 
-## Step 4: Remove the package manager with DHI Enterprise customizations
+## Step 4: Remove the shell and the package manager with DHI Enterprise customizations
 
-The previous steps still use the `-dev` or `-sfw-dev` variant as the runtime
-image, which includes a shell and package manager. DHI Enterprise
-customizations let you start from the base (non-dev) image — which has no
-shell and no package manager — and add only the runtime libraries your
-application needs.
+The previous steps still use the `-dev` or `-sfw-dev` variant as the runtime image, which includes a shell and package manager. DHI Enterprise customizations let you start from the base (non-dev) image — which has no shell and no package manager — and add only the runtime libraries and language runtimes your application needs.
 
 > **Important**
 >
-> Only add **runtime** libraries to the customization, not build tools or
-> language runtimes as system packages. While build tools like `g++` and
-> `make` won't reintroduce a shell on their own, they add significant size
-> to the runtime image (over 200 MB) and serve no purpose without `/bin/sh`
-> — `make` hardcodes `SHELL := /bin/sh` to execute recipes and `gcc` shells
-> out to invoke the linker. More critically, adding `python3` as a system
-> package pulls in `busybox-binsh` as a dependency, which provides `/bin/sh`
-> and breaks the distroless property entirely. Instead, compile everything
-> in the build stage (which uses the `-dev` variant), copy the pre-built
-> `node_modules` into the runtime image, and use an OCI artifact for any
-> language runtimes needed at runtime.
+> Only add runtime libraries to the customization, not build tools or language runtimes as system packages. Compile everything in the build stage (which uses the `-dev` variant), copy the pre-built `node_modules` into the runtime image, and use an OCI artifact for any language runtimes needed at runtime.
 
-For Backstage, the only runtime library needed is `sqlite-libs` — the shared
-library that the compiled `better-sqlite3` native module links against.
-Docker will continuously build with SLSA Level 3 compliance and patch these
-customized images within the guaranteed SLA for CVE patching.
+For Backstage, the runtime image needs:
+
+- **sqlite-libs** — the shared library that the compiled `better-sqlite3` native module links against (added as a system package).
+- **Python** — if your Backstage plugins or configuration require Python at runtime. Added as an OCI artifact using the hardened `dhi.io/python` image, which layers the Python runtime onto the Node.js base without introducing a package manager or shell.
+
+Docker will continuously build with SLSA Level 3 compliance and patch these customized images within the guaranteed SLA for CVE patching.
 
 ### Using the Docker Hub UI
 
@@ -326,24 +287,18 @@ After you mirror the Node.js DHI repository to your organization's namespace:
 1. Open the mirrored Node.js repository in Docker Hub.
 2. Select **Customize** and choose the `node:24-alpine3.23` tag.
 3. Under **Packages**, add `sqlite-libs`.
-4. Create the customization.
+4. Under **OCI artifacts**, select your mirrored `dhi-python` repository and include the `/opt/python` path to layer the Python runtime into the image.
+5. Create the customization.
 
-For more information, see [Customize an image](/dhi/how-to/customize/).
+For more information, see [Customize an image](#).
 
 ### Using the dhictl CLI
 
-[`dhictl`](https://github.com/docker-hardened-images/dhictl) is Docker's
-command-line tool for managing Docker Hardened Images. It lets you browse
-the DHI catalog, mirror images, and create customizations directly from
-your terminal — making it easy to integrate DHI into CI/CD pipelines and
-infrastructure-as-code workflows. You can install `dhictl` as a standalone
-binary or as a Docker CLI plugin (`docker dhi`); it will also be available
-by default in Docker Desktop soon.
+`dhictl` is Docker's command-line tool for managing Docker Hardened Images. It lets you browse the DHI catalog, mirror images, and create customizations directly from your terminal — making it easy to integrate DHI into CI/CD pipelines and infrastructure-as-code workflows. You can install `dhictl` as a standalone binary or as a Docker CLI plugin (`docker dhi`); it will also be available by default in Docker Desktop soon.
 
-Rather than writing the customization YAML by hand, use `dhictl` to scaffold
-a starting point:
+Rather than writing the customization YAML by hand, use `dhictl` to scaffold a starting point:
 
-```console
+```
 dhictl customization prepare --org YOUR_ORG node 24-alpine3.23 \
     --destination YOUR_ORG/dhi-node \
     --name "backstage" \
@@ -351,9 +306,7 @@ dhictl customization prepare --org YOUR_ORG node 24-alpine3.23 \
     --output node-backstage.yaml
 ```
 
-This generates a YAML file with the correct `source`, `tag_definition_id`,
-and `accounts` fields pre-populated. Edit the file to add the runtime library
-Backstage needs:
+Edit the generated file to add the runtime library and the Python OCI artifact:
 
 ```yaml
 name: backstage
@@ -361,139 +314,7 @@ name: backstage
 source: dhi/node
 tag_definition_id: node/alpine-3.23/24
 
-destination: docker.io/YOUR_ORG/dhi-node
-tag_suffix: _backstage
-
-platforms:
-  - linux/amd64
-  - linux/arm64
-
-contents:
-  packages:
-    - sqlite-libs
-
-accounts:
-  root: true
-  runs-as: node
-  users:
-    - name: node
-      uid: 1000
-  groups:
-    - name: node
-      gid: 1000
-
-environment:
-  NODE_VERSION: 24.14.0-r0
-
-cmd:
-  - node
-```
-
-Then create the customization:
-
-```console
-dhictl customization create --org YOUR_ORG node-backstage.yaml
-```
-
-Monitor the build progress:
-
-```console
-dhictl customization build list --org YOUR_ORG YOUR_ORG/dhi-node "backstage"
-```
-
-Docker builds the customized image on its secure infrastructure and publishes
-it as `YOUR_ORG/dhi-node:24-alpine3.23_backstage`.
-
-### Updated Dockerfile
-
-Update only the final stage of your Dockerfile to use the customized image:
-
-```dockerfile
-# Final Stage: create the runtime image
-FROM YOUR_ORG/dhi-node:24-alpine3.23_backstage
-WORKDIR /app
-COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/packages/backend/dist/bundle/ ./
-CMD ["node", "packages/backend", "--config", "app-config.yaml"]
-```
-
-Since the customization includes only the `sqlite-libs` runtime library and
-no build tools or language runtimes, the resulting image is distroless — no
-shell, no package manager:
-
-```console
-docker run --rm YOUR_ORG/dhi-node:24-alpine3.23_backstage sh -c "echo hello"
-docker: Error response from daemon: ... exec: "sh": executable file not found in $PATH
-```
-
-> **Note**
->
-> If your organization requires FIPS/STIG compliant images, that's also an
-> option in DHI Enterprise.
-
-## Step 5: Use an OCI artifact for the Python runtime
-
-If your Backstage plugins or configuration require Python at runtime (for
-example, for `node-gyp` rebuilds during production installs), you need
-Python in the runtime image. Adding `python3` as a system package is not an
-option — on Alpine, `python3` depends on `busybox-binsh`, which provides
-`/bin/sh` and defeats the distroless property.
-
-Instead, add the Python runtime as an OCI artifact. This uses the hardened
-`dhi.io/python` image layered onto the Node.js base, keeping both runtimes
-tracked in the image SBOM without any package manager or shell at runtime.
-
-> **Warning**
->
-> Do not add `python3` to the `packages` section of your customization YAML.
-> Unlike build tools such as `g++` and `make` (which install without pulling
-> in a shell), `python3` on Alpine depends on `busybox-binsh`. This
-> reintroduces `/bin/sh` into the image, breaking the distroless guarantee:
->
-> ```console
-> # With python3 as a system package — shell is accessible
-> docker run --rm YOUR_ORG/dhi-node:24-alpine3.23_backstage sh -c "echo hello"
-> hello
-> ```
->
-> Use an OCI artifact instead to get a hardened Python runtime without
-> compromising the image's security posture.
-
-### Using the Docker Hub UI
-
-After you mirror the Node.js DHI repository to your organization's namespace:
-
-1. Open the mirrored Node.js repository in Docker Hub.
-2. Select **Customize** and choose the `node:24-alpine3.23` tag.
-3. Under **Packages**, add `sqlite-libs`.
-4. Under **OCI artifacts**, select your mirrored `dhi-python` repository
-   and include the `/opt/python` path to layer the Python runtime into the
-   image.
-5. Create the customization.
-
-For more information, see [Customize an image](/dhi/how-to/customize/).
-
-### Using the dhictl CLI
-
-Scaffold the customization:
-
-```console
-dhictl customization prepare --org YOUR_ORG node 24-alpine3.23 \
-    --destination YOUR_ORG/dhi-node \
-    --name "backstage" \
-    --tag-suffix "_backstage" \
-    --output node-backstage-oci.yaml
-```
-
-Edit the generated file to add the packages and the Python OCI artifact:
-
-```yaml
-name: backstage
-
-source: dhi/node
-tag_definition_id: node/alpine-3.23/24
-
-destination: docker.io/YOUR_ORG/dhi-node
+destination: YOUR_ORG/dhi-node
 tag_suffix: _backstage
 
 platforms:
@@ -519,7 +340,6 @@ accounts:
       gid: 1000
 
 environment:
-  NODE_VERSION: 24.14.0-r0
   PYTHON: /opt/python/bin/python3
 
 cmd:
@@ -528,22 +348,25 @@ cmd:
 
 Then create the customization:
 
-```console
-dhictl customization create --org YOUR_ORG node-backstage-oci.yaml
+```
+dhictl customization create --org YOUR_ORG node-backstage.yaml
 ```
 
 Monitor the build progress:
 
-```console
+```
 dhictl customization build list --org YOUR_ORG YOUR_ORG/dhi-node "backstage"
 ```
 
-Docker builds the customized image on its secure infrastructure and publishes
-it as `YOUR_ORG/dhi-node:24-alpine3.23_backstage`.
+Docker builds the customized image on its secure infrastructure and publishes it as `YOUR_ORG/dhi-node:24-alpine3.23_backstage`.
+
+> **Note**
+>
+> If your Backstage configuration does not require Python at runtime, you can omit the `artifacts` and `environment` sections from the YAML. The `sqlite-libs` package alone is sufficient to run Backstage with `better-sqlite3`.
 
 ### Updated Dockerfile
 
-Update the runtime stage of your Dockerfile to use the customized image:
+Update only the final stage of your Dockerfile to use the customized image:
 
 ```dockerfile
 # Final Stage: create the runtime image
@@ -557,82 +380,77 @@ CMD ["node", "packages/backend", "--config", "app-config.yaml"]
 
 > **Important**
 >
-> When the Python runtime is added as an OCI artifact, it installs under
-> `/opt/python/` instead of `/usr/bin/`. Set `ENV PYTHON=/opt/python/bin/python3`
-> so that any Node.js packages requiring Python at runtime can locate the
-> binary.
+> When the Python runtime is added as an OCI artifact, it installs under `/opt/python/` instead of `/usr/bin/`. Set `ENV PYTHON=/opt/python/bin/python3` so that any Node.js packages requiring Python at runtime can locate the binary. If you omitted the Python OCI artifact, remove this `ENV` line.
+
+Since the customization includes only runtime libraries and OCI artifacts — no build tools, no package manager, no shell — the resulting image is distroless:
+
+```
+docker run --rm YOUR_ORG/dhi-node:24-alpine3.23_backstage sh -c "echo hello"
+docker: Error response from daemon: ... exec: "sh": executable file not found in $PATH
+```
 
 With the Enterprise customization:
 
 - The runtime image is distroless — no shell, no package manager.
-- Docker automatically rebuilds your customized image when the base Node.js
-  image or the Python OCI artifact receives a security patch.
-- The full chain of trust is maintained, including SLSA Build Level 3
-  provenance.
+- Docker automatically rebuilds your customized image when the base Node.js image or the Python OCI artifact receives a security patch.
+- The full chain of trust is maintained, including SLSA Build Level 3 provenance.
 - Both the Node.js and Python runtimes are tracked in the image SBOM.
 
 Confirm the container no longer has shell access:
 
-```console
+```
 docker exec -it <container-id> sh
 OCI runtime exec failed: exec failed: unable to start container process: ...
 ```
 
-Use Docker Debug if you need to troubleshoot a running distroless container.
+Use [Docker Debug](#) if you need to troubleshoot a running distroless container.
 
-## Step 6: Verify the results
+> **Note**
+>
+> If your organization requires FIPS/STIG compliant images, that's also an option in DHI Enterprise.
+
+## Step 5: Verify the results
 
 Compare the DHI-based image against the original using Docker Scout:
 
-```console
+```
 docker scout compare backstage:dhi \
     --to backstage:init \
     --platform linux/amd64 \
     --ignore-unchanged
 ```
 
-A typical comparison across the approaches shows results similar to the
-following:
+A typical comparison across the approaches shows results similar to the following:
 
-| Metric | Original | DHI `-dev` | DHI `-sfw-dev` | Enterprise (system packages) | Enterprise (OCI artifact) |
-|---|---|---|---|---|---|
-| Disk usage | 1.61 GB | 1.72 GB | 1.9 GB | 1.55 GB | 1.49 GB |
-| Content size | 268 MB | 288 MB | 328 MB | 363 MB | 247 MB |
-| Shell in runtime | Yes | Yes | Yes | No | No |
-| Package manager | Yes | Yes | Yes | No | No |
-| Non-root default | No | No | No | Yes | Yes |
-| Socket Firewall | No | No | Yes (build) | No | No |
-| SLSA provenance | No | Base only | Base only | Full (Level 3) | Full (Level 3) |
+| Metric | Original | DHI -dev | DHI -sfw-dev | Enterprise |
+|--------|----------|----------|--------------|------------|
+| Disk usage | 1.61 GB | 1.72 GB | 1.9 GB | 1.49 GB |
+| Content size | 268 MB | 288 MB | 328 MB | 247 MB |
+| Shell in runtime | Yes | Yes | Yes | No |
+| Package manager | Yes | Yes | Yes | No |
+| Non-root default | No | No | No | Yes |
+| Socket Firewall | No | No | Yes (build) | No |
+| SLSA provenance | No | Base only | Base only | Full (Level 3) |
 
 > **Note**
 >
-> The `-sfw-dev` variant is larger because Socket Firewall adds monitoring
-> tooling to the image. This is expected — the additional size is in the
-> build stages, and the security benefit during `yarn install` outweighs
-> the size increase.
+> The `-sfw-dev` variant is larger because Socket Firewall adds monitoring tooling to the image. This is expected — the additional size is in the build stages, and the security benefit during `yarn install` outweighs the size increase.
 
 For a more thorough assessment, scan with multiple tools:
 
-```console
+```
 trivy image backstage:dhi
 grype backstage:dhi
 docker scout quickview backstage:dhi
 ```
 
-Different scanners detect different issues. Running all three gives you the
-most complete view of your security posture.
+Different scanners detect different issues. Running all three gives you the most complete view of your security posture.
 
 ## What's next
 
-- [Customize an image](/dhi/how-to/customize/) — complete reference on the
-  Enterprise customization UI.
-- [`dhictl` CLI](https://github.com/docker-hardened-images/dhictl) — manage
-  DHI images, mirrors, and customizations from the command line.
-- [Migrate to DHI](/dhi/migration/) — for applications that work with
-  standard DHI images without additional packages.
-- [Compare images](/scout/how-tos/compare-images/) — evaluate security
-  improvements between your original and hardened images.
-- [Docker Debug](/reference/cli/docker/debug/) — troubleshoot distroless
-  containers that have no shell.
-- [Socket Firewall in DHI](/dhi/concepts/socket-firewall/) — how `-sfw`
-  variants protect against supply chain attacks.
+- [Customize an image](#) — complete reference on the Enterprise customization UI.
+- [Create and build a DHI](#) — learn how to write a DHI definition file, build images locally.
+- [Use the DHI CLI](#) — manage DHI images, mirrors, and customizations from the command line.
+- [Migrate to DHI](#) — for applications that work with standard DHI images without additional packages.
+- [Compare images](#) — evaluate security improvements between your original and hardened images.
+- [Docker Debug](#) — troubleshoot distroless containers that have no shell.
