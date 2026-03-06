@@ -1,17 +1,17 @@
------
-
-## title: Use Docker Hardened Images with OpenShift
+---
+title: Use Docker Hardened Images with Red Hat OpenShift
 description: Deploy Docker Hardened Images on Red Hat OpenShift Container Platform, covering Security Context Constraints, arbitrary user ID assignment, file permissions, and best practices.
 keywords: docker hardened images, dhi, openshift, OCP, SCC, security context constraints, nonroot, distroless, containers, red hat
-tags: [“Docker Hardened Images”, “dhi”]
+tags: ["Docker Hardened Images", "dhi"]
 params:
-proficiencyLevel: Intermediate
-time: 30 minutes
-prerequisites: |
-- An OpenShift cluster (version 4.11 or later recommended)
-- The `oc` CLI authenticated to your cluster
-- A Docker Hub account with access to Docker Hardened Images
-- Familiarity with OpenShift Security Context Constraints (SCCs)
+  proficiencyLevel: Intermediate
+  time: 30 minutes
+  prerequisites:
+    - An OpenShift cluster (version 4.11 or later recommended)
+    - The oc CLI authenticated to your cluster
+    - A Docker Hub account with access to Docker Hardened Images
+    - Familiarity with OpenShift Security Context Constraints (SCCs)
+---
 
 Docker Hardened Images (DHI) can be deployed on Red Hat OpenShift Container
 Platform, but OpenShift’s security model differs from standard Kubernetes in
