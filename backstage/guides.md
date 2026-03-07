@@ -1,4 +1,4 @@
-# Harden a Backstage application with Docker Hardened Images
+# Secure a Backstage application with Docker Hardened Images
 
 This guide shows how to secure a Backstage application using Docker Hardened Images (DHI). Backstage is a CNCF open source developer portal used by thousands of organizations to manage their software catalogs, templates, and developer tooling.
 
