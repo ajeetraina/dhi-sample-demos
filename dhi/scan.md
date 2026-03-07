@@ -68,7 +68,7 @@ To build with maximum provenance, use the `--provenance=max` flag with
 $ docker buildx build \
     --provenance=max \
     --push \
-    -t <your-registry>/<your-image>:<tag> .
+    -t docker.io/<namespace>/<image>:<tag> .
 ```
 
 > **Important**
