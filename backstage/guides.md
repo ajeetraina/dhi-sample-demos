@@ -1,4 +1,17 @@
-# Secure a Backstage application with Docker Hardened Images
+---
+title: Secure a Backstage application with Docker Hardened Images
+description: Secure a Backstage developer portal container using Docker Hardened Images, covering native module compilation, multi-stage builds, Socket Firewall protection, and distroless runtime images.
+keywords: docker hardened images, dhi, backstage, CNCF, developer portal, node.js, native modules, sqlite, better-sqlite3, distroless, socket firewall, dhictl, multi-stage build
+tags: ["Docker Hardened Images", "dhi"]
+params:
+  proficiencyLevel: Intermediate
+  time: 45 minutes
+  prerequisites:
+    - Docker Desktop or Docker Engine with BuildKit enabled
+    - A Docker Hub account authenticated with docker login and docker login dhi.io
+    - A Backstage project created with @backstage/create-app
+    - Basic familiarity with multi-stage Dockerfiles and Node.js native modules
+---
 
 This guide shows how to secure a Backstage application using Docker Hardened Images (DHI). Backstage is a CNCF open source developer portal used by thousands of organizations to manage their software catalogs, templates, and developer tooling.
 
@@ -448,9 +461,9 @@ Different scanners detect different issues. Running all three gives you the most
 
 ## What's next
 
-- [Customize an image](#) — complete reference on the Enterprise customization UI.
-- [Create and build a DHI](#) — learn how to write a DHI definition file, build images locally.
-- [Use the DHI CLI](#) — manage DHI images, mirrors, and customizations from the command line.
-- [Migrate to DHI](#) — for applications that work with standard DHI images without additional packages.
-- [Compare images](#) — evaluate security improvements between your original and hardened images.
-- [Docker Debug](#) — troubleshoot distroless containers that have no shell.
+- [Customize an image](/dhi/how-to/customize/) — complete reference on the Enterprise customization UI.
+- [Create and build a DHI](/dhi/how-to/build/) — learn how to write a DHI definition file, build images locally.
+- [Use the DHI CLI](dhi/how-to/cli/) — manage DHI images, mirrors, and customizations from the command line.
+- [Migrate to DHI](/dhi/migration/) — for applications that work with standard DHI images without additional packages.
+- [Compare images](/dhi/how-to/compare/) — evaluate security improvements between your original and hardened images.
+- [Docker Debug](/dhi/how-to/debug/) — troubleshoot distroless containers that have no shell.
