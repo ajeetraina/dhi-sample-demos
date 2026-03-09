@@ -5,8 +5,8 @@ your Docker Hub namespace), update your commands to reference the mirrored image
 
 For example:
 
-- Public image: `dhi.io/<repository>:<tag>`
-- Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
+- Public image: `dhi.io/istio-pilot:<tag>`
+- Mirrored image: `<your-namespace>/dhi-istio-pilot:<tag>`
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
@@ -14,36 +14,76 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 
 This Docker Hardened Image includes:
 
-- Istio control plane components
-- Certificate issuance tools
-- Configuration validation utilities
+- `pilot-discovery` binary — the Istio control plane (Istiod) for service discovery and configuration distribution
+- mTLS certificate issuance and rotation via built-in CA
+- Configuration validation webhook support
+- TLS certificates (`SSL_CERT_FILE` pre-configured)
 - CIS benchmark compliance (runtime), FIPS 140 + STIG + CIS compliance (FIPS variant)
 
-## Start a Istio Pilot instance
+## Start an Istio Pilot instance
 
-The Istio Pilot image (also known as Istiod) is the **control plane component** that manages service discovery,
-configuration, and certificate management. It runs as a Deployment in Kubernetes and cannot be run standalone.
+The Istio Pilot image (also known as Istiod) is the control plane component that manages service discovery,
+configuration distribution, and certificate management for the Istio service mesh. It is designed to run as a
+Deployment in Kubernetes and requires a Kubernetes environment to function fully.
 
-Run the following command and replace `<tag>` with the image variant you want to run:
+Run the following command and replace `<tag>` with the image variant you want to run (for example,
+`1.28-debian13`):
 
 ```console
-$ docker run --rm dhi.io/istio-pilot:<tag> <flags>
+$ docker run --rm dhi.io/istio-pilot:<tag> version
+```
+
+To check the short version:
+
+```console
+$ docker run --rm dhi.io/istio-pilot:<tag> version --short
+```
+
+To view all available discovery flags:
+
+```console
+$ docker run --rm dhi.io/istio-pilot:<tag> discovery --help
 ```
 
 ## Common Istio Pilot use cases
 
-### Control plane for service mesh
+### Start the proxy discovery service
 
-Istiod provides service discovery, configuration distribution, and proxy management for all data plane components in the
-mesh.
+Istiod provides xDS-based service discovery, configuration distribution, and proxy management for all Envoy
+sidecars in the mesh. In a Kubernetes deployment, it listens on the following ports:
 
-### Certificate authority
+- `:15010` — gRPC (plaintext)
+- `:15012` — gRPC (TLS)
+- `:15017` — HTTPS (injection and validation webhooks)
+- `:15014` — HTTP (self-monitoring and metrics)
+- `:9876` — ControlZ introspection
 
-Istiod acts as a certificate authority, issuing and rotating certificates for mTLS communication between services.
+```console
+$ docker run --rm dhi.io/istio-pilot:<tag> discovery --help
+```
 
-### Configuration validation
+### Query Pilot metrics and debug endpoints
 
-Istiod validates Istio configuration resources and provides webhook endpoints for admission control.
+Use the `request` subcommand to make HTTP requests to Pilot's internal metrics and debug endpoint while
+Istiod is running in Kubernetes:
+
+```console
+$ docker run --rm dhi.io/istio-pilot:<tag> request --help
+```
+
+### Check Istio Pilot version
+
+Verify the version of the Istio Pilot image:
+
+```console
+$ docker run --rm dhi.io/istio-pilot:<tag> version
+```
+
+For a concise single-line output:
+
+```console
+$ docker run --rm dhi.io/istio-pilot:<tag> version --short
+```
 
 ### Deploy Istio Pilot in Kubernetes
 
@@ -64,6 +104,7 @@ metadata:
   name: istiod
   namespace: istio-system
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: istiod
@@ -81,11 +122,14 @@ spec:
         ports:
         - containerPort: 15010
         - containerPort: 15012
+        - containerPort: 15014
+        - containerPort: 15017
         securityContext:
-          runAsUser: 65532
+          runAsUser: 1337
 ```
 
-Note: This configuration uses `runAsUser: 65532` to avoid issues with the nonroot string user.
+> **Note:** This configuration uses `runAsUser: 1337` which matches the user set in the DHI image. The Istio
+> project uses UID `1337` by convention for the `istio-proxy` user.
 
 Apply the configuration and verify:
 
@@ -96,30 +140,39 @@ $ kubectl get pods -n istio-system
 
 ## Official Docker image (DOI) vs Docker Hardened Image (DHI)
 
-| Feature | DOI (`istio/pilot`) | DHI (`dhi.io/istio-pilot`) |
-|---------|----------------------|-----------------------------|
-| User    | root | nonroot |
-| Shell   | bash | none |
-| Package manager | apt-get | none |
-| Entrypoint | ["pilot-discovery"] | ["pilot-discovery"] |
-| Uncompressed size | 200MB | 180MB |
-| Zero CVE commitment | No | Yes |
-| FIPS variant | No | Yes (FIPS + STIG + CIS) |
-| Base OS | Ubuntu 20.04 | Docker Hardened Images (Debian 13) |
-| Compliance labels | None | CIS (runtime), FIPS+STIG+CIS (fips) |
-| ENV: PILOT_MODE | istio-pilot | istio-pilot |
-| Architectures | amd64, arm64 | amd64, arm64 |
+| Feature             | DOI (`istio/pilot`)                        | DHI (`dhi.io/istio-pilot`)              |
+|---------------------|--------------------------------------------|-----------------------------------------|
+| User                | `1337:1337`                                | `1337`                                  |
+| Shell               | sh (present)                               | none                                    |
+| Package manager     | apt-get (present)                          | none                                    |
+| Entrypoint          | `["/usr/local/bin/pilot-discovery"]`       | `["/usr/local/bin/pilot-discovery"]`    |
+| Uncompressed size   | 375MB                                      | 225MB (runtime), 351MB (dev)            |
+| Zero CVE commitment | No                                         | Yes                                     |
+| FIPS variant        | No                                         | Yes (FIPS + STIG + CIS)                 |
+| Base OS             | Ubuntu 24.04 LTS                           | Docker Hardened Images (Debian 13)      |
+| Compliance labels   | None                                       | CIS (runtime), FIPS+STIG+CIS (fips)    |
+| ENV                 | `PATH`, `DEBIAN_FRONTEND=noninteractive`   | `PATH`, `SSL_CERT_FILE`                 |
+| Architectures       | amd64, arm64                               | amd64, arm64                            |
 
 ## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
 their tag.
 
-- **FIPS variants** - FIPS 140 + STIG + CIS compliance
-- **Runtime variants** - production use, nonroot, no shell/pkg manager
+**Runtime variants** are intended for production use. They run as user `1337`, contain no shell and no package
+manager, and are CIS benchmark compliant.
 
-To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
-select a tag.
+**Dev variants** are intended for build and development use. They run as `root`, include `bash` and `apt-get`,
+and are useful for multi-stage builds or debugging workflows.
+
+**FIPS variants** are intended for environments requiring FIPS 140, STIG, and CIS compliance. They run as
+user `1337` with no shell or package manager.
+
+> **Note:** FIPS variants require a Docker Hardened Images subscription. Start a free 30-day trial at
+> [https://dhi.io](https://dhi.io).
+
+To view the image variants and get more information about them, select the **Tags** tab for this repository, and
+then select a tag.
 
 ## Migrate to a Docker Hardened Image
 
