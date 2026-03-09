@@ -1,11 +1,5 @@
 version: "2"
 
-name: dhi-guide-creator
-description: |
-  Multi-agent system that creates Docker Hardened Image (DHI) user guides
-  following the standard template, empirically validates every command,
-  and submits a PR to the dhi-sample-demos repository.
-
 agents:
   # ===== ROOT AGENT (Coordinator) =====
   root:
