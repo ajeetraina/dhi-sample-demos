@@ -1,3 +1,5 @@
+# Docker Hardened Image — Istio Pilot Guide
+
 ## Prerequisite
 
 All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
@@ -89,13 +91,69 @@ $ docker run --rm dhi.io/istio-pilot:<tag> version --short
 
 First follow the [authentication instructions for DHI in Kubernetes](https://docs.docker.com/dhi/how-to/k8s/#authentication).
 
-Create the namespace:
+**Step 1: Create the namespace**
 
 ```console
 $ kubectl create namespace istio-system
 ```
 
-Deployment YAML:
+**Step 2: Create the image pull secret**
+
+```console
+$ kubectl create secret docker-registry dhi-pull-secret \
+  --docker-server=dhi.io \
+  --docker-username=<your-docker-username> \
+  --docker-password=<your-docker-token> \
+  -n istio-system
+```
+
+**Step 3: Create the ServiceAccount**
+
+```console
+$ kubectl create serviceaccount istiod -n istio-system
+```
+
+**Step 4: Create the ClusterRole and bindings**
+
+Istiod requires cluster-wide permissions to manage service discovery, webhooks, and leader election:
+
+```console
+$ kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: istiod-clusterrole
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "configmaps", "endpoints", "pods", "services", "secrets", "nodes", "serviceaccounts"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses", "ingressclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["discovery.k8s.io"]
+  resources: ["endpointslices"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+EOF
+```
+
+```console
+$ kubectl create clusterrolebinding istiod-clusterrolebinding \
+  --clusterrole=istiod-clusterrole \
+  --serviceaccount=istio-system:istiod
+```
+
+**Step 5: Create the deployment YAML**
+
+Save the following as `deployment.yaml`:
 
 ```yaml
 apiVersion: apps/v1
@@ -115,10 +173,11 @@ spec:
     spec:
       serviceAccountName: istiod
       imagePullSecrets:
-      - name: <secret name>
+      - name: dhi-pull-secret
       containers:
       - name: discovery
         image: dhi.io/istio-pilot:<tag>
+        command: ["pilot-discovery", "discovery"]
         ports:
         - containerPort: 15010
         - containerPort: 15012
@@ -131,11 +190,29 @@ spec:
 > **Note:** This configuration uses `runAsUser: 1337` which matches the user set in the DHI image. The Istio
 > project uses UID `1337` by convention for the `istio-proxy` user.
 
-Apply the configuration and verify:
+> **Note:** The `command: ["pilot-discovery", "discovery"]` is required. Without it, the container prints
+> help text and exits immediately.
+
+**Step 6: Apply and verify**
 
 ```console
 $ kubectl apply -f deployment.yaml
 $ kubectl get pods -n istio-system
+```
+
+**Step 7: Confirm Istiod is running**
+
+```console
+$ kubectl logs -n istio-system -l app=istiod --tail=20
+```
+
+A healthy Istiod will show output similar to:
+
+```
+info    leader election lock obtained: istio-leader
+info    Starting ingress status writer
+info    leader election lock obtained: istio-gateway-deployment-default
+info    ads     XDS: Pushing Services:2 ConnectedEndpoints:0 Version:...
 ```
 
 ## Official Docker image (DOI) vs Docker Hardened Image (DHI)
