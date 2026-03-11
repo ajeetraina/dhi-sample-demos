@@ -1,6 +1,6 @@
-## How to use this image
+## Prerequisite
 
-All examples in this guide use the public image. If you’ve mirrored the repository for your own use (for example, to
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
@@ -23,16 +23,13 @@ security-hardened package:
 
 ## Start a cert-manager-cainjector image
 
-> **Note:** The cert-manager-acmesolver image is primarily designed to run inside a Kubernetes cluster as part of a full
-> cert-manager deployment. The standalone Docker command below simply displays configuration options.
+> **Note:** cert-manager-cainjector is designed to run within a Kubernetes cluster to inject CA certificate data into
+> webhook configurations. The following standalone Docker command displays the available configuration options.
 
 Run the following command and replace `<tag>` with the image variant you want to run.
 
-**Note:** cert-manager-cainjector is designed to run within a Kubernetes cluster to inject CA certificate data into
-webhook configurations. The following standalone Docker command displays the available configuration options.
-
 ```bash
-docker run --rm -it dhi.io/cert-manager-cainjector:<tag> --help
+docker run --rm dhi.io/cert-manager-cainjector:<tag> --help
 ```
 
 ### Configure injection sources
@@ -47,11 +44,11 @@ These injection sources can be controlled through annotations on target resource
 
 ### Configure namespace filtering
 
-The `--namespace` flag restricts the cainjector to only watch resources to a SINGLE namespace. By default, it watches
+The `--namespace` flag restricts the cainjector to only watch resources in a SINGLE namespace. By default, it watches
 all namespaces.
 
 ```bash
-docker run --rm -it dhi.io/cert-manager-cainjector:<tag> \
+docker run --rm dhi.io/cert-manager-cainjector:<tag> \
   --namespace=cert-manager
 ```
 
@@ -62,17 +59,19 @@ docker run --rm -it dhi.io/cert-manager-cainjector:<tag> \
 The cainjector automatically populates CA bundles for Kubernetes admission webhooks to enable secure communication
 between the API server and webhook endpoints.
 
-The following example shows a ValidatingAdmissionWebhook with CA injection annotation:
+The following example shows a ValidatingWebhookConfiguration with CA injection annotation:
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionWebhook
+kind: ValidatingWebhookConfiguration
 metadata:
   name: my-webhook
   annotations:
     cert-manager.io/inject-ca-from: webhook-ns/webhook-certificate
 webhooks:
 - name: webhook.example.com
+  admissionReviewVersions: ["v1"]
+  sideEffects: None
   clientConfig:
     service:
       name: webhook-service
@@ -93,13 +92,15 @@ must be [kubernetes.io/tls](https://kubernetes.io/docs/concepts/configuration/se
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingAdmissionWebhook
+kind: MutatingWebhookConfiguration
 metadata:
   name: my-mutating-webhook
   annotations:
     cert-manager.io/inject-ca-from-secret: webhook-ns/ca-secret
 webhooks:
 - name: mutate.example.com
+  admissionReviewVersions: ["v1"]
+  sideEffects: None
   clientConfig:
     service:
       name: webhook-service
@@ -117,14 +118,22 @@ The cainjector is typically deployed as part of a complete cert-manager installa
 
 The following example shows a Deployment configuration for cert-manager-cainjector:
 
-```yaml
+```bash
+kubectl apply -f - <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cert-manager-cainjector
   namespace: cert-manager
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cert-manager-cainjector
   template:
+    metadata:
+      labels:
+        app: cert-manager-cainjector
     spec:
       containers:
       - name: cert-manager-cainjector
@@ -135,6 +144,7 @@ spec:
         - --leader-election-namespace=$(POD_NAMESPACE)
       imagePullSecrets:
       - name: <secret name>
+EOF
 ```
 
 ## Image variants
@@ -178,13 +188,13 @@ If you want to use the RFC2136 DNS-01 solver, there are two signatures that are 
 will Panic (sha1 and md5), some of the DNS servers may require these legacy algorithms for TSIG authentication, removing
 those would break compatibility with existing DNS infrastructure.
 
-A way to mitigate this is to specifying in the `spec.acme.solvers[dnsXX].rfc2136.tsigAlgorithm` spec of your `Issuer` or
+A way to mitigate this is to specify in the `spec.acme.solvers[dnsXX].rfc2136.tsigAlgorithm` spec of your `Issuer` or
 `ClusterIssuer` with some FIPS-approved algorithm.
 
 Example:
 
 ```yaml
-  apiVersion: cert-manager.io/v1
+apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: example-rfc2136
@@ -207,20 +217,16 @@ spec:
 
 2. Legacy TLS cipher suites (RC4, ChaCha20, SHA1...):
 
-Cert-manager supports non FIPS-compliant
+cert-manager supports non FIPS-compliant
 [ciphers](https://github.com/cert-manager/cert-manager/blob/d7090f55e7aae3ebee6a0917a2b59eef37e36c75/third_party/forked/acme/autocert/autocert.go#L363)
-from the go's autocert library, and is needed for the ACME client to be compatible with older DNS servers.
+from the Go autocert library, and is needed for the ACME client to be compatible with older DNS servers.
 
-cert-manager's fork of "Go's autocert" is part of a function (supportsECDSA) that decides whether to serve an ECDSA
-certificate based on what the client's TLS handshake says it supports
+Note: These are only supported, not preferred - modern clients will negotiate stronger ciphers.
 
-Note: These are only supported, not preferred - modern clients will negotiate stronger ciphers
-
-3. PKCS#12 legacy profiles (DES and RC2): Cert Manager supports
+3. PKCS#12 legacy profiles (DES and RC2): cert-manager supports
    [LegacyDESPKCS12Profile and LegacyRC2PKCS12Profile](https://github.com/cert-manager/cert-manager/blob/d7090f55e7aae3ebee6a0917a2b59eef37e36c75/pkg/controller/certificates/issuing/internal/keystore.go#L68-L73)
    using DES and RC2, those are required for backward compatibility with systems that only support legacy PKCS#12
-   formats. Even cert manager states that this is an experimental feature, Modern2023 profile is available as
-   FIPS-compliant alternative
+   formats. Modern2023 profile is available as a FIPS-compliant alternative.
 
 Remediation: Avoid keystores entirely or use the
 [Modern 2023](https://github.com/cert-manager/cert-manager/blob/v1.19.1/pkg/apis/certmanager/v1/types_certificate.go#L536)
@@ -228,9 +234,7 @@ Certificate profile which supports secure algorithms.
 
 4. CHACHA20_POLY1305 cipher
    [scheme support](https://github.com/cert-manager/cert-manager/blob/d7090f55e7aae3ebee6a0917a2b59eef37e36c75/third_party/forked/acme/autocert/autocert.go#L337):
-   `autocert.go` Defines the `tlsECDSAWithSHA1` constant for client compatibility, it's logic checks the client's
-   offered cipher suites, if the client supports the `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305` cipher the application
-   will panic.
+   If the client supports `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305`, the application will panic.
 
 Remediation: Ensure your FIPS-compliant stack does not negotiate the `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305` as a valid
 cipher.
@@ -248,7 +252,7 @@ common changes are listed in the following table of migration notes:
 | Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                         |
 | Multi-stage build  | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime.                                             |
 | TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                 |
-| Ports              | Non-dev hardened images run as a nonroot user by default. cert-manager-cainjector typically uses port 9402 for metrics, which works without issues.                                |
+| Ports              | Non-dev hardened images run as a nonroot user by default. cert-manager-cainjector uses port 9402 for metrics (default: `0.0.0.0:9402`), which works without issues.               |
 | Entry point        | Docker Hardened Images may have different entry points than standard cert-manager images. Inspect entry points for Docker Hardened Images and update your deployment if necessary. |
 | No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.        |
 | Kubernetes RBAC    | Ensure RBAC permissions are correctly configured as cert-manager-cainjector requires specific permissions to watch and modify webhook configurations and API services.             |
@@ -262,9 +266,9 @@ The following steps outline the general migration process.
    deployment manifests to use the hardened images. If using Helm, update your values file accordingly.
 1. **For custom deployments, update the runtime image in your Dockerfile.** If you're building custom images based on
    cert-manager, ensure that your final image uses the hardened cert-manager-cainjector as the base.
-1. **Verify component compatibility** Ensure all cert-manager components (controller, webhook, cainjector, acmesolver)
+1. **Verify component compatibility.** Ensure all cert-manager components (controller, webhook, cainjector, acmesolver)
    are using compatible versions. The cainjector works in conjunction with these other components.
-1. **Test CA injection** After migration, test that webhook configurations are properly receiving CA bundle injections
+1. **Test CA injection.** After migration, test that webhook configurations are properly receiving CA bundle injections
    and that API server communication with webhooks continues to function correctly.
 
 ## Troubleshoot migration
@@ -296,14 +300,3 @@ with no shell.
 
 Docker Hardened Images may have different entry points than standard cert-manager images. Use `docker inspect` to
 inspect entry points for Docker Hardened Images and update your Kubernetes deployment if necessary.
-
-### cert-manager-cainjector specific troubleshooting
-
-- **Missing CA bundles**: If webhook configurations are missing CA bundles, check that the cainjector is running and has
-  proper RBAC permissions to read Certificate/Secret resources and modify webhook configurations.
-- **Annotation issues**: Verify that webhook resources have the correct injection annotations
-  (`cert-manager.io/inject-ca-from`, `cert-manager.io/inject-ca-from-secret`, or `cert-manager.io/inject-apiserver-ca`).
-- **Source resource missing**: If using `inject-ca-from`, ensure the referenced Certificate resource exists and has a
-  valid CA certificate. If using `inject-ca-from-secret`, verify the Secret exists and contains the expected CA data.
-- **Webhook communication failures**: If the API server cannot communicate with webhooks, check that CA bundles were
-  properly injected and that the webhook's serving certificate was issued by the expected CA.
