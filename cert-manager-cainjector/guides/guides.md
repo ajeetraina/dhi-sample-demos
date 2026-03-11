@@ -1,8 +1,4 @@
-# cert-manager-cainjector Docker Hardened Image Guide
-
-> Validated against `dhi.io/cert-manager-cainjector:1-debian13` · cert-manager v1.19.4
-
-## How to use this image
+## Prerequisite 
 
 All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
