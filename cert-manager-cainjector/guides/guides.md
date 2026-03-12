@@ -1,4 +1,4 @@
-## Prerequisite 
+## Prerequisite
 
 All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
 your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
@@ -384,8 +384,75 @@ First follow the
 [authentication instructions for DHI in Kubernetes](https://docs.docker.com/dhi/how-to/k8s/#authentication).
 
 The cainjector is typically deployed as part of a complete cert-manager installation in Kubernetes.
+It requires a ServiceAccount with cluster-scoped RBAC permissions to read CRDs, Certificates, and
+Secrets, and to update webhook configurations and APIServices.
 
-The following example shows a Deployment configuration for cert-manager-cainjector:
+**Step 1: Create the namespace and imagePullSecret**
+
+```bash
+kubectl create namespace cert-manager
+
+kubectl create secret docker-registry dhi-pull-secret \
+  --docker-server=dhi.io \
+  --docker-username=<your-docker-username> \
+  --docker-password=<your-docker-password> \
+  -n cert-manager
+```
+
+**Step 2: Create the ServiceAccount and RBAC**
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cainjector
+  namespace: cert-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cainjector-role
+rules:
+- apiGroups: ["cert-manager.io"]
+  resources: ["certificates"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["apiregistration.k8s.io"]
+  resources: ["apiservices"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["secrets", "configmaps", "events"]
+  verbs: ["get", "list", "watch", "create", "patch", "update"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "create", "update", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cainjector-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cainjector-role
+subjects:
+- kind: ServiceAccount
+  name: cainjector
+  namespace: cert-manager
+EOF
+```
+
+**Step 3: Deploy cert-manager-cainjector**
+
+> **Note:** The `--cluster-resource-namespace` flag does not exist in this version. Use
+> `--leader-election-namespace` instead, populated via the `POD_NAMESPACE` environment variable
+> from the pod's own namespace using the Downward API.
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -404,37 +471,56 @@ spec:
       labels:
         app: cert-manager-cainjector
     spec:
+      serviceAccountName: cainjector
       containers:
       - name: cert-manager-cainjector
         image: dhi.io/cert-manager-cainjector:<tag>
         args:
         - --v=2
-        - --cluster-resource-namespace=$(POD_NAMESPACE)
         - --leader-election-namespace=$(POD_NAMESPACE)
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
       imagePullSecrets:
-      - name: <secret name>
+      - name: dhi-pull-secret
 EOF
+```
+
+**Step 4: Verify the deployment**
+
+```bash
+kubectl get pods -n cert-manager
+# NAME                                    READY   STATUS    RESTARTS   AGE
+# cert-manager-cainjector-xxx             1/1     Running   0          20s
+
+kubectl logs -n cert-manager deployment/cert-manager-cainjector | grep -E "Starting|Updated|leader"
+# I0312 07:10:35  "starting cert-manager ca-injector" version="1.19.4"
+# I0312 07:10:35  became leader
+# I0312 07:10:35  "Starting Controller" controller="validatingwebhookconfiguration"
+# I0312 07:10:35  "Starting Controller" controller="mutatingwebhookconfiguration"
+# I0312 07:10:35  "Starting Controller" controller="customresourcedefinition"
+# I0312 07:10:35  "Starting Controller" controller="apiservice"
 ```
 
 ## Official images vs Docker Hardened Images
 
-| Feature | Official cert-manager-cainjector | Docker Hardened cert-manager-cainjector |
-|---------|----------------------------------|----------------------------------------|
-| **Source** | `quay.io/jetstack/cert-manager-cainjector` | `dhi.io/cert-manager-cainjector` |
-| **Security** | Standard base with common utilities | Hardened base with significantly reduced attack surface |
-| **Shell access** | Shell available (`/bin/sh` or `/bin/bash`) | No shell in runtime variants — use `docker debug` |
-| **Package manager** | Package manager available (`apt`) | Removed in runtime variants |
-| **User** | Runs as root or unprivileged user | Runs as nonroot user by default |
-| **System utilities** | Standard toolchain present (`ls`, `cat`, `id`, `ps`, `find`) | Removed in runtime variants |
-| **Compliance** | None | CIS benchmark (runtime and dev variants) |
-| **Vulnerabilities** | Not continuously tracked | Runtime: None; actively patched by Docker |
-| **Variants** | Single image per release | Runtime (`1-debian13`), dev (`1-debian13-dev`), and FIPS (`1-fips`, `1-debian13-fips`) variants. FIPS variants carry CIS, FIPS, and STIG compliance badges with 0 vulnerabilities. Pulling FIPS variants requires a Docker subscription. |
-| **Entrypoint** | `/app/cmd/cainjector/cainjector` | `/usr/local/bin/cainjector` (different — update Kubernetes manifests accordingly) |
-| **Metrics port** | 9402 (`0.0.0.0:9402`) | 9402 (`0.0.0.0:9402`) (identical) |
-| **CA injection** | Full cert-manager cainjector functionality | Full cert-manager cainjector functionality (identical) |
-| **TLS certificates** | Standard certificates included | CA bundle (`ca-certificates.crt`) included |
-| **Multi-arch** | `linux/amd64`, `linux/arm64` | `linux/amd64`, `linux/arm64` |
-| **Vulnerability patching** | Patched on cert-manager release cadence | Continuously patched by Docker |
+| Feature | DOI (`quay.io/jetstack/cert-manager-cainjector`) | DHI (`dhi.io/cert-manager-cainjector`) |
+|---------|--------------------------------------------------|----------------------------------------|
+| **User** | `1000` (numeric UID) | `nonroot` (runtime/FIPS) / `root` (dev) |
+| **Shell** | No | No (runtime/FIPS) / Yes (dev) |
+| **Package manager** | No | No (runtime/FIPS) / Yes (dev) |
+| **Binary path** | `/app/cmd/cainjector/cainjector` | `/usr/local/bin/cainjector` |
+| **Entrypoint** | `["/app/cmd/cainjector/cainjector"]` | `["/usr/local/bin/cainjector"]` |
+| **Zero CVE commitment** | No | Yes |
+| **FIPS variant** | No | Yes (FIPS + STIG + CIS) |
+| **Base OS** | Minimal (no labels) | Docker Hardened Images (Debian 13) |
+| **Uncompressed size** | ~10.7 MB | ~12.6 MB (runtime) |
+| **Layers** | 15 | 7 |
+| **Compliance labels** | None | CIS (runtime), FIPS+STIG+CIS (fips) |
+| **ENV: SSL_CERT_FILE** | `/etc/ssl/certs/ca-certificates.crt` | `/etc/ssl/certs/ca-certificates.crt` |
+| **Architectures** | amd64, arm64 | amd64, arm64 |
 
 ## Image variants
 
@@ -569,17 +655,3 @@ with no shell.
 Docker Hardened Images may have different entry points than standard cert-manager images. Use `docker inspect` to
 inspect entry points for Docker Hardened Images and update your Kubernetes deployment if necessary.
 
-```bash
-docker image inspect dhi.io/cert-manager-cainjector:<tag> --format='{{json .Config.Entrypoint}}'
-```
-
-### cert-manager-cainjector specific troubleshooting
-
-- **Missing CA bundles**: If webhook configurations are missing CA bundles, check that the cainjector is running and has
-  proper RBAC permissions to read Certificate/Secret resources and modify webhook configurations.
-- **Annotation issues**: Verify that webhook resources have the correct injection annotations
-  (`cert-manager.io/inject-ca-from`, `cert-manager.io/inject-ca-from-secret`, or `cert-manager.io/inject-apiserver-ca`).
-- **Source resource missing**: If using `inject-ca-from`, ensure the referenced Certificate resource exists and has a
-  valid CA certificate. If using `inject-ca-from-secret`, verify the Secret exists and contains the expected CA data.
-- **Webhook communication failures**: If the API server cannot communicate with webhooks, check that CA bundles were
-  properly injected and that the webhook's serving certificate was issued by the expected CA.
