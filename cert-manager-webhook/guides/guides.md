@@ -55,7 +55,7 @@ The webhook binary accepts configuration via command-line flags. When running vi
 | Flag                     | Description                                                                      | Default | Required                                                                    |
 | ------------------------ | -------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------- |
 | `--kubeconfig`           | Path inside container to a kubeconfig file used to connect to the target cluster | none    | No (either provide `--kubeconfig` or rely on in-cluster credentials)        |
-| `--secure-port`          | Port number the webhook server listens on for HTTPS traffic                      | 10250   | No                                                                          |
+| `--secure-port`          | Port number the webhook server listens on for HTTPS traffic                      | 6443    | No                                                                          |
 | `--tls-cert-file`        | Path to the TLS certificate file for the webhook server                          | none    | Yes (or use CA Secret reference for dynamic generation)                     |
 | `--tls-private-key-file` | Path to the TLS private key file for the webhook server                          | none    | Yes (or use CA Secret reference for dynamic generation)                     |
 | `-v`, `--v`              | Log level verbosity (number)                                                     | 0       | No                                                                          |
@@ -79,8 +79,9 @@ The webhook intercepts CREATE and UPDATE requests for cert-manager resources and
 cert-manager's admission rules before they are persisted to etcd. This prevents misconfigured Certificate,
 Issuer, and ClusterIssuer resources from being accepted by the cluster.
 
-The following example shows a `ValidatingWebhookConfiguration` with the webhook configured to validate
-cert-manager resources:
+The `ValidatingWebhookConfiguration` is created and managed automatically by cert-manager when you install it.
+You do not apply it manually. The following shows the actual configuration deployed by cert-manager v1.19.4,
+retrieved with `kubectl get validatingwebhookconfiguration cert-manager-webhook -o yaml`:
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1
@@ -94,32 +95,63 @@ webhooks:
   admissionReviewVersions: ["v1"]
   sideEffects: None
   failurePolicy: Fail
+  matchPolicy: Equivalent
+  timeoutSeconds: 30
   clientConfig:
     service:
       name: cert-manager-webhook
       namespace: cert-manager
       path: /validate
+      port: 443
     # caBundle populated automatically by cainjector
+  namespaceSelector:
+    matchExpressions:
+    - key: cert-manager.io/disable-validation
+      operator: NotIn
+      values:
+      - "true"
   rules:
   - operations: ["CREATE", "UPDATE"]
     apiGroups: ["cert-manager.io", "acme.cert-manager.io"]
     apiVersions: ["v1"]
-    resources:
-    - certificates
-    - certificaterequests
-    - issuers
-    - clusterissuers
-    - orders
-    - challenges
+    resources: ["*/*"]
+```
+
+To verify the webhook is validating resources, apply an invalid Certificate with missing required fields:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: invalid-cert
+  namespace: cert-manager
+spec:
+  secretName: ""
+  issuerRef:
+    name: ""
+EOF
+```
+
+Expected output:
+
+```
+Error from server (Forbidden): error when creating "STDIN": admission webhook "webhook.cert-manager.io"
+denied the request: [spec.secretName: Required value: must be specified,
+spec.issuerRef.name: Required value: must be specified,
+spec: Invalid value: "": at least one of commonName (from the commonName field or from a literalSubject),
+dnsNames, uriSANs, ipAddresses, emailSANs or otherNames must be set]
 ```
 
 ### Mutate cert-manager resources
 
-The webhook can mutate incoming cert-manager resources by setting default values and normalising fields before
-they are stored. This ensures consistent resource state across the cluster without requiring every user to
-specify every optional field explicitly.
+The webhook mutates incoming `CertificateRequest` resources on CREATE by injecting the identity of the
+requesting user — specifically the `username`, `groups`, and `extra` fields. This allows cert-manager to
+enforce RBAC-based approval policies on certificate requests.
 
-The following example shows a `MutatingWebhookConfiguration` for cert-manager resource defaulting:
+The `MutatingWebhookConfiguration` is created and managed automatically by cert-manager when you install it.
+You do not apply it manually. The following shows the actual configuration deployed by cert-manager v1.19.4,
+retrieved with `kubectl get mutatingwebhookconfiguration cert-manager-webhook -o yaml`:
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1
@@ -133,47 +165,34 @@ webhooks:
   admissionReviewVersions: ["v1"]
   sideEffects: None
   failurePolicy: Fail
+  matchPolicy: Equivalent
+  timeoutSeconds: 30
   clientConfig:
     service:
       name: cert-manager-webhook
       namespace: cert-manager
       path: /mutate
+      port: 443
     # caBundle populated automatically by cainjector
   rules:
-  - operations: ["CREATE", "UPDATE"]
+  - operations: ["CREATE"]
     apiGroups: ["cert-manager.io"]
     apiVersions: ["v1"]
-    resources:
-    - certificates
-    - certificaterequests
-    - issuers
-    - clusterissuers
+    resources: ["certificaterequests"]
 ```
 
-### Convert cert-manager resource versions
+To verify mutation is working, create a Certificate and inspect the resulting CertificateRequest to confirm
+the webhook injected the `username`, `groups`, and `extra` fields:
 
-The webhook handles version conversion for cert-manager CRDs, allowing the Kubernetes API server to store
-resources in a single version while serving them across multiple API versions. This is required for cert-manager
-CRDs that support multiple API versions simultaneously.
+```bash
+kubectl get certificaterequest -n cert-manager -o jsonpath='{.items[0].spec.username}{"\n"}{.items[0].spec.groups}{"\n"}'
+```
 
-Conversion webhooks are configured directly in the CRD definition:
+Expected output:
 
-```yaml
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: certificates.cert-manager.io
-spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      conversionReviewVersions: ["v1"]
-      clientConfig:
-        service:
-          name: cert-manager-webhook
-          namespace: cert-manager
-          path: /convert
-        # caBundle populated automatically by cainjector
+```
+system:serviceaccount:cert-manager:cert-manager
+["system:serviceaccounts","system:serviceaccounts:cert-manager","system:authenticated"]
 ```
 
 ### End-to-end webhook deployment walkthrough
@@ -181,169 +200,81 @@ spec:
 The following steps demonstrate a complete cert-manager-webhook deployment, validated against cert-manager v1.19.4
 and `dhi.io/cert-manager-webhook:1-debian13`.
 
-**Prerequisites**: A running Kubernetes cluster with `kubectl` access. The cert-manager CRDs, controller, and
-cainjector should be installed and `Ready` before proceeding.
-
-**Step 1: Create the namespace and imagePullSecret**
+**Prerequisites**: A running Kubernetes cluster with `kubectl` and `helm` access. All cert-manager components
+must use Docker Hardened Images. The recommended way to install all components together is via the DHI Helm
+chart, which deploys `dhi.io/cert-manager-controller`, `dhi.io/cert-manager-cainjector`,
+`dhi.io/cert-manager-webhook`, and `dhi.io/cert-manager-acmesolver` automatically:
 
 ```bash
+# Create the namespace and imagePullSecret first
 kubectl create namespace cert-manager
 
-kubectl create secret docker-registry dhi-pull-secret \
+kubectl create secret docker-registry helm-pull-secret \
   --docker-server=dhi.io \
   --docker-username=<your-docker-username> \
   --docker-password=<your-docker-password> \
   -n cert-manager
+
+# Install all cert-manager components using the DHI Helm chart
+helm install my-cert-manager oci://dhi.io/cert-manager-chart --version 1 \
+  --namespace cert-manager \
+  --set "imagePullSecrets[0].name=helm-pull-secret"
+
+# Wait for all pods to be ready
+kubectl wait --for=condition=Ready pod --all -n cert-manager --timeout=120s
 ```
 
-**Step 2: Create the ServiceAccount and RBAC**
-
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cert-manager-webhook
-  namespace: cert-manager
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: cert-manager-webhook-role
-rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get", "list", "watch", "create", "update", "delete"]
-- apiGroups: ["admissionregistration.k8s.io"]
-  resources:
-  - validatingwebhookconfigurations
-  - mutatingwebhookconfigurations
-  verbs: ["get", "list", "watch", "update"]
-- apiGroups: ["apiextensions.k8s.io"]
-  resources: ["customresourcedefinitions"]
-  verbs: ["get", "list", "watch", "update"]
-- apiGroups: ["authorization.k8s.io"]
-  resources: ["subjectaccessreviews"]
-  verbs: ["create"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cert-manager-webhook-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cert-manager-webhook-role
-subjects:
-- kind: ServiceAccount
-  name: cert-manager-webhook
-  namespace: cert-manager
-EOF
-```
-
-**Step 3: Deploy cert-manager-webhook**
-
-```bash
-kubectl apply -f - <<'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cert-manager-webhook
-  namespace: cert-manager
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: cert-manager-webhook
-  template:
-    metadata:
-      labels:
-        app: cert-manager-webhook
-    spec:
-      serviceAccountName: cert-manager-webhook
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
-      containers:
-      - name: cert-manager-webhook
-        image: dhi.io/cert-manager-webhook:<tag>
-        args:
-        - --v=2
-        - --secure-port=10250
-        - --dynamic-serving-ca-secret-namespace=$(POD_NAMESPACE)
-        - --dynamic-serving-ca-secret-name=cert-manager-webhook-ca
-        - --dynamic-serving-dns-names=cert-manager-webhook
-        - --dynamic-serving-dns-names=cert-manager-webhook.cert-manager
-        - --dynamic-serving-dns-names=cert-manager-webhook.cert-manager.svc
-        env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        ports:
-        - name: https
-          containerPort: 10250
-          protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /livez
-            port: 6080
-            scheme: HTTP
-          initialDelaySeconds: 60
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 6080
-            scheme: HTTP
-          initialDelaySeconds: 5
-          periodSeconds: 5
-      imagePullSecrets:
-      - name: dhi-pull-secret
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: cert-manager-webhook
-  namespace: cert-manager
-spec:
-  selector:
-    app: cert-manager-webhook
-  ports:
-  - name: https
-    port: 443
-    targetPort: 10250
-EOF
-```
-
-**Step 4: Verify the deployment**
+**Step 1: Verify all pods are running DHI images**
 
 ```bash
 kubectl get pods -n cert-manager
-# NAME                                   READY   STATUS    RESTARTS   AGE
-# cert-manager-webhook-xxx               1/1     Running   0          30s
+# NAME                                         READY   STATUS    RESTARTS   AGE
+# my-cert-manager-xxx                          1/1     Running   0          73s
+# my-cert-manager-cainjector-xxx               1/1     Running   0          73s
+# my-cert-manager-webhook-xxx                  1/1     Running   0          73s
 
-kubectl logs -n cert-manager deployment/cert-manager-webhook | grep -E "Starting|listening|ready"
-# I0312 07:10:35  "starting cert-manager webhook" version="1.19.4"
-# I0312 07:10:35  "listening for requests" address=":10250"
+# Confirm DHI images are in use
+kubectl get pods -n cert-manager -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[0].image}{"\n"}{end}'
 ```
 
-**Step 5: Verify webhook TLS**
+**Step 2: Check webhook logs**
+
+```bash
+kubectl logs -n cert-manager deployment/my-cert-manager-webhook | grep -E "Starting|listening|ready"
+# I0312 07:10:35  "starting cert-manager webhook" version="1.19.4"
+# I0312 07:10:35  "listening for requests" address=":6443"
+```
+
+**Step 3: Verify webhook TLS**
 
 Within seconds of startup, the webhook generates its serving certificate from the CA Secret. Verify the CA
 Secret was created and inspect the certificate:
 
 ```bash
-kubectl get secret cert-manager-webhook-ca -n cert-manager
-# NAME                       TYPE     DATA   AGE
-# cert-manager-webhook-ca    Opaque   3      45s
+kubectl get secret my-cert-manager-webhook-ca -n cert-manager
+# NAME                          TYPE     DATA   AGE
+# my-cert-manager-webhook-ca    Opaque   3      45s
 
-kubectl get secret cert-manager-webhook-ca -n cert-manager \
+kubectl get secret my-cert-manager-webhook-ca -n cert-manager \
   -o jsonpath='{.data.ca\.crt}' | base64 -d \
   | openssl x509 -text -noout | grep -E "Subject:|Not After"
 ```
 
-**Step 6: Test admission control**
+**Step 4: Create a self-signed Issuer**
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+EOF
+```
+
+**Step 5: Test admission control**
 
 ```bash
 # Apply a valid Certificate — should succeed
@@ -378,28 +309,26 @@ EOF
 # Expected: Error from server: ... spec.secretName: Required value
 ```
 
-**Step 7: Clean up**
+**Step 6: Clean up**
 
 ```bash
 kubectl delete certificate test-cert -n cert-manager
-kubectl delete deployment cert-manager-webhook -n cert-manager
-kubectl delete service cert-manager-webhook -n cert-manager
-kubectl delete clusterrolebinding cert-manager-webhook-rolebinding
-kubectl delete clusterrole cert-manager-webhook-role
-kubectl delete serviceaccount cert-manager-webhook -n cert-manager
-kubectl delete secret cert-manager-webhook-ca dhi-pull-secret -n cert-manager
+kubectl delete issuer selfsigned-issuer -n cert-manager
+helm uninstall my-cert-manager -n cert-manager
+kubectl delete secret helm-pull-secret -n cert-manager
 kubectl delete namespace cert-manager
 ```
+
 
 ## Official images vs Docker Hardened Images
 
 | Feature | DOI (`quay.io/jetstack/cert-manager-webhook`) | DHI (`dhi.io/cert-manager-webhook`) |
 |---------|-----------------------------------------------|-------------------------------------|
-| **User** | `root` | `nonroot` / UID 65532 (runtime/FIPS) / `root` (dev) |
+| **User** | `1000` (numeric UID) | `nonroot` / UID 65532 (runtime/FIPS) / `root` (dev) |
 | **Shell** | Typically included | No (runtime/FIPS) / Yes (dev) |
 | **Package manager** | Varies | No (runtime/FIPS) / APT (dev) |
-| **Binary path** | `/webhook` | `/usr/local/bin/webhook` |
-| **Entrypoint** | `["/webhook"]` | `["/usr/local/bin/webhook"]` |
+| **Binary path** | `/app/cmd/webhook/webhook` | `/app/cmd/webhook/webhook` |
+| **Entrypoint** | `["/app/cmd/webhook/webhook"]` | `["/app/cmd/webhook/webhook"]` |
 | **Zero CVE commitment** | No | Yes |
 | **FIPS variant** | No | Yes (FIPS + STIG + CIS) |
 | **Base OS** | Ubuntu / Debian (no hardening labels) | Docker Hardened Images (Debian 13) |
@@ -439,6 +368,18 @@ Each component may be available as a separate Docker Hardened Image for deployme
 FIPS variants (`1-fips`, `1-debian13-fips`, `1.19-fips`, `1.19.4-fips`, `1.19.4-debian13-fips`) are available
 on Docker Hub and carry CIS, FIPS, and STIG compliance badges with 0 vulnerabilities. Pulling FIPS variants
 requires a Docker subscription — the tags return 401 without one.
+
+The FIPS image runs with the following verified environment variables that enable FIPS mode:
+
+- `GODEBUG=fips140=on` — enables FIPS 140 mode in the Go runtime
+- `GOFIPS140=v1.0.0` — specifies the FIPS 140 Go module version
+- `OPENSSL_CONF=/usr/lib/ssl/openssl.cnf` — points to the FIPS-enabled OpenSSL configuration
+- `OPENSSL_MODULES=/usr/lib/aarch64-linux-gnu/ossl-modules` — path to OpenSSL FIPS modules
+- `OPENSSL_VERSION=3.5.5` — OpenSSL version used
+
+> **Note:** The following behaviours are documented from cert-manager source code. They cannot be tested without
+> a Docker subscription, a FIPS-enabled Kubernetes cluster, and a live DNS server. Triggering these panics
+> requires a full production FIPS environment.
 
 When using FIPS variants, be aware of the following cert-manager behaviours involving non-FIPS-compliant algorithms:
 
@@ -493,8 +434,8 @@ common changes are listed in the following table of migration notes:
 | Non-root user      | By default, non-dev images, intended for runtime, run as the nonroot user. Ensure that necessary files and directories are accessible to the nonroot user.                                                                                             |
 | Multi-stage build  | Utilize images with a dev tag for build stages and non-dev images for runtime. For binary executables, use a static image for runtime.                                                                                                                 |
 | TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                     |
-| Ports              | Non-dev hardened images run as a nonroot user by default. cert-manager-webhook listens on port 10250 for HTTPS traffic by default (configurable via `--secure-port`), which works without issues.                                                      |
-| Entry point        | Docker Hardened Images may have different entry points than standard cert-manager images. The DHI entry point is `/usr/local/bin/webhook`. Inspect entry points for Docker Hardened Images and update your deployment if necessary.                     |
+| Ports              | Non-dev hardened images run as a nonroot user by default. cert-manager-webhook listens on port 6443 for HTTPS traffic by default (configurable via `--secure-port`), which works without issues.                                                      |
+| Entry point        | Docker Hardened Images may have different entry points than standard cert-manager images. The DHI entry point is `/app/cmd/webhook/webhook`. Inspect entry points for Docker Hardened Images and update your deployment if necessary.                     |
 | No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                            |
 | TLS configuration  | The webhook requires a valid TLS certificate and key at startup. Ensure your Deployment mounts the correct certificate files or references the CA Secret for dynamic generation.                                                                       |
 
@@ -550,20 +491,3 @@ with no shell.
 
 Docker Hardened Images may have different entry points than standard cert-manager images. Use `docker inspect` to
 inspect entry points for Docker Hardened Images and update your Kubernetes deployment if necessary.
-
-### Webhook timeout and connectivity
-
-If the Kubernetes API server cannot reach the webhook within the configured timeout, admission requests will fail or be
-allowed depending on the `failurePolicy` setting. Check pod status and logs, and verify the TLS CA Secret exists and is
-correctly referenced.
-
-```bash
-# Check webhook pod status
-kubectl get pods -n cert-manager -l app=cert-manager-webhook
-
-# Check pod logs for TLS or startup errors
-kubectl logs -n cert-manager deployment/cert-manager-webhook
-
-# Verify the CA Secret exists
-kubectl get secret cert-manager-webhook-ca -n cert-manager
-```
