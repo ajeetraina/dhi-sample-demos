@@ -1,3 +1,4 @@
+# cert-manager-startupapicheck Docker Hardened Image
 
 ## Prerequisite
 
@@ -61,7 +62,7 @@ commonly used flags include:
 | Flag | Description | Default | Required |
 | ---- | ----------- | ------- | -------- |
 | `--kubeconfig` | Path inside the container to a kubeconfig file used to connect to the target cluster | none | No — omit to use in-cluster credentials |
-| `--wait` | Duration to wait for cert-manager to become ready before failing | `1m` | No |
+| `--wait` | Duration to wait for cert-manager to become ready before failing | `0s` (poll once) | No |
 | `-v`, `--v` | Log level verbosity (number) | `0` | No |
 
 Example:
@@ -85,7 +86,44 @@ registered and the webhook is reachable before post-install steps proceed. It pr
 by attempting to create a `CertificateRequest` resource and checking for a valid admission response.
 
 When deployed via Helm, cert-manager automatically runs `startupapicheck` as a post-install Job. You can
-also run it manually to verify a running cert-manager installation:
+also run it manually to verify a running cert-manager installation.
+
+First, create the required service account and RBAC. This is handled automatically by Helm but must be
+created manually when using `kubectl apply`:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-manager-startupapicheck
+  namespace: cert-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cert-manager-startupapicheck
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificaterequests"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cert-manager-startupapicheck
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cert-manager-startupapicheck
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager-startupapicheck
+    namespace: cert-manager
+EOF
+```
+
+Then run the Job:
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -118,28 +156,36 @@ EOF
 A successful run produces output similar to:
 
 ```
-Not ready: the cert-manager webhook CA bundle is not injected yet
-Not ready: the cert-manager webhook CA bundle is not injected yet
-cert-manager has successfully started
+The cert-manager API is ready
 ```
 
 The Job exits 0 on success and the pod reaches `Completed` status.
 
 ### Use as a Helm post-install hook
 
+> **Note:** This use case was fully tested (Statements 51–70) using Helm v4.1.3 and
+> `dhi.io/cert-manager-chart:1.19.4`. The chart requires `installCRDs=true` as CRDs are not
+> installed by default. The `startupapicheck` Job ran as a post-install hook, waited for cainjector
+> to inject the webhook CA bundle, completed successfully, and was cleaned up automatically by Helm.
+
 In production deployments, `startupapicheck` runs automatically as a Helm post-install hook. When using
 the DHI Helm chart, no extra configuration is required — the hook is pre-configured to use the DHI image.
 The hook blocks the `helm install` command from returning until cert-manager is confirmed ready:
 
 ```bash
-helm install my-cert-manager oci://dhi.io/cert-manager-chart --version 1 \
+helm install my-cert-manager oci://dhi.io/cert-manager-chart --version 1.19.4 \
   --namespace cert-manager \
-  --set "imagePullSecrets[0].name=helm-pull-secret"
+  --set "global.imagePullSecrets[0].name=helm-pull-secret" \
+  --set "installCRDs=true"
 ```
 
 If `startupapicheck` fails, the Helm installation is marked as failed and the release is rolled back.
 
 ### Monitor readiness in CI/CD pipelines
+
+> **Note:** This use case was fully tested (Statements 37–38). The `kubectl wait` command
+> completes in under 5 seconds against a running cert-manager installation and the Job exits with
+> `The cert-manager API is ready`.
 
 `startupapicheck` is useful as a readiness gate in CI/CD pipelines after deploying cert-manager. Run the
 Job and wait for its completion before proceeding with certificate issuance steps:
@@ -157,7 +203,7 @@ kubectl apply -f my-certificate.yaml
 ## End-to-end startupapicheck deployment walkthrough
 
 The following steps demonstrate a complete deployment and verification, validated against cert-manager
-v1.17.2 and `dhi.io/cert-manager-startupapicheck:1-debian13`.
+v1.19.4 and `dhi.io/cert-manager-startupapicheck:1-debian13`.
 
 **Prerequisites:** A running Kubernetes cluster with `kubectl` and `helm` access. All cert-manager
 components must use Docker Hardened Images. The recommended way to install all components together is via
@@ -176,9 +222,10 @@ kubectl create secret docker-registry helm-pull-secret \
   -n cert-manager
 
 # Install all cert-manager components using the DHI Helm chart
-helm install my-cert-manager oci://dhi.io/cert-manager-chart --version 1 \
+helm install my-cert-manager oci://dhi.io/cert-manager-chart --version 1.19.4 \
   --namespace cert-manager \
-  --set "imagePullSecrets[0].name=helm-pull-secret"
+  --set "global.imagePullSecrets[0].name=helm-pull-secret" \
+  --set "installCRDs=true"
 
 # Wait for all pods to be ready
 kubectl wait --for=condition=Ready pod --all -n cert-manager --timeout=120s
@@ -196,10 +243,14 @@ kubectl get job -n cert-manager | grep startupapicheck
 
 ```bash
 kubectl logs job/my-cert-manager-startupapicheck -n cert-manager
-# Not ready: the cert-manager webhook CA bundle is not injected yet
-# Not ready: the cert-manager webhook CA bundle is not injected yet
-# cert-manager has successfully started
+# The cert-manager API is ready
 ```
+
+> **Note:** When deployed via Helm with `installCRDs=true`, the `startupapicheck` Job first polls
+> while cainjector injects the webhook CA bundle. You may see repeated `"Not ready"` messages
+> referencing `x509: certificate signed by unknown authority` for 60–90 seconds before the Job
+> completes. This is expected behavior. Once cainjector finishes CA injection, the Job completes and
+> is automatically cleaned up by Helm.
 
 **Step 3: Confirm the DHI image is in use**
 
@@ -249,9 +300,21 @@ Expected: `job.batch/startupapicheck-manual condition met`
 
 ```bash
 kubectl delete job startupapicheck-manual -n cert-manager
+kubectl delete clusterrolebinding cert-manager-startupapicheck
+kubectl delete clusterrole cert-manager-startupapicheck
+kubectl delete serviceaccount cert-manager-startupapicheck -n cert-manager
 helm uninstall my-cert-manager -n cert-manager
 kubectl delete secret helm-pull-secret -n cert-manager
 kubectl delete namespace cert-manager
+
+# CRDs are kept by Helm resource policy — delete manually if needed
+kubectl delete crd \
+  challenges.acme.cert-manager.io \
+  orders.acme.cert-manager.io \
+  certificaterequests.cert-manager.io \
+  certificates.cert-manager.io \
+  clusterissuers.cert-manager.io \
+  issuers.cert-manager.io
 ```
 
 ## Official images vs Docker Hardened Images
@@ -261,8 +324,8 @@ kubectl delete namespace cert-manager
 | User | `1000` (numeric UID) | `nonroot` / UID 65532 (runtime/FIPS) / `root` (dev) |
 | Shell | None | No (runtime/FIPS) / Yes (dev) |
 | Package manager | None | No (runtime/FIPS) / APT (dev) |
-| Binary path | `/app/cmd/startupapicheck/startupapicheck` | `/app/cmd/startupapicheck/startupapicheck` |
-| Entrypoint | `["/app/cmd/startupapicheck/startupapicheck"]` | `["/app/cmd/startupapicheck/startupapicheck"]` |
+| Binary path | `/startupapicheck` | `/usr/local/bin/startupapicheck` |
+| Entrypoint | `["/startupapicheck"]` | `["/usr/local/bin/startupapicheck"]` |
 | Zero CVE commitment | No | Yes |
 | FIPS variant | No | Yes (FIPS + STIG + CIS) |
 | Base OS | Distroless (Google) | Docker Hardened Images (Debian 13) |
@@ -272,8 +335,7 @@ kubectl delete namespace cert-manager
 | ENV: `SSL_CERT_FILE` | `/etc/ssl/certs/ca-certificates.crt` | `/etc/ssl/certs/ca-certificates.crt` |
 | Architectures | amd64, arm64 | amd64, arm64 |
 
-> **Note:** The binary path and entrypoint rows must be confirmed empirically with `docker inspect` before
-> publishing this guide.
+ 
 
 ## Image variants
 
@@ -402,7 +464,7 @@ The following steps outline the general migration process.
    components are deployed.
 
 5. **Confirm the check passes.** After migration, inspect the completed Job logs to confirm
-   `cert-manager has successfully started` appears in the output.
+   `The cert-manager API is ready` appears in the output.
 
 ## Troubleshoot migration
 
