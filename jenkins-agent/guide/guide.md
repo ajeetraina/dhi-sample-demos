@@ -311,10 +311,6 @@ use the `dev` image variant as a build stage and copy the required binaries to t
 
 ### Entry point
 
-Neither the DOI nor the DHI define an ENTRYPOINT — both rely on CMD. Use `docker inspect` to verify:
+Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
+to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
 
-```bash
-docker inspect --format='Entrypoint: {{json .Config.Entrypoint}} CMD: {{json .Config.Cmd}}' \
-  dhi.io/jenkins-agent:<tag>
-# Entrypoint: null CMD: ["/usr/local/bin/java","-jar","/usr/share/jenkins/agent.jar"]
-```
