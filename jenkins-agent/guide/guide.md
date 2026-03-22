@@ -1,4 +1,3 @@
-# jenkins-agent Docker Hardened Image
 
 ## Prerequisites
 
