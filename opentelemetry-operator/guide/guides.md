@@ -1,3 +1,4 @@
+# opentelemetry-operator Docker Hardened Image
 
 ## Prerequisites
 
@@ -22,7 +23,8 @@ single, security-hardened package:
   [open-telemetry/opentelemetry-operator](https://github.com/open-telemetry/opentelemetry-operator)
   repository
 - **OpenTelemetry Collector management**: Creates, configures, and manages OpenTelemetry Collector
-  instances via the `OpenTelemetryCollector` custom resource
+  instances via the `OpenTelemetryCollector` custom resource. Use `dhi.io/opentelemetry-collector:0-debian13`
+  as the collector image for a fully DHI deployment
 - **Auto-instrumentation support**: Manages automatic instrumentation for Java, Python, Node.js, .NET,
   Go, Apache HTTPD, and Nginx workloads via the `Instrumentation` custom resource
 - **Webhook server**: Validates and mutates OpenTelemetry custom resources via admission webhooks,
@@ -56,7 +58,7 @@ The `manager` binary accepts configuration via command-line flags. Commonly used
 | `--metrics-secure` | Enable secure serving for metrics with TLS | `true` | No |
 | `--tls-min-version` | Minimum TLS version | `VersionTLS12` | No |
 | `--enable-webhooks` | Enable admission webhooks | `true` | No |
-| `--collector-image` | Default OpenTelemetry Collector image | `ghcr.io/open-telemetry/...` | No |
+| `--collector-image` | Default OpenTelemetry Collector image. Override with `dhi.io/opentelemetry-collector:0-debian13` for a fully DHI deployment | `ghcr.io/open-telemetry/...` | No |
 | `--zap-log-level` | Log verbosity: `debug`, `info`, `error`, `panic` | `info` | No |
 | `--feature-gates` | Comma-delimited list of feature gate identifiers | See `--help` | No |
 | `--fips-disabled-components` | Disabled collector components on FIPS platforms | `uppercase` | No |
@@ -88,7 +90,7 @@ metadata:
   name: otel-collector
   namespace: default
 spec:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector:0.147.0
+  image: dhi.io/opentelemetry-collector:0-debian13
   config:
     receivers:
       otlp:
@@ -152,7 +154,7 @@ metadata:
   name: otel-collector-custom
   namespace: default
 spec:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector:0.147.0
+  image: dhi.io/opentelemetry-collector:0-debian13
   config:
     receivers:
       otlp:
@@ -179,7 +181,8 @@ spec:
 ## End-to-end opentelemetry-operator deployment walkthrough
 
 The following steps demonstrate a complete deployment and verification, validated against
-opentelemetry-operator v0.147.0 and `dhi.io/opentelemetry-operator:0-debian13`.
+opentelemetry-operator v0.147.0 and `dhi.io/opentelemetry-operator:0-debian13` with
+`dhi.io/opentelemetry-collector:0-debian13` — a fully DHI deployment with zero non-DHI images.
 
 **Prerequisites:** A running Kubernetes cluster with `kubectl` access, `cert-manager` installed (required
 for webhook TLS), and the OpenTelemetry Operator CRDs installed.
@@ -244,7 +247,7 @@ metadata:
   name: otel-test
   namespace: default
 spec:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector:0.147.0
+  image: dhi.io/opentelemetry-collector:0-debian13
   config:
     receivers:
       otlp:
@@ -272,9 +275,11 @@ kubectl get pods -n default | grep otel-test
 Expected output:
 
 ```
-NAME        MODE         VERSION   READY   AGE   IMAGE                                                                                     MANAGEMENT
-otel-test   deployment   0.0.0     1/1     30s   ghcr.io/.../opentelemetry-collector:0.147.0   managed
-otel-test-collector-xxx   1/1     Running   0          30s
+# Operator (opentelemetry-operator-system namespace)
+opentelemetry-operator-controller-manager-xxx: dhi.io/opentelemetry-operator:0-debian13
+
+# Collector (default namespace)
+otel-test-collector-xxx: dhi.io/opentelemetry-collector:0-debian13
 ```
 
 **Step 7: Clean up**
