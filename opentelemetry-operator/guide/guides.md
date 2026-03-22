@@ -319,7 +319,7 @@ kubectl delete crd \
 | SBOM / VEX metadata | No | Yes |
 | Compliance labels | None | CIS (runtime) |
 | ENV: `SSL_CERT_FILE` | Not set | `/etc/ssl/certs/ca-certificates.crt` |
-| Architectures | amd64, arm64 | amd64, arm64 |
+
 
 ## Image variants
 
@@ -421,7 +421,3 @@ Docker Debug to debug containers with no shell.
 Both the DOI and DHI use the same entrypoint `["/manager"]`. No changes are required when migrating.
 Use `docker inspect` to verify:
 
-```bash
-docker inspect --format='{{json .Config.Entrypoint}}' \
-  dhi.io/opentelemetry-operator:<tag>
-```
