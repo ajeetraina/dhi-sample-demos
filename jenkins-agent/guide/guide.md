@@ -1,39 +1,35 @@
-
 ## Prerequisites
 
-All examples in this guide use the public image. If you've mirrored the repository for your own use (for
-example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of
-the public one.
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to
+your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
 
 - Public image: `dhi.io/jenkins-agent:<tag>`
 - Mirrored image: `<your-namespace>/dhi-jenkins-agent:<tag>`
 
-For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the
-images.
+For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
 ## What's included in this jenkins-agent image
 
-This Docker Hardened jenkins-agent image includes the Jenkins Agent component in a single,
-security-hardened package:
+This Docker Hardened jenkins-agent image includes the Jenkins Agent component in a single, security-hardened package:
 
-- **Jenkins Remoting library** (`agent.jar`): Connects Jenkins agents to Jenkins controllers, located
-  at `/usr/share/jenkins/agent.jar` (Remoting version `3345`)
+- **Jenkins Remoting library** (`agent.jar`): Connects Jenkins agents to Jenkins controllers, located at
+  `/usr/share/jenkins/agent.jar` (Remoting version `3345`)
 - **Backward compatibility symlink**: `slave.jar → agent.jar` at `/usr/share/jenkins/slave.jar`
 - **Eclipse Temurin JRE 21**: Java runtime at `/usr/local/bin/java` (`openjdk 21.0.10`, Temurin-21.0.10+7)
 - **Bash shell**: Included in the runtime image (required for running build jobs)
 - **Pre-configured work directory**: `/home/jenkins/agent`
 - **TLS support**: Standard TLS certificates included for secure communication
 
-> **Note:** Unlike most Docker Hardened Images, the jenkins-agent runtime image **includes bash**. This
-> is intentional — Jenkins build jobs require a shell to execute pipeline steps.
+> **Note:** Unlike most Docker Hardened Images, the jenkins-agent runtime image **includes bash**. This is intentional —
+> Jenkins build jobs require a shell to execute pipeline steps.
 
 ## Start a jenkins-agent container
 
 The jenkins-agent image is designed to connect to a Jenkins controller. The default CMD runs
-`/usr/local/bin/java -jar /usr/share/jenkins/agent.jar` automatically, so you can start the container
-without specifying a command.
+`/usr/local/bin/java -jar /usr/share/jenkins/agent.jar` automatically, so you can start the container without specifying
+a command.
 
 ```bash
 docker run -i --rm --name jenkins-agent --init \
@@ -47,20 +43,19 @@ This command:
 - Uses `--init` for proper signal handling
 - Executes the default CMD to connect to a Jenkins controller
 
-**Expected behavior:** Without a Jenkins controller connected, the agent outputs the remoting capacity
-handshake string and waits for input on stdin:
+**Expected behavior:** Without a Jenkins controller connected, the agent outputs the remoting capacity handshake string
+and waits for input on stdin:
 
 ```
 <===[JENKINS REMOTING CAPACITY]===>rO0ABXNyABpodWRzb24...
 ```
 
-This is expected — the agent JAR is working correctly but waiting for a controller connection. This is
-not an error.
+This is expected — the agent JAR is working correctly but waiting for a controller connection. This is not an error.
 
 ### With work directory
 
-Starting from Remoting 3.8, agents support work directories which provide logging by default and change
-JAR caching behavior:
+Starting from Remoting 3.8, agents support work directories which provide logging by default and change JAR caching
+behavior:
 
 ```bash
 docker run -i --rm --name jenkins-agent --init \
@@ -79,14 +74,14 @@ INFO: Both error and output logs will be printed to /home/jenkins/agent/remoting
 
 ## Environment variables
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `AGENT_WORKDIR` | Agent work directory path | `/home/jenkins/agent` |
-| `JAVA_HOME` | Java installation directory | `/opt/java/openjdk/21-jre` |
-| `JAVA_VERSION` | Java version | `jre-21.0.10+7` |
-| `LANG` | Locale setting | `en_US.UTF-8` |
-| `TZ` | Timezone | `Etc/UTC` |
-| `USER` | User running the agent | `jenkins` |
+| Variable        | Description                 | Default                    |
+| --------------- | --------------------------- | -------------------------- |
+| `AGENT_WORKDIR` | Agent work directory path   | `/home/jenkins/agent`      |
+| `JAVA_HOME`     | Java installation directory | `/opt/java/openjdk/21-jre` |
+| `JAVA_VERSION`  | Java version                | `jre-21.0.10+7`            |
+| `LANG`          | Locale setting              | `en_US.UTF-8`              |
+| `TZ`            | Timezone                    | `Etc/UTC`                  |
+| `USER`          | User running the agent      | `jenkins`                  |
 
 Example with custom environment variables:
 
@@ -102,8 +97,7 @@ docker run -i --rm --name jenkins-agent --init \
 
 ### Basic agent connection
 
-Connect an agent to a Jenkins controller using the URL, secret, and agent name provided by the
-controller:
+Connect an agent to a Jenkins controller using the URL, secret, and agent name provided by the controller:
 
 ```bash
 docker run -i --rm --name jenkins-agent --init \
@@ -174,29 +168,29 @@ docker run -i --rm --name jenkins-agent --init \
 
 ## Official images vs Docker Hardened Images
 
-| Feature | DOI (`docker.io/jenkins/agent`) | DHI (`dhi.io/jenkins-agent`) |
-| ------- | -------------------------------- | ----------------------------- |
-| User | `jenkins` | `jenkins` |
-| Shell | bash (included) | bash (included) |
-| Package manager | Included | No (runtime) / APT (dev) |
-| Default CMD | `["bash"]` | `["/usr/local/bin/java","-jar","/usr/share/jenkins/agent.jar"]` |
-| Entrypoint | None | None |
-| Java version | OpenJDK 21 (Temurin) | OpenJDK 21.0.10 (Temurin-21.0.10+7) |
-| `JAVA_HOME` | `/opt/java/openjdk` | `/opt/java/openjdk/21-jre` |
-| `LANG` | `C.UTF-8` | `en_US.UTF-8` |
-| Remoting version | 3307 | 3345 (newer) |
-| Zero CVE commitment | No | Yes |
-| FIPS variant | No | Yes (subscription required) |
-| Base OS | Debian | Docker Hardened Images (Debian 13) |
-| Signed provenance | No | Yes |
-| SBOM / VEX metadata | No | Yes |
-| Compliance labels | None | CIS (runtime) |
-| Architectures | amd64, arm64 | amd64, arm64 |
+| Feature             | DOI (`docker.io/jenkins/agent`) | DHI (`dhi.io/jenkins-agent`)                                    |
+| ------------------- | ------------------------------- | --------------------------------------------------------------- |
+| User                | `jenkins`                       | `jenkins`                                                       |
+| Shell               | bash (included)                 | bash (included)                                                 |
+| Package manager     | Included                        | No (runtime) / APT (dev)                                        |
+| Default CMD         | `["bash"]`                      | `["/usr/local/bin/java","-jar","/usr/share/jenkins/agent.jar"]` |
+| Entrypoint          | None                            | None                                                            |
+| Java version        | OpenJDK 21 (Temurin)            | OpenJDK 21.0.10 (Temurin-21.0.10+7)                             |
+| `JAVA_HOME`         | `/opt/java/openjdk`             | `/opt/java/openjdk/21-jre`                                      |
+| `LANG`              | `C.UTF-8`                       | `en_US.UTF-8`                                                   |
+| Remoting version    | 3307                            | 3345 (newer)                                                    |
+| Zero CVE commitment | No                              | Yes                                                             |
+| FIPS variant        | No                              | Yes (subscription required)                                     |
+| Base OS             | Debian                          | Docker Hardened Images (Debian 13)                              |
+| Signed provenance   | No                              | Yes                                                             |
+| SBOM / VEX metadata | No                              | Yes                                                             |
+| Compliance labels   | None                            | CIS (runtime)                                                   |
+| Architectures       | amd64, arm64                    | amd64, arm64                                                    |
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use. Image variants are
-identified by their tag.
+Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
+their tag.
 
 - **Runtime variants** are designed to run the Jenkins agent in production. These images:
 
@@ -205,44 +199,44 @@ identified by their tag.
   - Do not include a package manager
   - Contain only the minimal set of libraries needed to run the agent
 
-- **Build-time variants** typically include `dev` in the tag name and are intended for use in the first
-  stage of a multi-stage Dockerfile. These images typically:
+- **Build-time variants** typically include `dev` in the tag name and are intended for use in the first stage of a
+  multi-stage Dockerfile. These images typically:
 
   - Run as the root user
   - Include a shell and package manager (apt-get 3.0.3)
   - Are used to build or compile applications
 
-- **FIPS variants** include `fips` in the variant name and tag. They use cryptographic modules validated
-  under FIPS 140, a U.S. government standard for secure cryptographic operations. Pulling FIPS variants
-  requires a Docker subscription — the tags return 401 without one.
+- **FIPS variants** include `fips` in the variant name and tag. They use cryptographic modules validated under FIPS 140,
+  a U.S. government standard for secure cryptographic operations. Pulling FIPS variants requires a Docker subscription —
+  the tags return 401 without one.
 
-To view the image variants and get more information about them, select the **Tags** tab for this
-repository, and then select a tag.
+To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
+select a tag.
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, update your Dockerfile or Kubernetes manifests.
-Common changes are listed in the following table of migration notes.
+To migrate your application to a Docker Hardened Image, update your Dockerfile or Kubernetes manifests. Common changes
+are listed in the following table of migration notes.
 
-| Item | Migration note |
-| :--- | :------------- |
-| Base image | Replace your base images in your Dockerfile or Kubernetes manifests with a Docker Hardened Image. |
-| Package management | Runtime images don't contain package managers. Use images with a `dev` tag for build stages that require package installation. |
-| User | Both DOI and DHI run as the `jenkins` user. No changes required. |
-| Shell | The runtime image includes bash. No changes required for build jobs that rely on a shell. |
-| Default CMD | DOI defaults to `["bash"]`. DHI defaults to `["/usr/local/bin/java","-jar","/usr/share/jenkins/agent.jar"]`. Update any scripts that rely on the DOI default CMD. |
-| Java path | DOI `JAVA_HOME=/opt/java/openjdk`. DHI `JAVA_HOME=/opt/java/openjdk/21-jre`. Update any scripts that reference `JAVA_HOME` directly. |
-| TLS certificates | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
-| Ports | Jenkins agents do not bind to any ports — they make outbound connections to the controller only. Privileged port restrictions do not apply. |
-| agent.jar path | Both DOI and DHI use `/usr/share/jenkins/agent.jar`. No changes required. |
-| Multi-stage build | Utilize images with a `dev` tag for build stages and runtime images for production. |
+| Item               | Migration note                                                                                                                                                    |
+| :----------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base image         | Replace your base images in your Dockerfile or Kubernetes manifests with a Docker Hardened Image.                                                                 |
+| Package management | Runtime images don't contain package managers. Use images with a `dev` tag for build stages that require package installation.                                    |
+| User               | Both DOI and DHI run as the `jenkins` user. No changes required.                                                                                                  |
+| Shell              | The runtime image includes bash. No changes required for build jobs that rely on a shell.                                                                         |
+| Default CMD        | DOI defaults to `["bash"]`. DHI defaults to `["/usr/local/bin/java","-jar","/usr/share/jenkins/agent.jar"]`. Update any scripts that rely on the DOI default CMD. |
+| Java path          | DOI `JAVA_HOME=/opt/java/openjdk`. DHI `JAVA_HOME=/opt/java/openjdk/21-jre`. Update any scripts that reference `JAVA_HOME` directly.                              |
+| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                |
+| Ports              | Jenkins agents do not bind to any ports — they make outbound connections to the controller only. Privileged port restrictions do not apply.                       |
+| agent.jar path     | Both DOI and DHI use `/usr/share/jenkins/agent.jar`. No changes required.                                                                                         |
+| Multi-stage build  | Utilize images with a `dev` tag for build stages and runtime images for production.                                                                               |
 
 The following steps outline the general migration process.
 
-1. **Find hardened images for your app.** Inspect the image tags for `dhi.io/jenkins-agent` and find
-   the variant that meets your needs (runtime, dev, or FIPS).
+1. **Find hardened images for your app.** Inspect the image tags for `dhi.io/jenkins-agent` and find the variant that
+   meets your needs (runtime, dev, or FIPS).
 
-2. **Update the image reference in your Kubernetes manifests or Dockerfile.**
+1. **Update the image reference in your Kubernetes manifests or Dockerfile.**
 
    ```yaml
    # In your Deployment manifest
@@ -251,18 +245,17 @@ The following steps outline the general migration process.
        image: dhi.io/jenkins-agent:<tag>
    ```
 
-3. **Update the default CMD if needed.** The DHI default CMD runs the agent jar directly. If your
-   existing setup overrides the CMD, verify the java path is `/usr/local/bin/java`.
+1. **Update the default CMD if needed.** The DHI default CMD runs the agent jar directly. If your existing setup
+   overrides the CMD, verify the java path is `/usr/local/bin/java`.
 
-4. **Verify the agent connects to the controller.** After migration, confirm the agent appears as
-   online in the Jenkins controller UI.
+1. **Verify the agent connects to the controller.** After migration, confirm the agent appears as online in the Jenkins
+   controller UI.
 
 ## Troubleshoot migration
 
 ### General debugging
 
-Use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to a running container
-for debugging:
+Use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to a running container for debugging:
 
 ```bash
 docker debug <container-name>
@@ -270,8 +263,8 @@ docker debug <container-name>
 
 ### Permissions
 
-The runtime image runs as the `jenkins` user. Ensure that mounted volumes and files are accessible to
-the `jenkins` user. You may need to set appropriate permissions on host directories before mounting them.
+The runtime image runs as the `jenkins` user. Ensure that mounted volumes and files are accessible to the `jenkins`
+user. You may need to set appropriate permissions on host directories before mounting them.
 
 ### Deprecated positional arguments
 
@@ -294,22 +287,20 @@ Always use the `-secret` and `-name` flags explicitly:
 ### Default CMD difference
 
 The DOI default CMD is `["bash"]` while the DHI default CMD is
-`["/usr/local/bin/java","-jar","/usr/share/jenkins/agent.jar"]`. If your setup relies on the DOI
-default, update your `command` or `args` fields in Kubernetes manifests or your `docker run` command
-accordingly.
+`["/usr/local/bin/java","-jar","/usr/share/jenkins/agent.jar"]`. If your setup relies on the DOI default, update your
+`command` or `args` fields in Kubernetes manifests or your `docker run` command accordingly.
 
 ### Java path
 
-The DHI `JAVA_HOME` is `/opt/java/openjdk/21-jre` while the DOI `JAVA_HOME` is `/opt/java/openjdk`.
-Update any scripts or environment variables that reference `JAVA_HOME` directly.
+The DHI `JAVA_HOME` is `/opt/java/openjdk/21-jre` while the DOI `JAVA_HOME` is `/opt/java/openjdk`. Update any scripts
+or environment variables that reference `JAVA_HOME` directly.
 
 ### No package manager
 
-The runtime image does not include a package manager. If your build jobs require additional tools,
-use the `dev` image variant as a build stage and copy the required binaries to the runtime stage.
+The runtime image does not include a package manager. If your build jobs require additional tools, use the `dev` image
+variant as a build stage and copy the required binaries to the runtime stage.
 
 ### Entry point
 
 Docker Hardened Images may have different entry points than images such as Docker Official Images. Use `docker inspect`
 to inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.
-
