@@ -15,11 +15,11 @@ images.
 
 ### What's included in this Alpine Base image
 
-This Docker Hardened Image is built on **Docker Hardened Images/Alpine Linux v3.22**
-(`PRETTY_NAME="Docker Hardened Images/Alpine Linux v3.22"`). It includes:
+This Docker Hardened Image is built on **Docker Hardened Images/Alpine Linux v3.23**
+(`PRETTY_NAME="Docker Hardened Images/Alpine Linux v3.23"`). It includes:
 
 - BusyBox
-- Alpine Linux v3.22 utilities (musl libc, standard Alpine userland)
+- Alpine Linux v3.23 utilities (musl libc, standard Alpine userland)
 - Package manager: `apk` (dev variant only — runtime variant does not include `apk`)
 - CIS benchmark compliance (runtime), FIPS 140 + STIG + CIS compliance (FIPS variant)
 
@@ -34,7 +34,7 @@ $ docker run -it --rm dhi.io/alpine-base:<tag> sh
 ```
 
 > **Note:** The runtime variant includes `/bin/ash` and a shell. To use the dev variant for
-> build-time operations, use a tag that includes `-dev` (for example, `3.22-dev`).
+> build-time operations, use a tag that includes `-dev` (for example, `3.23-alpine3.23-dev`).
 
 ## Common Alpine Base use cases
 
@@ -142,10 +142,10 @@ $ kubectl get pods -n alpine-base-test
 | Uncompressed size   | ~5MB                         | ~4MB                                    |
 | Zero CVE commitment | No                           | Yes                                     |
 | FIPS variant        | No                           | Yes (FIPS + STIG + CIS)                 |
-| Base OS             | Alpine Linux                 | Docker Hardened Images/Alpine Linux v3.22 |
+| Base OS             | Alpine Linux                 | Docker Hardened Images/Alpine Linux v3.23 |
 | Compliance labels   | None                         | CIS (runtime), FIPS+STIG+CIS (fips)    |
 | ENV: PATH           | `/usr/sbin:/sbin:/bin`       | `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` |
-| Architectures       | amd64, arm64                 | amd64, arm64                            |
+
 
 ## Image variants
 
@@ -154,16 +154,19 @@ identified by their tag.
 
 - **Runtime variants** — designed for production use. These images:
   - Run as the `nonroot` user (UID 65532) by default
-  - Include `/bin/ash` shell
+  - Include `/bin/ash` and `/bin/sh`
   - Do **not** include a package manager (`apk`)
   - Contain only the minimal set of libraries needed to run the app
 
 - **Dev variants** (tag includes `-dev`) — intended for use in build stages of a multi-stage Dockerfile. These images:
   - Run as the `root` user
-  - Include a shell and `apk` package manager
+  - Include `/bin/ash`, `/bin/sh`, and the `apk` package manager (`apk-tools 3.0.5-r0`)
   - Are used to build, compile, or install application dependencies
 
-To view all available tags and variants, select the **Tags** tab for this repository.
+- **FIPS variants** (tag includes `-fips`) — for environments requiring FIPS 140 compliance. Available
+  in both runtime and dev flavours. These images carry CIS, FIPS, and STIG (100%) compliance badges.
+
+To view all available tags, select the **Tags** tab for this repository.
 
 ## Migrate to a Docker Hardened Image
 
