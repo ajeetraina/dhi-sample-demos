@@ -10,15 +10,20 @@ For example:
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
-### What's included in this Alpine Base image
+### What's included in this alpine-base image
 
-This Docker Hardened Image is built on **Docker Hardened Images/Alpine Linux v3.23**
-(`PRETTY_NAME="Docker Hardened Images/Alpine Linux v3.23"`). It includes:
+This Docker Hardened alpine-base image provides a minimal, security-hardened Alpine Linux foundation built on **Docker
+Hardened Images/Alpine Linux v3.23**:
 
-- BusyBox
-- Alpine Linux v3.23 utilities (musl libc, standard Alpine userland)
-- Package manager: `apk` (dev variant only — runtime variant does not include `apk`)
-- CIS benchmark compliance (runtime), FIPS 140 + STIG + CIS compliance (FIPS variant)
+- `busybox`: A single binary that provides lightweight implementations of common Unix utilities including `sh`, `ls`,
+  `cp`, `mv`, `wget`, and more — all essential for shell scripting and container tooling
+- `musl libc`: A lightweight, standards-compliant C standard library used as the foundation for all Alpine-based
+  binaries
+- `/bin/ash` and `/bin/sh`: POSIX-compatible shells provided by BusyBox, available in both the runtime and dev variants
+- `apk` package manager: Available in the dev variant only (`-dev` tag) for installing additional packages during build
+  stages — the runtime variant does not include `apk` to minimise attack surface
+- Standard TLS certificates: Pre-installed CA certificate bundle at `/etc/ssl/certs/ca-certificates.crt` for secure
+  outbound TLS connections without additional setup
 
 ## Start an Alpine Base instance
 
