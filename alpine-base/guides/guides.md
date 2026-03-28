@@ -86,7 +86,7 @@ CMD ["/usr/local/bin/server"]
 
 ### Deploy Alpine Base in Kubernetes
 
-- [Link to DHI K8s authentication instructions](https://example.com/k8s/auth)
+- [Link to DHI K8s authentication instructions](https://docs.docker.com/dhi/how-to/k8s/)
 - Create namespace:
 
 ```console
