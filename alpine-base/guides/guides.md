@@ -1,8 +1,3 @@
-# alpine-base Docker Hardened Image
-
-> ✅ **Empirically Validated** — All commands and use cases tested against `dhi.io/alpine-base:3.22`
-> on Docker Desktop (macOS, Apple Silicon). 18/18 checks passed, 0 failures, 0 warnings.
-> Last validated: March 2026.
 
 ## Prerequisite
 
