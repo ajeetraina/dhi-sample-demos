@@ -1,4 +1,3 @@
-# Docker Hardened Image: strimzi-kafka
 
 ## Prerequisites
 
