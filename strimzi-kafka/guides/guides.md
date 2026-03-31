@@ -1,131 +1,165 @@
-## How to use this image
+# Docker Hardened Image: strimzi-kafka
 
-All examples in this guide use the public image. If you’ve mirrored the repository for your own use (for example, to
-your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
+## Prerequisites
 
-For example:
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
-- Public image: `dhi.io/<repository>:<tag>`
-- Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
+| | Example |
+|---|---|
+| Public image | `dhi.io/strimzi-kafka:<tag>` |
+| Mirrored image | `<your-namespace>/dhi-strimzi-kafka:<tag>` |
 
-For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
+Before pulling images, authenticate to the registry:
 
-This image contains the Kafka broker and related binaries. You can run it directly with Docker to explore the included
-tools or check versions.
+```bash
+docker login dhi.io
+```
 
-For the following examples, replace `<tag>` with the image variant you want to run. To confirm the correct namespace and
-repository name of the mirrored repository, select **View in repository**.
+### What's included in this image
 
-Run a simple command to check the Kafka version:
+- Kafka broker and related binaries
+- CIS benchmark compliance (runtime variant)
+- FIPS 140, STIG, and CIS compliance (FIPS variant)
+
+---
+
+## Start a strimzi-kafka instance
+
+Running a `strimzi-kafka` image starts a Kafka broker. This lets you explore included binaries or run typical Kafka commands.
+
+Replace `<tag>` with the image variant you want to run:
 
 ```bash
 docker run --rm dhi.io/strimzi-kafka:<tag> /opt/kafka/bin/kafka-server-start.sh --version
 ```
 
-This image is designed to be used with the Strimzi Kafka Operator Helm chart. The operator manages the deployment and
-configuration of Kafka clusters on Kubernetes. For detailed information on deploying Kafka with the Strimzi operator,
-refer to the official Strimzi documentation at https://strimzi.io/
+---
+
+## Common use cases
+
+### Single Kafka broker setup
+
+<!-- Add single broker setup steps here -->
+
+### Multiple broker configuration
+
+<!-- Add multi-broker configuration steps here -->
+
+### Deploy strimzi-kafka in Kubernetes
+
+1. Follow the [DHI Kubernetes authentication instructions](https://docs.docker.com).
+
+2. Create a namespace for Kafka:
+
+    ```bash
+    kubectl create namespace kafka
+    ```
+
+3. Create a deployment manifest (`kafka-deployment.yaml`) with `imagePullSecrets`:
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: strimzi-kafka
+      namespace: kafka
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: kafka
+      template:
+        metadata:
+          labels:
+            app: kafka
+        spec:
+          imagePullSecrets:
+            - name: myregistrykey
+          containers:
+            - name: kafka
+              image: dhi.io/strimzi-kafka:<tag>
+              imagePullPolicy: Always
+              securityContext:
+                runAsUser: 65532  # nonroot user
+              ports:
+                - containerPort: 9092
+    ```
+
+4. Apply the deployment and verify the pods are running:
+
+    ```bash
+    kubectl apply -f kafka-deployment.yaml
+    kubectl get pods -n kafka
+    ```
+
+---
+
+## Docker Official Image vs Docker Hardened Image
+
+| Feature | DOI (`strimzi/kafka`) | DHI (`dhi.io/strimzi-kafka`) |
+|---|---|---|
+| User | 1001 | nonroot |
+| Shell | `/bin/bash` | None |
+| Package manager | apt-get | None |
+| Entrypoint | N/A | `/opt/kafka/bin/kafka-server-start.sh` |
+| Uncompressed size | 629 MB | 565 MB |
+| Zero CVE commitment | No | Yes |
+| FIPS variant | No | Yes (FIPS + STIG + CIS) |
+| Base OS | CentOS | Debian 13 |
+| Compliance labels | None | CIS (runtime), FIPS+STIG+CIS (fips) |
+| Architectures | amd64 | amd64, arm64 |
+
+---
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
-their tag.
+Image variants are identified by their tag.
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either
-  directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+| Variant | Description |
+|---|---|
+| **Runtime** | Production-ready images that run as a nonroot user without shells or package managers. |
+| **Dev** | Images tagged with `dev` that include shells and package managers for development use. |
+| **FIPS** | Images that comply with FIPS 140, STIG, and CIS standards. |
 
-  - Run as a nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+To view available variants, select the **Tags** tab in this repository and then select a tag.
 
-- Build-time variants typically include `dev` in the tag name and are intended for use in the first stage of a
-  multi-stage Dockerfile. These images typically:
-
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
-
-To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
-select a tag.
+---
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the
-base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the
-following table of migration notes.
+To migrate your application to a Docker Hardened Image, update your Dockerfile. At minimum, replace the base image. The table below covers this and other common changes:
 
-| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
-| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
-| Nonroot user       | By default, non-dev images, intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user.                                                                                                                                                                            |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can’t bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
+| Item | Migration note |
+|---|---|
+| Base image | Replace your base image in the Dockerfile with a Docker Hardened Image. |
+| Package management | Non-dev (runtime) images don't include package managers. Use package managers only in `dev`-tagged images. |
+| Non-root user | Runtime images run as the `nonroot` user by default. Ensure all required files and directories are accessible to this user. |
+| Multi-stage builds | Use `dev`-tagged images for build stages and non-dev images for the runtime stage. Use static images for binary executables. |
+| TLS certificates | Docker Hardened Images include standard TLS certificates. No separate installation is needed. |
+| Ports | Runtime images run as a nonroot user and cannot bind to privileged ports (below 1024) in Kubernetes or Docker Engine versions older than 20.10. Configure your application to listen on port 1025 or higher. |
+| Entrypoint | Docker Hardened Images may have different entrypoints than Docker Official Images. Use `docker inspect` to verify and update your Dockerfile if needed. |
+| No shell | Runtime images don't include a shell. Use `dev` images in build stages to run shell commands, then copy artifacts to the runtime stage. |
 
-The following steps outline the general migration process.
+---
 
-1. Find hardened images for your app.
-
-   A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
-
-1. Update the base image in your Dockerfile.
-
-   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For
-   framework images, this is typically going to be an image tagged as `dev` because it has the tools needed to install
-   packages and dependencies.
-
-1. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
-
-   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your
-   Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as `dev`, your
-   final runtime stage should use a non-dev image variant.
-
-1. Install additional packages
-
-   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to
-   install additional packages in your Dockerfile. To view if a package manager is available for an image variant,
-   select the **Tags** tab for this repository. To view what packages are already installed in an image variant, select
-   the **Tags** tab for this repository, and then select a tag.
-
-   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the
-   packages. Install the packages in the build stage that uses a `dev` image. Then, if needed, copy any necessary
-   artifacts to the runtime stage that uses a non-dev image.
-
-   For Alpine-based images, you can use `apk` to install packages. For Debian-based images, you can use `apt-get` to
-   install packages.
-
-## Troubleshooting migration
-
-The following are common issues that you may encounter during migration.
+## Troubleshoot migration
 
 ### General debugging
 
-The recommended method for debugging applications built with Docker Hardened Images is to use
-[Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides
-a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists
-during the debugging session.
+Runtime images don't include a shell or debugging tools. Use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers — it provides a shell, common debugging tools, and lets you install additional tools in an ephemeral writable layer that exists only for the duration of the session.
 
 ### Permissions
 
-By default image variants intended for runtime, run as a nonroot user. Ensure that necessary files and directories are
-accessible to that user. You may need to copy files to different directories or change permissions so your application
-running as a nonroot user can access them.
-
-To view the user for an image variant, select the **Tags** tab for this repository.
+Runtime images run as the `nonroot` user by default. If your application can't access required files or directories, copy them to a different path or update permissions so the `nonroot` user can read them.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to
-privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues,
-configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on
-the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and
-`docker run -p 80:81 my-image` won't work because the port inside the container is 81.
+Runtime images run as a nonroot user and cannot bind to ports below 1024 in Kubernetes or Docker Engine versions older than 20.10. Configure your application to use port 1025 or higher.
 
-### Entry point
+### No shell
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images.
+Runtime images don't include a shell. Use `dev`-tagged images in your build stages to run shell commands, then copy necessary artifacts to the runtime stage. Use Docker Debug to inspect running containers without a shell.
 
-To view the Entrypoint or CMD defined for an image variant, select the **Tags** tab for this repository, select a tag,
-and then select the **Specifications** tab.
+### Entrypoint
+
+Docker Hardened Images may have different entrypoints than Docker Official Images. Run `docker inspect` to check the entrypoint and update your Dockerfile if necessary.
