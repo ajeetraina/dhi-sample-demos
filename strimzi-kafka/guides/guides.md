@@ -46,7 +46,7 @@ docker run --rm dhi.io/strimzi-kafka:<tag> /opt/kafka/bin/kafka-server-start.sh 
 
 ### Deploy strimzi-kafka in Kubernetes
 
-1. Follow the [DHI Kubernetes authentication instructions](https://docs.docker.com).
+1. Follow the [DHI Kubernetes authentication instructions](https://docs.docker.com/dhi/how-to/k8s/).
 
 2. Create a namespace for Kafka:
 
