@@ -14,10 +14,16 @@ For the examples, you must first use `docker login dhi.io` to authenticate to th
 
 This Docker Hardened JMX Exporter image includes:
 
-- JMX Prometheus Standalone JAR (`jmx_prometheus_standalone.jar`) version 1.5.0, located at `/opt/jmx-exporter/`
-- JMX Prometheus Java Agent JAR (`jmx_prometheus_javaagent.jar`) at `/opt/jmx-exporter/jmx_prometheus_javaagent.jar` for
-  in-process metric collection
-- Eclipse Temurin JRE 21 (`jre-21.0.10+7`) at `/opt/java/openjdk/21-jre`
+- JMX Prometheus Standalone JAR (`jmx_prometheus_standalone.jar`) and Java Agent JAR
+  (`jmx_prometheus_javaagent.jar`) at `/opt/jmx-exporter/`
+- Eclipse Temurin JRE at `/opt/java/openjdk/21-jre`
+- Bundled example configuration files at `/opt/jmx-exporter/examples/` for Kafka, Cassandra,
+  Zookeeper, Tomcat, Spark, ActiveMQ, Flink, Hazelcast, Presto, WildFly, and WebLogic
+- Default entrypoint: `java -jar jmx_prometheus_standalone.jar 5556 examples/standalone_sample_config.yml`
+- Embedded SBOM at `/opt/docker/sbom/` for supply chain verification
+
+> **Note:** The JMX Exporter image supports two operating modes: standalone (external process using RMI) and Java Agent
+> (in-process). The standalone mode is the default. 
 
 ## Run JMX Exporter
 
@@ -37,12 +43,8 @@ curl localhost:5556/metrics
 curl localhost:5556/-/healthy
 ```
 
-The `/metrics` endpoint returns Prometheus-format metrics. The `/-/healthy` endpoint returns `Exporter is healthy.` when
-the exporter is running correctly.
-
-> **Note:** At startup, the exporter logs `OpenTelemetry enabled [false]` by default. OpenTelemetry output must be
-> explicitly enabled in your configuration file. See the
-> [upstream documentation](https://prometheus.github.io/jmx_exporter/) for details.
+The `/metrics` endpoint returns Prometheus-format metrics. The `/-/healthy` endpoint returns `Exporter is healthy.`
+when the exporter is running correctly.
 
 ### Run in standalone mode with a custom configuration
 
@@ -55,18 +57,25 @@ $ docker run --rm -p 5556:5556 \
   5556 /etc/jmx_exporter_config.yaml
 ```
 
-This command binds host port 5556 to container port 5556 and mounts your configuration file into the container.
+> **Important:** In standalone mode, your configuration file must include either `hostPort` or `jmxUrl` to specify
+> which JVM to scrape. Without one of these, the exporter will exit immediately with a configuration error. When
+> connecting across Docker networks or Kubernetes, prefer `jmxUrl` over `hostPort` as it resolves more reliably
+> over RMI:
+>
+> ```yaml
+> jmxUrl: service:jmx:rmi:///jndi/rmi://your-jvm-host:9999/jmxrmi
+> ssl: false
+> rules:
+>   - pattern: ".*"
+> ```
+
+See the [upstream documentation](https://prometheus.github.io/jmx_exporter/) for the full configuration reference and
+supported output modes (HTTP and OpenTelemetry).
 
 ### Run JMX Exporter as a Java Agent
 
-In addition to standalone mode, the image includes the Java Agent JAR at
-`/opt/jmx-exporter/jmx_prometheus_javaagent.jar`. You can copy this artifact into your own application image or create a
-customized DHI to run JMX Exporter as an in-process Java agent.
-
-The Java Agent supports both HTTP (default) and OpenTelemetry output modes, configured in your JMX Exporter
-configuration file. See the [upstream documentation](https://prometheus.github.io/jmx_exporter/) for details.
-
-Example multi-stage Dockerfile that copies the agent into your application image:
+The image includes the Java Agent JAR at `/opt/jmx-exporter/jmx_prometheus_javaagent.jar`. Use a multi-stage
+Dockerfile to copy it into your application image and run JMX Exporter as an in-process agent:
 
 ```dockerfile
 FROM dhi.io/jmx-exporter:<tag> AS jmx-agent
@@ -78,18 +87,19 @@ COPY jmx_exporter_config.yaml /etc/jmx_exporter_config.yaml
 ENV JAVA_OPTS="-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=5556:/etc/jmx_exporter_config.yaml"
 ```
 
+See the [upstream documentation](https://prometheus.github.io/jmx_exporter/) for agent configuration details.
+
 ## Common JMX Exporter use cases
 
 ### Standalone exporter with a sample JVM application
 
-Use Docker Compose to run JMX Exporter alongside a JVM application that exposes JMX metrics. Save the following as
-`compose.yaml`:
+Use Docker Compose to run JMX Exporter alongside a JVM application. Save the following as `compose.yaml`, replacing
+the `example-app` service with your own JVM application configured to expose JMX on port 9999:
 
 ```yaml
 services:
   jmx-exporter:
     image: dhi.io/jmx-exporter:<tag>
-    container_name: jmx-exporter
     ports:
       - "5556:5556"
     volumes:
@@ -103,22 +113,7 @@ services:
       - example-app
 
   example-app:
-    build: ./SimpleJMXApp
-    container_name: example-app
-    ports:
-      - "9999:9999"
-    command:
-      - "java"
-      - "-classpath"
-      - "."
-      - "-Dcom.sun.management.jmxremote=true"
-      - "-Dcom.sun.management.jmxremote.authenticate=false"
-      - "-Dcom.sun.management.jmxremote.local.only=false"
-      - "-Dcom.sun.management.jmxremote.ssl=false"
-      - "-Dcom.sun.management.jmxremote.port=9999"
-      - "-Dcom.sun.management.jmxremote.rmi.port=9999"
-      - "-Djava.rmi.server.hostname=example-app"
-      - "SimpleJMXApp"
+    image: your-jvm-app:<tag>
     networks:
       - metrics
 
@@ -133,66 +128,29 @@ Save the following as `config.yaml` in the same directory:
 jmxUrl: service:jmx:rmi:///jndi/rmi://example-app:9999/jmxrmi
 startDelaySeconds: 5
 ssl: false
-lowercaseOutputName: false
-lowercaseOutputLabelNames: false
 rules:
   - pattern: ".*"
 ```
 
-> **Important:** When running JMX Exporter in Docker Compose, use `jmxUrl` with the full RMI service URL instead of
-> `hostPort`. The full `jmxUrl` format resolves correctly across Docker networks, whereas `hostPort` can fail silently
-> due to RMI handshake issues between containers. The format is:
-> `service:jmx:rmi:///jndi/rmi://<service-name>:<port>/jmxrmi`
+> **Important:** Use `jmxUrl` with the full RMI service URL instead of `hostPort` when running in Docker Compose.
+> The `hostPort` option can fail silently due to RMI handshake issues between containers.
 
-Start the services:
+Start the services and verify the scrape:
 
 ```bash
 docker compose up
-```
-
-Verify metrics are being scraped successfully:
-
-```bash
 curl localhost:5556/metrics | grep jmx_scrape_error
-curl localhost:5556/-/healthy
 ```
 
-A successful scrape shows `jmx_scrape_error 0.0` and real JVM metrics such as `java_lang_Threading_ThreadCount`,
-`java_lang_OperatingSystem_SystemLoadAverage`, and `java_lang_Runtime_Uptime` in the output.
-
-This example defines two services: `jmx-exporter`, which runs the standalone exporter listening on port 5556, and
-`example-app`, a sample Java application exposing JMX metrics on port 9999 over RMI.
+A successful scrape shows `jmx_scrape_error 0.0`.
 
 ### Standalone exporter in Kubernetes
 
-Deploy JMX Exporter in Kubernetes using a Deployment and a ConfigMap for the configuration. The following example shows
-a minimal setup that scrapes a JVM application running in the same namespace.
-
-First, create a ConfigMap for your JMX Exporter configuration. The configuration must include either `hostPort` or
-`jmxUrl` to specify which JVM to scrape:
+Create a ConfigMap for your JMX Exporter configuration:
 
 ```bash
 kubectl create configmap jmx-exporter-config \
   --from-file=config.yaml=/path/to/your/jmx_exporter_config.yaml
-```
-
-Alternatively, define the ConfigMap inline in your manifest:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: jmx-exporter-config
-  namespace: default
-data:
-  config.yaml: |
-    hostPort: your-jvm-service:9999
-    startDelaySeconds: 0
-    ssl: false
-    lowercaseOutputName: false
-    lowercaseOutputLabelNames: false
-    rules:
-      - pattern: ".*"
 ```
 
 Then apply the following Deployment and Service manifests:
@@ -259,22 +217,20 @@ spec:
     targetPort: 5556
 ```
 
+**Note:** The image uses a named user (`nonroot`) rather than a numeric UID. Set `runAsUser: 65532` explicitly in the
+security context, otherwise the pod will fail with:
+`container has runAsNonRoot and image has non-numeric user (nonroot), cannot verify user is non-root`
+
 ### Exporter with OpenTelemetry output
 
-JMX Exporter supports OpenTelemetry as an output mode in addition to the default HTTP/Prometheus format. To enable
-OpenTelemetry output, configure the `openTelemetry` section in your configuration file and pass it to the container:
-
-```bash
-$ docker run --rm -p 5556:5556 \
-  -v /path/to/otel_config.yaml:/etc/jmx_exporter_config.yaml \
-  dhi.io/jmx-exporter:<tag> \
-  5556 /etc/jmx_exporter_config.yaml
-```
+To enable OpenTelemetry output, add an `openTelemetry` section to your configuration file and pass it to the
+container as shown in [Run in standalone mode with a custom configuration](#run-in-standalone-mode-with-a-custom-configuration).
+Refer to the [upstream documentation](https://prometheus.github.io/jmx_exporter/) for the full OpenTelemetry
+configuration reference.
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use. The following variants are available
-for this image:
+Docker Hardened Images come in different variants depending on their intended use.
 
 ### Runtime variants
 
@@ -287,9 +243,8 @@ directly or as the `FROM` image in the final stage of a multi-stage build. These
 
 ### FIPS variants
 
-FIPS variants include `fips` in the tag name and come in both runtime and build-time variants. They use cryptographic
-modules validated under FIPS 140, a U.S. government standard for secure cryptographic operations. Both FIPS variants for
-this image are also STIG-compliant at 100%, making them suitable for government and regulated industry deployments.
+FIPS variants include `fips` in the tag name. They use cryptographic modules validated under FIPS 140 and are
+STIG-compliant at 100%, making them suitable for government and regulated industry deployments.
 
 To use the FIPS-compliant runtime image:
 
