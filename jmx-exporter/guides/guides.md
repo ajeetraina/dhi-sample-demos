@@ -51,7 +51,7 @@ To run JMX Exporter with your own configuration file, mount it into the containe
 ```bash
 $ docker run --rm -p 5556:5556 \
   -v /path/to/your/jmx_exporter_config.yaml:/etc/jmx_exporter_config.yaml \
-  dhi.io/jmx-exporter:1 \
+  dhi.io/jmx-exporter:<tag> \
   5556 /etc/jmx_exporter_config.yaml
 ```
 
@@ -69,7 +69,7 @@ configuration file. See the [upstream documentation](https://prometheus.github.i
 Example multi-stage Dockerfile that copies the agent into your application image:
 
 ```dockerfile
-FROM dhi.io/jmx-exporter:1 AS jmx-agent
+FROM dhi.io/jmx-exporter:<tag> AS jmx-agent
 
 FROM dhi.io/your-app-image:<tag>
 COPY --from=jmx-agent /opt/jmx-exporter/jmx_prometheus_javaagent.jar /opt/jmx-exporter/jmx_prometheus_javaagent.jar
@@ -88,7 +88,7 @@ Use Docker Compose to run JMX Exporter alongside a JVM application that exposes 
 ```yaml
 services:
   jmx-exporter:
-    image: dhi.io/jmx-exporter:1
+    image: dhi.io/jmx-exporter:<tag>
     container_name: jmx-exporter
     ports:
       - "5556:5556"
@@ -217,7 +217,7 @@ spec:
     spec:
       containers:
       - name: jmx-exporter
-        image: dhi.io/jmx-exporter:1
+        image: dhi.io/jmx-exporter:<tag>
         args:
           - "5556"
           - /etc/jmx-exporter/config.yaml
@@ -267,7 +267,7 @@ OpenTelemetry output, configure the `openTelemetry` section in your configuratio
 ```bash
 $ docker run --rm -p 5556:5556 \
   -v /path/to/otel_config.yaml:/etc/jmx_exporter_config.yaml \
-  dhi.io/jmx-exporter:1 \
+  dhi.io/jmx-exporter:<tag> \
   5556 /etc/jmx_exporter_config.yaml
 ```
 
@@ -296,7 +296,7 @@ To use the FIPS-compliant runtime image:
 ```bash
 $ docker run --rm -p 5556:5556 \
   -v /path/to/your/jmx_exporter_config.yaml:/etc/jmx_exporter_config.yaml \
-  dhi.io/jmx-exporter:1-debian13-fips \
+  dhi.io/jmx-exporter:<tag>-fips \
   5556 /etc/jmx_exporter_config.yaml
 ```
 
