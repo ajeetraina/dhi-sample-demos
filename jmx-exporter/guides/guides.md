@@ -17,10 +17,7 @@ This Docker Hardened JMX Exporter image includes:
 - JMX Prometheus Standalone JAR (`jmx_prometheus_standalone.jar`) and Java Agent JAR
   (`jmx_prometheus_javaagent.jar`) at `/opt/jmx-exporter/`
 - Eclipse Temurin JRE at `/opt/java/openjdk/21-jre`
-- Bundled example configuration files at `/opt/jmx-exporter/examples/` for Kafka, Cassandra,
-  Zookeeper, Tomcat, Spark, ActiveMQ, Flink, Hazelcast, Presto, WildFly, and WebLogic
 - Default entrypoint: `java -jar jmx_prometheus_standalone.jar 5556 examples/standalone_sample_config.yml`
-- Embedded SBOM at `/opt/docker/sbom/` for supply chain verification
 
 > **Note:** The JMX Exporter image supports two operating modes: standalone (external process using RMI) and Java Agent
 > (in-process). The standalone mode is the default. 
@@ -69,8 +66,6 @@ $ docker run --rm -p 5556:5556 \
 >   - pattern: ".*"
 > ```
 
-See the [upstream documentation](https://prometheus.github.io/jmx_exporter/) for the full configuration reference and
-supported output modes (HTTP and OpenTelemetry).
 
 ### Run JMX Exporter as a Java Agent
 
@@ -86,8 +81,6 @@ COPY jmx_exporter_config.yaml /etc/jmx_exporter_config.yaml
 
 ENV JAVA_OPTS="-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=5556:/etc/jmx_exporter_config.yaml"
 ```
-
-See the [upstream documentation](https://prometheus.github.io/jmx_exporter/) for agent configuration details.
 
 ## Common JMX Exporter use cases
 
@@ -143,90 +136,6 @@ curl localhost:5556/metrics | grep jmx_scrape_error
 ```
 
 A successful scrape shows `jmx_scrape_error 0.0`.
-
-### Standalone exporter in Kubernetes
-
-Create a ConfigMap for your JMX Exporter configuration:
-
-```bash
-kubectl create configmap jmx-exporter-config \
-  --from-file=config.yaml=/path/to/your/jmx_exporter_config.yaml
-```
-
-Then apply the following Deployment and Service manifests:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: jmx-exporter
-  namespace: default
-  labels:
-    app: jmx-exporter
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: jmx-exporter
-  template:
-    metadata:
-      labels:
-        app: jmx-exporter
-    spec:
-      containers:
-      - name: jmx-exporter
-        image: dhi.io/jmx-exporter:<tag>
-        args:
-          - "5556"
-          - /etc/jmx-exporter/config.yaml
-        ports:
-        - containerPort: 5556
-          name: metrics
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 65532
-          allowPrivilegeEscalation: false
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "256Mi"
-          limits:
-            cpu: "1"
-            memory: "512Mi"
-        volumeMounts:
-        - name: config
-          mountPath: /etc/jmx-exporter
-      volumes:
-      - name: config
-        configMap:
-          name: jmx-exporter-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: jmx-exporter
-  namespace: default
-  labels:
-    app: jmx-exporter
-spec:
-  selector:
-    app: jmx-exporter
-  ports:
-  - name: metrics
-    port: 5556
-    targetPort: 5556
-```
-
-**Note:** The image uses a named user (`nonroot`) rather than a numeric UID. Set `runAsUser: 65532` explicitly in the
-security context, otherwise the pod will fail with:
-`container has runAsNonRoot and image has non-numeric user (nonroot), cannot verify user is non-root`
-
-### Exporter with OpenTelemetry output
-
-To enable OpenTelemetry output, add an `openTelemetry` section to your configuration file and pass it to the
-container as shown in [Run in standalone mode with a custom configuration](#run-in-standalone-mode-with-a-custom-configuration).
-Refer to the [upstream documentation](https://prometheus.github.io/jmx_exporter/) for the full OpenTelemetry
-configuration reference.
 
 ## Image variants
 
