@@ -1,165 +1,192 @@
-## How to use this image
+## Prerequisites
 
-All examples in this guide use the public image. If you’ve mirrored the repository for your own use (for example, to
-your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
+All examples in this guide use the public image. If you've mirrored the repository for your own use (for example, to your Docker Hub namespace), update your commands to reference the mirrored image instead of the public one.
 
 For example:
 
-- Public image: `dhi.io/<repository>:<tag>`
-- Mirrored image: `<your-namespace>/dhi-<repository>:<tag>`
+- Public image: `dhi.io/trino:<tag>`
+- Mirrored image: `<your-namespace>/dhi-trino:<tag>`
 
 For the examples, you must first use `docker login dhi.io` to authenticate to the registry to pull the images.
 
-This image runs trino server, a distributed SQL query engine, with `run-trino`, and `trino`, the trino CLI.
+## What's included in this Trino image
 
-For the following examples, replace `<tag>` with the image variant you want to run. To confirm the correct namespace and
-repository name of the mirrored repository, select **View in repository**.
+This Docker Hardened Trino image includes:
 
-Run the trino server.
+- Trino server binaries at `/usr/lib/trino/bin/`, including `run-trino`, `launcher`, and `health-check`
+- Trino CLI at `/usr/bin/trino`
+- Default CMD: `/usr/lib/trino/bin/run-trino`
+
+Note: By default, only the `server-core` plugin set is included in the runtime and dev variants. The compat variant includes the full set of optional Trino plugins. See [Image variants](#image-variants) for details.
+
+## Prerequisites
+
+Before you can use any Docker Hardened Image, you must mirror the image repository from the catalog to your organization. To mirror the repository, select either **Mirror to repository** or **View in repository > Mirror to repository**, and then follow the on-screen instructions.
+
+## Start a Trino instance
+
+Run the following command and replace `<your-namespace>` with your organization's namespace and `<tag>` with the image variant you want to run.
 
 ```
-docker run -p 8080:8080 --rm --name trino dhi.io/trino:<tag>
+docker run -d --name my-trino -p 8080:8080 <your-namespace>/dhi-trino:<tag>
 ```
 
-Run the trino CLI with the `--version` command to display version information.
+Verify the server is running and connect using the Trino CLI:
 
 ```
-$ docker exec -it my-trino trino --version
+docker exec -it my-trino trino
 ```
 
-## Trino plugins
+## Common Trino use cases
 
-By default, only a minimal set of essential plugins for trino is included in this image. If your application requires
-plugins outside of the
-[`server-core` trino distribution](https://trino.io/docs/current/installation/deployment.html#installing-trino), follow
-trino's guide for
-[installing and configuring additional plugins](https://trino.io/docs/current/installation/plugins.html) that you need.
+### Connect with the Trino CLI
 
-The `-compat` image variant of this image includes
-[all the optional plugins](https://trino.io/docs/current/installation/plugins.html#list-of-plugins) that ship with
-trino.
+Use the Trino CLI to connect to a running Trino server instance and run queries interactively.
+
+```
+docker exec -it my-trino trino
+```
+
+### Install additional plugins
+
+By default, only the `server-core` plugin set is included in this image. If your application requires additional plugins, follow Trino's guide for [installing and configuring additional plugins](https://trino.io/docs/current/installation/plugins.html).
+
+To use all optional plugins without manual installation, use the compat image variant, which includes the [full plugin set](https://trino.io/docs/current/installation/plugins.html#list-of-plugins) that ships with Trino.
+
+```
+docker run -d --name my-trino -p 8080:8080 <your-namespace>/dhi-trino:<compat-tag>
+```
+
+## Non-hardened images vs Docker Hardened Images
+
+### Key differences
+
+| Feature | Docker Official Trino | Docker Hardened Trino |
+|---|---|---|
+| Security | Standard base, less frequently patched | Minimal, hardened base with active security patches |
+| Shell access | `bash` available | `bash` available |
+| Package manager | Not available | Not available in runtime variants |
+| User | `trino` (nonroot) | `trino` (nonroot) |
+| Attack surface | Larger due to less hardened base | Minimal, actively maintained with CVE fixes |
+| Compliance | None | CIS benchmark compliant |
+| Debugging | Traditional shell debugging | Docker Debug or shell debugging |
+
+### Why use Docker Hardened Images?
+
+Docker Hardened Images prioritize security through active patching and a minimal base:
+
+- **Reduced attack surface:** Actively maintained with security patches and CVE fixes.
+- **Compliance ready:** CIS benchmark compliant out of the box, with FIPS and STIG variants available for regulated environments.
+- **Immutable infrastructure:** Runtime containers shouldn't be modified after deployment.
+
+For debugging, you can use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to containers:
+
+```
+docker debug <container-name>
+```
 
 ## Image variants
 
-Docker Hardened Images come in different variants depending on their intended use. Image variants are identified by
-their tag.
+Docker Hardened Images come in different variants depending on their intended use. To view all available image variants and their tags, select the **Tags** tab for this repository.
 
-- Runtime variants are designed to run your application in production. These images are intended to be used either
-  directly or as the `FROM` image in the final stage of a multi-stage build. These images typically:
+**Runtime variant** is designed to run Trino in production. This image:
 
-  - Run as a nonroot user
-  - Do not include a shell or a package manager
-  - Contain only the minimal set of libraries needed to run the app
+- Runs as the `trino` nonroot user
+- Includes a `bash` shell
+- Does not include a package manager
+- Contains only the `server-core` plugin set
+- Is CIS benchmark compliant
 
-- Build-time variants typically include `dev` in the tag name and are intended for use in the first stage of a
-  multi-stage Dockerfile. These images typically:
+**Dev variant** is intended for use in the first stage of a multi-stage Dockerfile. This image:
 
-  - Run as the root user
-  - Include a shell and package manager
-  - Are used to build or compile applications
+- Runs as the `root` user
+- Includes a `bash` shell and `apt-get` package manager
+- Is used to build or compile applications
+- Is CIS benchmark compliant
 
-- Compat variants support more seamless usage of DHI as a drop-in replacement for upstream images, particularly for
-  circumstances that the ultra-minimal runtime variant may not fully support. These images typically:
+**Compat variant** is designed to support more seamless usage as a drop-in replacement for the upstream Trino image. This image:
 
-  - Run as a nonroot user
-  - Improve compatibility with upstream helm charts
-  - Include optional tools that are critical for certain use-cases
+- Runs as the `trino` nonroot user
+- Includes a `bash` shell
+- Does not include a package manager
+- Includes the full set of optional Trino plugins
+- Is CIS benchmark compliant
 
-- FIPS variants include `fips` in the variant name and tag. They come in both runtime and build-time variants. These
-  variants use cryptographic modules that have been validated under FIPS 140, a U.S. government standard for secure
-  cryptographic operations. For example, usage of MD5 fails in FIPS variants.
+**Compat-dev variant** combines the compat plugin set with dev tooling. This image:
 
-To view the image variants and get more information about them, select the **Tags** tab for this repository, and then
-select a tag.
+- Runs as the `root` user
+- Includes a `bash` shell and `apt-get` package manager
+- Includes the full set of optional Trino plugins
+- Is CIS benchmark compliant
+
+**FIPS variant** is available for environments requiring FIPS 140 validated cryptographic modules. This image:
+
+- Runs as the `trino` nonroot user
+- Includes a `bash` shell
+- Does not include a package manager
+- Is CIS, FIPS, and STIG compliant
+- Requires a paid subscription — start a 30-day free trial to access this variant
 
 ## Migrate to a Docker Hardened Image
 
-To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the
-base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the
-following table of migration notes.
+To migrate your application to a Docker Hardened Image, you must update your Dockerfile. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes:
 
-| Item               | Migration note                                                                                                                                                                                                                                                                                                               |
-| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Base image         | Replace your base images in your Dockerfile with a Docker Hardened Image.                                                                                                                                                                                                                                                    |
-| Package management | Non-dev images, intended for runtime, don't contain package managers. Use package managers only in images with a `dev` tag.                                                                                                                                                                                                  |
-| Nonroot user       | By default, non-dev images, intended for runtime, run as a nonroot user. Ensure that necessary files and directories are accessible to that user.                                                                                                                                                                            |
-| Multi-stage build  | Utilize images with a `dev` tag for build stages and non-dev images for runtime. For binary executables, use a `static` image for runtime.                                                                                                                                                                                   |
-| TLS certificates   | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates.                                                                                                                                                                                                           |
-| Ports              | Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container. |
-| Entry point        | Docker Hardened Images may have different entry points than images such as Docker Official Images. Inspect entry points for Docker Hardened Images and update your Dockerfile if necessary.                                                                                                                                  |
-| No shell           | By default, non-dev images, intended for runtime, don't contain a shell. Use dev images in build stages to run shell commands and then copy artifacts to the runtime stage.                                                                                                                                                  |
+| Item | Migration note |
+|---|---|
+| Base image | Replace your base images in your Dockerfile with a Docker Hardened Image. |
+| Package management | Only `dev` variants include a package manager. Use `dev` variants in build stages and runtime variants for production. |
+| Non-root user | Runtime and compat variants run as the `trino` nonroot user. Ensure that necessary files and directories are accessible to that user. |
+| TLS certificates | Docker Hardened Images contain standard TLS certificates by default. There is no need to install TLS certificates. |
+| Ports | Runtime and compat variants run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Docker Engine versions older than 20.10. Configure your application to listen on port 1025 or higher inside the container. |
+| Entry point | All variants use `run-trino` as the default CMD rather than ENTRYPOINT, meaning it can be overridden easily. Inspect entry points and update your Dockerfile if necessary. |
+| Plugins | The runtime variant includes only the `server-core` plugin set. Use the compat variant if you require the full plugin set. |
 
 The following steps outline the general migration process.
 
-1. Find hardened images for your app.
+1. **Find hardened images for your app.**
 
    A hardened image may have several variants. Inspect the image tags and find the image variant that meets your needs.
 
-1. Update the base image in your Dockerfile.
+2. **Update the base image in your Dockerfile.**
 
-   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For
-   framework images, this is typically going to be an image tagged as `dev` because it has the tools needed to install
-   packages and dependencies.
+   Update the base image in your application's Dockerfile to the hardened image you found in the previous step. For build stages, use a `dev` variant as it includes the tools needed to install packages and dependencies.
 
-1. For multi-stage Dockerfiles, update the runtime image in your Dockerfile.
+3. **For multi-stage Dockerfiles, update the runtime image.**
 
-   To ensure that your final image is as minimal as possible, you should use a multi-stage build. All stages in your
-   Dockerfile should use a hardened image. While intermediary stages will typically use images tagged as `dev`, your
-   final runtime stage should use a non-dev image variant.
+   To ensure that your final image is as minimal as possible, use a multi-stage build. Intermediary stages typically use `dev` variants, while your final runtime stage should use a non-dev variant.
 
-1. Install additional packages
+4. **Install additional packages.**
 
-   Docker Hardened Images contain minimal packages in order to reduce the potential attack surface. You may need to
-   install additional packages in your Dockerfile. To view if a package manager is available for an image variant,
-   select the **Tags** tab for this repository. To view what packages are already installed in an image variant, select
-   the **Tags** tab for this repository, and then select a tag.
+   Docker Hardened Images contain minimal packages to reduce the potential attack surface. Install any additional packages in the build stage using a `dev` variant, then copy necessary artifacts to the runtime stage.
 
-   Only images tagged as `dev` typically have package managers. You should use a multi-stage Dockerfile to install the
-   packages. Install the packages in the build stage that uses a `dev` image. Then, if needed, copy any necessary
-   artifacts to the runtime stage that uses a non-dev image.
+5. **Select the right plugin set.**
 
-   For Alpine-based images, you can use `apk` to install packages. For Debian-based images, you can use `apt-get` to
-   install packages.
+   If your application requires plugins beyond `server-core`, either install them manually following Trino's [plugin guide](https://trino.io/docs/current/installation/plugins.html), or use the compat variant which includes the full plugin set.
 
-## Troubleshooting migration
-
-The following are common issues that you may encounter during migration.
+## Troubleshoot migration
 
 ### General debugging
 
-The hardened images intended for runtime don't contain a shell nor any tools for debugging. The recommended method for
-debugging applications built with Docker Hardened Images is to use
-[Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides
-a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists
-during the debugging session.
+The recommended method for debugging applications built with Docker Hardened Images is to use [Docker Debug](https://docs.docker.com/reference/cli/docker/debug/) to attach to these containers. Docker Debug provides a shell, common debugging tools, and lets you install other tools in an ephemeral, writable layer that only exists during the debugging session.
+
+```
+docker debug <container-name>
+```
 
 ### Permissions
 
-By default image variants intended for runtime, run as a nonroot user. Ensure that necessary files and directories are
-accessible to that user. You may need to copy files to different directories or change permissions so your application
-running as a nonroot user can access them.
+By default, runtime and compat variants run as the `trino` nonroot user. Ensure that necessary files and directories are accessible to that user. You may need to copy files to different directories or change permissions so your application can access them.
 
 To view the user for an image variant, select the **Tags** tab for this repository.
 
 ### Privileged ports
 
-Non-dev hardened images run as a nonroot user by default. As a result, applications in these images can't bind to
-privileged ports (below 1024) when running in Kubernetes or in Docker Engine versions older than 20.10. To avoid issues,
-configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on
-the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and
-`docker run -p 80:81 my-image` won't work because the port inside the container is 81.
-
-### No shell
-
-By default, image variants intended for runtime don't contain a shell. Use `dev` images in build stages to run shell
-commands and then copy any necessary artifacts into the runtime stage. In addition, use Docker Debug to debug containers
-with no shell.
-
-To see if a shell is available in an image variant and which one, select the **Tags** tab for this repository.
+Runtime and compat variants run as a nonroot user by default. As a result, applications in these images can't bind to privileged ports (below 1024) when running in Docker Engine versions older than 20.10. To avoid issues, configure your application to listen on port 1025 or higher inside the container, even if you map it to a lower port on the host. For example, `docker run -p 80:8080 my-image` will work because the port inside the container is 8080, and `docker run -p 80:81 my-image` won't work because the port inside the container is 81.
 
 ### Entry point
 
-Docker Hardened Images may have different entry points than images such as Docker Official Images.
+All variants use `run-trino` as the default CMD rather than ENTRYPOINT. This means the command can be overridden easily. Use `docker inspect` to verify the entry point and update your Dockerfile if necessary.
 
-To view the Entrypoint or CMD defined for an image variant, select the **Tags** tab for this repository, select a tag,
-and then select the **Specifications** tab.
+```
+docker inspect <image> --format '{{.Config.Entrypoint}} {{.Config.Cmd}}'
+```
