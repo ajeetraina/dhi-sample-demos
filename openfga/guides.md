@@ -199,7 +199,7 @@ $ docker run --rm -it --pid container:openfga \
 
 For operational visibility without attaching a debugger, OpenFGA exposes a Prometheus metrics server on port `2112` by default, which reports request latencies, error rates, and datastore performance.
 
-# Image variants
+## Image variants
 
 Docker Hardened Images come in different variants depending on their intended use.
 
@@ -226,7 +226,7 @@ DHI tags use the upstream version number directly with no `v` prefix (for exampl
 
 To view all published tags and get more information about each variant, select the **Tags** tab for this repository.
 
-# Migrate to a Docker Hardened Image
+## Migrate to a Docker Hardened Image
 
 To migrate your application to a Docker Hardened Image, you must update your Dockerfile or runtime configuration. At minimum, you must update the base image in your existing Dockerfile to a Docker Hardened Image. This and a few other common changes are listed in the following table of migration notes.
 
